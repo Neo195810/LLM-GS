@@ -1,0 +1,3 @@
+# Start with structured memory retrieval
+
+The first V2 retriever will not use embeddings. It first hard-filters Experiment Context compatibility, then buckets by shared Failure Type and Task-specific Failure Reason, ranks by deterministic initial-state features and explainable AST features, and resolves ties using evidence quality, measured repair improvement, novelty, and stable identity. Every stage records its candidates, component values, and reason codes. Embedding retrieval remains a replaceable future experiment for when the corpus grows and structured retrieval demonstrably misses conceptually similar cases.

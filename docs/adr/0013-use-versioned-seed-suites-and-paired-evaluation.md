@@ -1,0 +1,3 @@
+# Use versioned seed suites and paired evaluation
+
+Each Task will define a versioned Seed Suite separating memory-training, development, and held-out evaluation seeds. Search, Diagnosis, and Repair can use only designated search seeds; the selected final program runs once on held-out seeds, whose outcomes cannot flow back into search or Frozen Memory. Methods are compared through repeated paired experiments using the same task and search seeds, with success rate under a fixed Evaluation Budget as the primary metric; costs, time-to-success, repair effectiveness, retrieval impact, and outcome distributions remain secondary metrics. Online Memory uses separately identified ordered seeds and is not mixed with Frozen Memory results.
