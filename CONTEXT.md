@@ -81,7 +81,7 @@ The deterministic, versioned environment-family role that converts an initial wo
 _Avoid_: Embedding, map description
 
 **Reflection**:
-A diagnosis that explains why a Candidate Program failed using evidence from its evaluation and identifies a concrete correction direction.
+The process that examines Evaluation Evidence and, when permitted, relevant Experience Memory to produce a persistent Diagnosis.
 _Avoid_: Retry, critique
 
 **Repair Cycle**:
@@ -186,7 +186,7 @@ The role that executes Candidate Programs and returns their Attempt Outcomes wit
 The role that diagnoses a failed Program Attempt using relevant Experience Memory and produces a corrected Candidate Program in the same Repair Cycle.
 
 **Diagnosis**:
-The explicit, evidence-linked explanation of a failed Candidate Program and the correction direction passed from reflection to repair.
+The persistent, evidence-linked output of Reflection that explains a failed Candidate Program and states the correction direction passed to repair.
 _Avoid_: Feedback, chain of thought
 
 **Repair Intent**:

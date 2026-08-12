@@ -41,6 +41,8 @@ For multi-episode Diagnosis, deterministic selection includes the worst-progress
 
 Formal executions prohibit human changes to prompts, programs, memory, or curator state. Interactive development activity is separately identified and cannot contribute to the primary Frozen Snapshot or held-out results.
 
+Infrastructure Retry limits and backoff rules are resolved into the Experiment Manifest. Exhaustion produces an Infrastructure Failure Work Unit outcome, creates no failed Program Attempt, consumes no Episode Evaluation beyond any evaluation that already completed transactionally, and is reported separately from all Attempt Outcomes.
+
 ## Artifact retention
 
 Execution Summaries, seeds, programs, and provenance are permanent structured records. Complete trajectories are retained for new failure types, successful programs, leading repair pairs, and deterministic samples within a configured capacity. Referenced Artifacts are not automatically deleted; cleanup may remove only unreferenced content. Diagnostic service payloads are sanitized before retention.
@@ -50,6 +52,8 @@ Execution Summaries, seeds, programs, and provenance are permanent structured re
 The Attempt Store preserves the naturally observed distribution. The primary Frozen Snapshot uses preregistered quotas across Tasks, Failure Types, successful examples, effective repair pairs, and Search Strategy sources while retaining source-frequency metadata. Exact duplicates require matching Experiment Context, Failure Type and Reason, Normalized AST hash, and state-feature bucket; approximate AST matches remain separate entries.
 
 Online arms and replicates maintain isolated Memory Lineages. Formal OpenAI requests are never replayed from an application response cache, although provider-side prompt caching may be used and its token usage is recorded.
+
+The Structured Retrieval implementation may calibrate its deterministic ordering or weights on development seeds, but its complete versioned configuration must be recorded in the Experiment Manifest and frozen before a Memory Snapshot is built for held-out evaluation. Held-out results cannot change retrieval ordering or weights.
 
 ## Verification gates
 
@@ -61,6 +65,8 @@ Online arms and replicates maintain isolated Memory Lineages. Formal OpenAI requ
 - Live OpenAI smoke tests require explicit manual activation and never run in default CI.
 
 Primary paired analysis includes only preregistered complete pairs, while reports retain every Execution and explicitly show missingness, Infrastructure Failures, Model Output Failures, exclusions, and bounded replacement executions. Incomplete or failed activity is never silently omitted.
+
+Before any held-out execution, exactly one Experiment Manifest is preregistered for every Task and method arm being reported. Alternate Manifests remain visible as separate exploratory experiments; all preregistered held-out outcomes are reported, and no Manifest may be selected or suppressed after observing held-out results.
 
 ## Cost and secret safety
 
