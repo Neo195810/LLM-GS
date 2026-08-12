@@ -8,13 +8,11 @@ sys.path.append(".")
 sys.path.append("./leaps")
 
 from llm import LLMProgramGenerator
-from prog_policies.utils import get_env_name
-from prog_policies.karel import KarelDSL
-from prog_policies.minigrid.dsl import MinigridDSL
-from prog_policies.karel_tasks import get_task_cls as get_karel_task_cls
-from prog_policies.minigrid_tasks import get_task_cls as get_minigrid_task_cls
+from llm.config import add_llm_cli_arguments, llm_generator_kwargs
+from prog_policies.runtime import create_task_envs
 from prog_policies.search_space import get_search_space_cls
 from prog_policies.search_methods import get_search_method_cls
+from prog_policies.utils.experiment_events import EventReporter
 from prog_policies.utils.save_file import (
     inside_seed_save_log_file,
     outside_seed_save_log_file,
@@ -23,46 +21,11 @@ from prog_policies.utils.evaluate_and_search import *
 
 
 def karel_env(args):
-    dsl = KarelDSL()
-
-    env_args = {
-        "env_height": 8,
-        "env_width": 8,
-        "crashable": args.crashable,
-        "leaps_behaviour": True,
-        "max_calls": 10000,
-    }
-
-    if (
-        args.task == "StairClimber"
-        or args.task == "StairClimberSparse"
-        or args.task == "TopOff"
-        or args.task == "FourCorners"
-    ):
-        env_args["env_height"] = 12
-        env_args["env_width"] = 12
-
-    if args.task == "CleanHouse":
-        env_args["env_height"] = 14
-        env_args["env_width"] = 22
-
-    if args.task == "WallAvoider":
-        env_args["env_height"] = 8
-        env_args["env_width"] = 5
-
-    task_cls = get_karel_task_cls(args.task)
-    task_envs = [task_cls(env_args, i) for i in range(args.num_envs)]
-    return task_envs, dsl
+    return create_task_envs(args)
 
 
 def minigrid_env(args):
-    dsl = MinigridDSL()
-    task_cls = get_minigrid_task_cls(args.task)
-    task_envs = [
-        task_cls(i, args.crashable, args.crash_penalty, args.max_calls)
-        for i in range(args.num_envs)
-    ]
-    return task_envs, dsl
+    return create_task_envs(args)
 
 
 if __name__ == "__main__":
@@ -142,15 +105,21 @@ if __name__ == "__main__":
     # LLM
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_p", type=float, default=1.0)
+    add_llm_cli_arguments(parser)
 
     # Output
-    parser.add_argument("--output_dir", type=str, default="output")
+    parser.add_argument(
+        "--output_dir", type=str, default=os.getenv("LLM_GS_OUTPUT_DIR", "output")
+    )
     parser.add_argument("--output_name", type=str, default="0")
     parser.add_argument("--save_step", type=int, default=5000)
 
     args = parser.parse_args()
 
     print(vars(args))
+    event_reporter = EventReporter.from_env(args)
+    event_reporter.install_exception_hook()
+    event_reporter.run_started("scripts/main.py")
 
     output_dir = os.path.join(args.output_dir, args.task, args.output_name)
     output_dir_seed = os.path.join(output_dir, str(args.seed))
@@ -163,12 +132,7 @@ if __name__ == "__main__":
 
     pathlib.Path(output_dir_seed).mkdir(parents=True, exist_ok=True)
 
-    if get_env_name(args.task) == "karel":
-        task_envs, dsl = karel_env(args)
-    elif get_env_name(args.task) == "minigrid":
-        task_envs, dsl = minigrid_env(args)
-    else:
-        assert 0, "Invalid task name."
+    task_envs, dsl = create_task_envs(args)
 
     search_space_cls = get_search_space_cls(args.search_space)
     search_space = search_space_cls(dsl, args.sigma)
@@ -188,6 +152,7 @@ if __name__ == "__main__":
         )
     else:
         search_method = search_method_cls(args.k, args.e)
+    search_method.set_event_reporter(event_reporter)
 
     best_reward = -float("inf")
     best_prog = None
@@ -197,7 +162,13 @@ if __name__ == "__main__":
     log["seed"] = args.seed
 
     llm_program_generator = LLMProgramGenerator(
-        args.seed, args.task, dsl, args.llm_program_num, args.temperature, args.top_p
+        args.seed,
+        args.task,
+        dsl,
+        args.llm_program_num,
+        args.temperature,
+        args.top_p,
+        **llm_generator_kwargs(args, event_reporter),
     )
     program_list, llm_log = llm_program_generator.get_program_list_python_to_dsl()
     log["llm_log"] = [llm_log]
@@ -290,3 +261,4 @@ if __name__ == "__main__":
         search_method.record,
         search_method.program_record,
     )
+    event_reporter.run_finished(best_reward, task_envs[0].program_num)

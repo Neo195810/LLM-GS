@@ -129,6 +129,21 @@ class ProgramWrapper(Wrapper):
                 im.save(name)
         return reward
 
+    def trace_program(
+        self,
+        program: dsl_nodes.Program,
+        max_steps: int = 1000,
+    ) -> list[Image.Image]:
+        """Replay a program without changing its evaluation counter."""
+        self.reset()
+        frames = [Image.fromarray(self.unwrapped.get_frame())]
+        for _ in program.run_generator(self):
+            terminated, _ = self.get_reward()
+            frames.append(Image.fromarray(self.unwrapped.get_frame()))
+            if len(frames) > max_steps or terminated or self.is_crashed():
+                break
+        return frames
+
     def generate_action_history(
         self,
         action: str,

@@ -8,10 +8,11 @@ sys.path.append(".")
 sys.path.append("./leaps")
 
 from llm import LLMProgramGenerator
-from prog_policies.karel import KarelDSL
-from prog_policies.karel_tasks import get_task_cls
+from llm.config import add_llm_cli_arguments, llm_generator_kwargs
+from prog_policies.runtime import create_task_envs
 from prog_policies.search_space import get_search_space_cls
 from prog_policies.search_methods import get_search_method_cls
+from prog_policies.utils.experiment_events import EventReporter
 from prog_policies.utils.save_file import (
     revision_inside_seed_save_log_file,
     revision_outside_seed_save_log_file,
@@ -84,9 +85,12 @@ if __name__ == "__main__":
     # LLM
     parser.add_argument("--temperature", type=float, default=1.0)
     parser.add_argument("--top_p", type=float, default=1.0)
+    add_llm_cli_arguments(parser)
 
     # Output
-    parser.add_argument("--output_dir", type=str, default="output")
+    parser.add_argument(
+        "--output_dir", type=str, default=os.getenv("LLM_GS_OUTPUT_DIR", "output")
+    )
     parser.add_argument("--output_name", type=str, default="0")
     parser.add_argument("--save_step", type=int, default=5000)
 
@@ -97,37 +101,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(vars(args))
+    event_reporter = EventReporter.from_env(args)
+    event_reporter.install_exception_hook()
+    event_reporter.run_started("scripts/revision.py")
 
     output_dir = os.path.join(args.output_dir, args.task, args.output_name)
     output_dir_seed = os.path.join(output_dir, str(args.seed))
 
     pathlib.Path(output_dir_seed).mkdir(parents=True, exist_ok=True)
 
-    dsl = KarelDSL()
-
-    env_args = {
-        "env_height": 8,
-        "env_width": 8,
-        "crashable": False,
-        "leaps_behaviour": True,
-        "max_calls": 10000,
-    }
-
-    if (
-        args.task == "StairClimber"
-        or args.task == "StairClimberSparse"
-        or args.task == "TopOff"
-        or args.task == "FourCorners"
-    ):
-        env_args["env_height"] = 12
-        env_args["env_width"] = 12
-
-    if args.task == "CleanHouse":
-        env_args["env_height"] = 14
-        env_args["env_width"] = 22
-
-    task_cls = get_task_cls(args.task)
-    task_envs = [task_cls(env_args, i) for i in range(args.num_envs)]
+    task_envs, dsl = create_task_envs(args)
 
     search_space_cls = get_search_space_cls(args.search_space)
     search_space = search_space_cls(dsl, args.sigma)
@@ -135,6 +118,7 @@ if __name__ == "__main__":
 
     search_method_cls = get_search_method_cls(args.search_method)
     search_method = search_method_cls(args.k, args.e)
+    search_method.set_event_reporter(event_reporter)
 
     best_reward = -float("inf")
     best_prog = None
@@ -156,6 +140,7 @@ if __name__ == "__main__":
         args.action_shots,
         args.perception_shots,
         args.program_shots,
+        **llm_generator_kwargs(args, event_reporter),
     )
     program_list, llm_log = llm_program_generator.get_program_list_python_to_dsl()
     log["llm_log"] = [llm_log]
@@ -220,13 +205,13 @@ if __name__ == "__main__":
                 llm_program_generator.get_program_list_revision_regeneration(program_list)
             )
         elif args.revision_method == "agent_execution_trace":
-            program_list, revised_log = (
+            program_list, revision_log = (
                 llm_program_generator.get_program_list_revision_agent_execution_trace(
                     worst_reward, record_log, best_reward
                 )
             )
         elif args.revision_method == "agent_program_execution_trace":
-            program_list, revised_log = (
+            program_list, revision_log = (
                 llm_program_generator.get_program_list_revision_agent_program_execution_trace(
                     worst_reward, record_log, best_reward
                 )
@@ -278,3 +263,5 @@ if __name__ == "__main__":
         reward_task_list = sorted(reward_task_list, key=lambda x: x[1])
         worst_task = reward_task_list[0][0]
         worst_reward, record_log = worst_task.record_evaluate_program(best_prog)
+
+    event_reporter.run_finished(best_reward, task_envs[0].program_num)

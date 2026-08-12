@@ -110,7 +110,8 @@ class KarelEnvironment(BaseEnvironment):
         import pickle
         from PIL import Image
         import os.path as osp
-        f = pickle.load(open(osp.join(root_dir, 'prog_policies/karel/texture.pkl'), 'rb'))
+        with open(osp.join(root_dir, 'prog_policies/karel/texture.pkl'), 'rb') as texture_file:
+            f = pickle.load(texture_file)
         wall_img = f['wall'].astype('uint8')
         marker_img = f['marker'].astype('uint8')
         agent_0_img = f['agent_0'].astype('uint8')

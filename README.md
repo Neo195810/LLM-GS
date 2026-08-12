@@ -26,15 +26,42 @@ conda env create --name llm_gs_env --file environment.yml
 pip install -r requirements.txt
 ```
 
-If `conda` is not available, it is also possible to install dependencies using `pip` on **Python 3.8**:
+If `conda` is not available, it is also possible to install dependencies using `pip` on **Python 3.9**:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-After installing the environment, please export your **OpenAI API key** to execute our main method:
+LLM-GS uses a local Ollama model by default. Install Ollama, download the default model, and verify that the NVIDIA GPU is visible:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen3-coder:30b
+ollama ps
+```
+
+If the WSL account cannot use `sudo`, install the same official archive under the
+current user's home directory instead:
+
+```bash
+mkdir -p "$HOME/.local"
+curl -L https://ollama.com/download/ollama-linux-amd64.tar.zst \
+  | tar --zstd -x -C "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+ollama pull qwen3-coder:30b
+```
+
+On WSL without a running systemd service, start Ollama in a separate terminal:
+
+```bash
+OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_NUM_PARALLEL=1 ollama serve
+```
+
+The local default does not require an API key. OpenAI remains available as an optional provider:
+
 ```bash
 export OPENAI_KEY="YOUR_API_KEY"
+python scripts/main.py --llm_provider openai
 ```
 
 ### Execution
@@ -48,6 +75,24 @@ Or you can run specific algorithm and tasks
 ```bash
 # All scripts are in scripts/{baseline}/run_{task}.sh
 bash scripts/LLM-GS/run_DoorKey.sh
+```
+
+### Gradio experiment utility
+
+Start the local dashboard from the Conda environment:
+
+```bash
+conda activate llm_gs_env
+export LD_PRELOAD="$CONDA_PREFIX/lib/libstdc++.so.6"
+python gradio_utility.py
+```
+
+Open `http://127.0.0.1:7860`. The utility can launch and stop every script under `scripts/`, display live candidate and best-reward events, replay Karel and MiniGrid programs, and inspect historical runs without stopping the active job. The task's stdout/stderr and tqdm progress bars are mirrored to the terminal that launched Gradio.
+
+UI-launched experiments are isolated under `output/ui_runs/<run_id>`. Each run stores `stdout.log`, structured `events.jsonl`, and full local-model diagnostics in `llm_debug.jsonl`. Ollama requests default to 1024 output tokens and a 300-second timeout; override them through Additional CLI arguments when needed:
+
+```text
+--llm_max_tokens 2048 --llm_request_timeout 600
 ```
 
 You can run revision method of the task DoorKey

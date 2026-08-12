@@ -9,8 +9,6 @@ from .environment import BaseEnvironment
 from . import dsl_nodes
 from PIL import Image
 
-from ..utils.indent import node_to_indent_python, record_node_to_indent_python
-
 class TerminateException(Exception):
     pass
 
@@ -94,6 +92,8 @@ class BaseTask(ABC):
         return reward
 
     def record_evaluate_program(self, program: dsl_nodes.Program) -> tuple[float, list[list[dict[str, str]]]]:
+        from ..utils.indent import node_to_indent_python, record_node_to_indent_python
+
         self.program_num += 1
         self.reset_environment()
         reward = 0.

@@ -14,6 +14,10 @@ class BaseSearch(ABC):
         self.best_reward = -float("inf")
         self.record = {}
         self.program_record = {}
+        self.event_reporter = None
+
+    def set_event_reporter(self, reporter) -> None:
+        self.event_reporter = reporter
     
     @abstractmethod
     def search(self, search_space: BaseSearchSpace, task_envs: list[BaseTask],
@@ -63,5 +67,20 @@ class BaseSearch(ABC):
             self.best_reward = average_reward
             self.record[task_envs[0].program_num] = average_reward
             self.program_record[task_envs[0].program_num] = {"type": record_type, "program": dsl.parse_node_to_str(program)}
+            if self.event_reporter is not None:
+                self.event_reporter.best_updated(
+                    program,
+                    average_reward,
+                    task_envs[0].program_num,
+                    record_type,
+                    dsl,
+                )
+
+        if self.event_reporter is not None:
+            self.event_reporter.evaluation_progress(
+                task_envs[0].program_num,
+                self.best_reward,
+                record_type,
+            )
         
         return average_reward

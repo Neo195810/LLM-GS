@@ -1,5 +1,25 @@
-from ..karel_tasks import TASK_NAME_LIST as KAREL_TASK_NAME_LIST
-from ..minigrid_tasks import TASK_NAME_LIST as MINIGRID_TASK_NAME_LIST
+KAREL_TASK_NAME_LIST = [
+    "StairClimber",
+    "StairClimberSparse",
+    "Maze",
+    "MazeSparse",
+    "FourCorners",
+    "FourCornersSparse",
+    "TopOff",
+    "TopOffSparse",
+    "Harvester",
+    "HarvesterSparse",
+    "CleanHouse",
+    "CleanHouseSparse",
+    "DoorKey",
+    "OneStroke",
+    "Seeder",
+    "Snake",
+    "WallAvoider",
+    "PathFollow",
+]
+
+MINIGRID_TASK_NAME_LIST = ["LavaGap", "RedBlueDoor", "PutNear"]
 
 
 def get_env_name(task_name: str) -> str:
