@@ -1,0 +1,3 @@
+# Isolate memory lineages between experimental arms
+
+Primary Frozen Memory comparisons use one independently generated and locked Snapshot shared by every search algorithm and treatment. Memory Entries in that shared, read-only Snapshot retain their source Search Strategy and may be used by another algorithm, allowing cross-search generalization to be measured without giving any arm different source material. Online experiments fork the starting Snapshot into a separate Memory Lineage for each method, algorithm, and replicate; entries created after the fork never flow between arms, algorithms, or replicates.

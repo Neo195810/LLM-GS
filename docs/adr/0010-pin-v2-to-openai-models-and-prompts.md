@@ -1,0 +1,3 @@
+# Pin V2 to OpenAI models and prompts
+
+V2 will support OpenAI models only and will not introduce a cross-provider model abstraction in the first release. The initial model is `gpt-5.6-luna` with reasoning effort `medium`; changing it requires an explicit user decision after development evidence shows quality or operational problems, recorded with its date, trigger, affected executions, limitation, and replacement. Held-out outcomes cannot justify model selection. Experiments pin the exact model identifier, inference parameters, prompt template hash, and parser version in their Experiment Manifest; changing any of them creates a different Experiment ID and prevents direct sharing of raw Memory Entries except in an explicit transfer experiment.
