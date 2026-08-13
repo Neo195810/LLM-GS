@@ -198,7 +198,11 @@ def execute_resumable(
         raise ValueError("no execution work is available to resume")
     results = [EpisodeResult.model_validate_json(row) for row in rows]
     report = _report_from_results(
-        experiment_id, active_execution_id, results, store.model_requests(active_execution_id)
+        experiment_id,
+        active_execution_id,
+        results,
+        store.model_requests(active_execution_id),
+        audit=store.execution_audit(active_execution_id),
     )
     store.save(manifest, report)
     return report, "completed"
@@ -322,6 +326,7 @@ def _execute_reflect(
         all_results,
         store.model_requests(execution_id),
         candidate_programs=len(all_results) // len(seeds),
+        audit=store.execution_audit(execution_id),
     )
     store.save(manifest, report)
     return report, "completed"
@@ -350,6 +355,7 @@ def _report_from_results(
     results: list[EpisodeResult],
     model_requests: int,
     candidate_programs: int = 1,
+    audit: dict[str, object] | None = None,
 ) -> ExperimentReport:
     outcomes: dict[str, int] = {}
     evidence: list[EvaluationEvidence] = []
@@ -374,4 +380,5 @@ def _report_from_results(
         model_requests=model_requests,
         outcomes=outcomes,
         evaluation_evidence=evidence,
+        audit=audit or {},
     )

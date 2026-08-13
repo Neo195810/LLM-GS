@@ -247,6 +247,45 @@ class WorkspaceStore:
                 (execution_id, outcome.model_dump_json()),
             )
 
+    def execution_audit(self, execution_id: str) -> dict[str, object]:
+        with self._connect() as connection:
+            usage = connection.execute(
+                "SELECT model_requests, episode_evaluations FROM executions WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            retrieval_rows = connection.execute(
+                "SELECT outcome_json FROM retrieval_outcomes WHERE execution_id = ? ORDER BY id",
+                (execution_id,),
+            ).fetchall()
+            repair_rows = connection.execute(
+                """SELECT round, parent_source, candidate_source, normalized_ast_difference
+                FROM repair_attempts WHERE execution_id = ? ORDER BY round""",
+                (execution_id,),
+            ).fetchall()
+        if usage is None:
+            raise ValueError(f"execution not found: {execution_id}")
+        try:
+            snapshot_id: str | None = self.memory_snapshot_id(execution_id)
+        except ValueError:
+            snapshot_id = None
+        return {
+            "memory_snapshot_id": snapshot_id,
+            "retrievals": [json.loads(str(row[0])) for row in retrieval_rows],
+            "repairs": [
+                {
+                    "round": int(row[0]),
+                    "parent_source": str(row[1]),
+                    "candidate_source": str(row[2]),
+                    "normalized_ast_difference": str(row[3]),
+                }
+                for row in repair_rows
+            ],
+            "resource_usage": {
+                "model_requests": int(usage[0]),
+                "episode_evaluations": int(usage[1]),
+            },
+        }
+
     def save(self, manifest: ExperimentManifest, report: ExperimentReport) -> None:
         with self._connect() as connection:
             connection.execute(

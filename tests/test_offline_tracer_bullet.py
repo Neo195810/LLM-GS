@@ -91,6 +91,12 @@ def test_valid_specification_runs_offline_through_a_deterministic_report(
     assert first_report.returncode == 0, first_report.stderr
     assert first_report.stdout == second_report.stdout
     assert json.loads(first_report.stdout) == {
+        "audit": {
+            "memory_snapshot_id": None,
+            "repairs": [],
+            "resource_usage": {"episode_evaluations": 1, "model_requests": 1},
+            "retrievals": [],
+        },
         "candidate_programs": 1,
         "evaluation_evidence": [],
         "episode_evaluations": 1,
@@ -265,6 +271,7 @@ failure_strategy:
     )
     assert report["episode_evaluations"] == 2
     assert report["candidate_programs"] == 2
+
     assert report["model_requests"] == 2
 
 
@@ -355,6 +362,13 @@ failure_strategy:
         ).stdout
     )
     assert report["candidate_programs"] == 2
+    assert report["audit"]["memory_snapshot_id"].startswith("snapshot_")
+    assert report["audit"]["retrievals"]
+    assert report["audit"]["repairs"][0]["round"] == 1
+    assert report["audit"]["resource_usage"] == {
+        "episode_evaluations": 2,
+        "model_requests": 2,
+    }
 
 
 def test_memory_repair_evaluates_the_same_full_seed_set_before_and_after_repair(

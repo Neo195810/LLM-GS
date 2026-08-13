@@ -141,3 +141,4 @@ class ExperimentReport(StrictContract):
     model_requests: int
     outcomes: dict[str, int]
     evaluation_evidence: list[EvaluationEvidence] = Field(default_factory=list)
+    audit: dict[str, object] = Field(default_factory=dict)
