@@ -145,6 +145,46 @@ seeds:
     assert not workspace.exists()
 
 
+def test_clean_house_regenerate_runs_offline_and_reports_outcome_evidence(
+    tmp_path: Path,
+) -> None:
+    specification = tmp_path / "clean-house.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-regenerate
+task:
+  name: CleanHouse
+seeds:
+  task: [7]
+""",
+        encoding="utf-8",
+    )
+
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert validation["manifest"]["task"] == {
+        "adapter_version": 1,
+        "name": "CleanHouse",
+        "outcome_classifier_version": 1,
+    }
+
+    run = run_cli("run", str(specification), "--workspace", str(workspace))
+    assert run.returncode == 0, run.stderr
+
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    )
+    assert report["status"] == "completed"
+    assert report["outcomes"] == {"partial_completion": 1}
+
+
 def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     tmp_path: Path,
 ) -> None:

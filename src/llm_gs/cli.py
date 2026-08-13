@@ -9,7 +9,7 @@ from typing import NoReturn
 
 from pydantic import BaseModel
 
-from llm_gs.execution import FakeOpenAIClient, OfflineEchoEvaluator, execute
+from llm_gs.execution import CleanHouseEvaluator, FakeOpenAIClient, OfflineEchoEvaluator, execute
 from llm_gs.manifest import experiment_id, load_specification, resolve_manifest
 from llm_gs.storage import WorkspaceStore
 
@@ -29,7 +29,7 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         resolved_experiment_id,
         execution_id,
         FakeOpenAIClient(),
-        OfflineEchoEvaluator(),
+        CleanHouseEvaluator() if manifest.task["name"] == "CleanHouse" else OfflineEchoEvaluator(),
     )
     store.save(manifest, report)
     return {

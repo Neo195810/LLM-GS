@@ -80,3 +80,21 @@ def test_v1_adapter_matches_deterministic_v1_execution(
     result = V1Adapter().evaluate(task_name, program_source, seed, limits)
 
     assert asdict(result) == baseline
+
+
+def test_clean_house_adapter_emits_versioned_partial_completion_evidence() -> None:
+    result = V1Adapter().evaluate_attempt(
+        "CleanHouse", "DEF run m( turnLeft m)", 7, V1ExecutionLimits(max_calls=10)
+    )
+
+    assert result.outcome == "partial_completion"
+    assert result.normalized_progress == 0.0
+    assert result.failure_type == "task_failure"
+    assert result.failure_reason == "no_markers_collected"
+    assert result.evaluation_evidence == {
+        "version": 1,
+        "initial_marker_count": 11,
+        "remaining_marker_count": 11,
+        "program_call_count": 1,
+        "terminal_state": result.terminal_state,
+    }

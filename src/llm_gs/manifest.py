@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from llm_gs.contracts import ExperimentManifest, ExperimentSpecification
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
+CLEAN_HOUSE_PROMPT = "Produce one deterministic CleanHouse DSL candidate."
 
 
 def canonical_json(value: object) -> str:
@@ -58,19 +59,23 @@ def load_specification(path: Path) -> ExperimentSpecification:
 
 
 def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManifest:
+    is_clean_house = specification.task.name == "CleanHouse"
     return ExperimentManifest(
         code={"source_sha256": _source_identity()},
         dependencies={"uv_lock_sha256": _dependency_identity()},
         components={
-            "evaluator": "offline-echo-v1",
+            "evaluator": "v1-clean-house-adapter-v1" if is_clean_house else "offline-echo-v1",
             "proposer": "fake-openai-v1",
             "reporter": "deterministic-json-v1",
         },
         contracts={
-            "parser": "offline-dsl-v1",
-            "prompt_sha256": sha256_bytes(OFFLINE_PROMPT.encode("utf-8")).removeprefix(
+            "parser": "karel-dsl-v1" if is_clean_house else "offline-dsl-v1",
+            "prompt_sha256": sha256_bytes(
+                (CLEAN_HOUSE_PROMPT if is_clean_house else OFFLINE_PROMPT).encode("utf-8")
+            ).removeprefix(
                 "sha256:"
             ),
+            **({"outcome_classifier": "clean-house-v1"} if is_clean_house else {}),
         },
         runtime={
             "package": "llm-gs-v2",
@@ -83,7 +88,11 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "model": "fake-openai-v1",
             "reasoning_effort": "medium",
         },
-        task={"adapter_version": 1, "name": specification.task.name},
+        task={
+            "adapter_version": 1,
+            "name": specification.task.name,
+            **({"outcome_classifier_version": 1} if is_clean_house else {}),
+        },
         search_strategy={"name": "single_candidate", "seed": specification.seeds.search},
         failure_strategy={"max_repair_cycles": 0, "name": "regenerate"},
         budgets={

@@ -10,7 +10,7 @@ class StrictContract(BaseModel):
 
 
 class TaskSpecification(StrictContract):
-    name: Literal["offline.echo"]
+    name: Literal["CleanHouse", "offline.echo"]
 
 
 class SeedSpecification(StrictContract):
@@ -47,8 +47,15 @@ class CandidateProgram(StrictContract):
 
 
 class EpisodeResult(StrictContract):
-    outcome: Literal["success"]
+    outcome: Literal[
+        "success", "partial_completion", "policy_crash", "invalid_program", "evaluation_error"
+    ]
     episode_evaluations: int = 1
+    normalized_progress: float = 1.0
+    failure_type: str | None = None
+    failure_reason: str | None = None
+    evaluation_evidence: dict[str, object] | None = None
+    terminal_state: str | None = None
 
 
 class ExperimentReport(StrictContract):
