@@ -13,7 +13,7 @@ from llm_gs.contracts import (
     RepairIntent,
 )
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, FINAL_CANDIDATE_SELECTION_RULE, OFFLINE_PROMPT
-from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_memory_context
+from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_repair_context
 from llm_gs.reflection import RepairCycle, RepeatedRepairError, _normalized_ast_hash
 from llm_gs.storage import WorkspaceStore
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
@@ -64,9 +64,10 @@ def reflect_once(
     repair_round: int = 1,
     seen_ast_hashes: set[str] | None = None,
     reflect: bool = True,
+    retrieved_data: str | None = None,
 ) -> CandidateProgram:
     diagnosis = (
-        cycle.diagnose(result, evidence_index=0)
+        cycle.diagnose(result, evidence_index=0, retrieved_data=retrieved_data)
         if reflect
         else Diagnosis(
             evidence_index=0,
@@ -226,7 +227,7 @@ def _execute_frozen_memory_protocol(
     evaluator: Evaluator,
 ) -> tuple[ExperimentReport, str]:
     """Build Frozen Memory, select on development seeds, then evaluate held-out once."""
-    if not isinstance(model, Repairer):
+    if not isinstance(model, Repairer) and manifest.failure_strategy["name"] != "regenerate":
         raise ValueError("frozen memory protocol requires a repair-capable model")
     suite = _seed_suite(manifest)
     execution_id = store.active_execution_id(experiment_id)
@@ -268,6 +269,10 @@ def _execute_frozen_memory_protocol(
     )
     candidates.append((current_candidate, current_results))
     strategy = str(manifest.failure_strategy["name"])
+    if strategy != "regenerate" and not isinstance(model, Repairer):
+        raise AssertionError(
+            "non-regenerate frozen memory protocols require a repair-capable model"
+        )
     cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]))
     seen_ast_hashes = {_normalized_ast_hash(current_candidate.source)}
     for repair_round in range(1, int(manifest.failure_strategy["max_repair_cycles"]) + 1):
@@ -275,9 +280,32 @@ def _execute_frozen_memory_protocol(
         if not failed_results:
             break
         failed_result = failed_results[0]
-        retrieved, retrieval = StructuredRetriever(tuple(snapshot_entries)).retrieve(failed_result)
-        store.save_retrieval_outcome(execution_id, retrieval)
-        memory_context = serialize_memory_context(retrieved)
+        if strategy == "regenerate":
+            replacement = model.propose(CLEAN_HOUSE_PROMPT)
+            if store.model_requests(execution_id) + replacement.model_requests > int(
+                manifest.budgets["model_requests"]
+            ):
+                break
+            store.add_model_requests(execution_id, replacement.model_requests)
+            current_candidate = replacement
+            current_results = _evaluate_candidate(
+                store, execution_id, current_candidate, suite["development"], evaluator
+            )
+            candidates.append((current_candidate, current_results))
+            seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source))
+            continue
+        if not isinstance(model, Repairer):
+            raise AssertionError("non-regenerate strategy requires a repair-capable model")
+        memory_context: str | None = None
+        retrieval_id: int | None = None
+        if strategy in {"memory_repair", "memory_reflect"}:
+            retrieved, retrieval = StructuredRetriever(tuple(snapshot_entries)).retrieve(
+                failed_result
+            )
+            retrieval_id = store.save_retrieval_outcome(execution_id, retrieval)
+            memory_context = serialize_repair_context(failed_result, retrieved)
+        else:
+            memory_context = serialize_repair_context(failed_result, [])
         prompt_prefix = (
             "Reflect on evidence then repair" if strategy == "memory_reflect" else "Repair"
         )
@@ -289,22 +317,30 @@ def _execute_frozen_memory_protocol(
                 cycle,
                 execution_id,
                 store,
-                f"{prompt_prefix} CleanHouse using memory: {memory_context}",
+                f"{prompt_prefix} CleanHouse using data: "
+                f"{memory_context}",
                 repair_round=repair_round,
                 seen_ast_hashes=seen_ast_hashes,
                 reflect=strategy != "memory_repair",
+                retrieved_data=memory_context,
             )
         except RepeatedRepairError:
+            if retrieval_id is not None:
+                store.record_no_retrieval_impact(retrieval_id)
             break
         if store.model_requests(execution_id) + repaired_candidate.model_requests > int(
             manifest.budgets["model_requests"]
         ):
+            if retrieval_id is not None:
+                store.record_no_retrieval_impact(retrieval_id)
             break
         store.add_model_requests(execution_id, repaired_candidate.model_requests)
         current_candidate = repaired_candidate
         current_results = _evaluate_candidate(
             store, execution_id, current_candidate, suite["development"], evaluator
         )
+        if retrieval_id is not None:
+            store.record_retrieval_impact(retrieval_id, failed_results, current_results)
         candidates.append((current_candidate, current_results))
         seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source))
 
@@ -510,12 +546,13 @@ def _execute_reflect(
             ).retrieve(
                 initial_result
             )
-            store.save_retrieval_outcome(execution_id, retrieval)
-            memory_context = serialize_memory_context(retrieved)
+            retrieval_id = store.save_retrieval_outcome(execution_id, retrieval)
+            memory_context = serialize_repair_context(initial_result, retrieved)
             prefix = "Reflect on evidence then repair" if strategy == "memory_reflect" else "Repair"
             repair_prompt = f"{prefix} CleanHouse using memory: {memory_context}"
         else:
             repair_prompt = None
+            memory_context = None
         try:
             repaired_candidate = reflect_once(
                 final_candidate,
@@ -528,10 +565,15 @@ def _execute_reflect(
                 repair_round=repair_round,
                 seen_ast_hashes=seen_ast_hashes,
                 reflect=strategy != "memory_repair",
+                retrieved_data=memory_context,
             )
         except RepeatedRepairError:
+            if is_online_memory:
+                store.record_no_retrieval_impact(retrieval_id)
             break
         if model_requests_used + repaired_candidate.model_requests > model_request_budget:
+            if is_online_memory:
+                store.record_no_retrieval_impact(retrieval_id)
             break
         model_requests_used += repaired_candidate.model_requests
         store.add_model_requests(execution_id, repaired_candidate.model_requests)
@@ -540,6 +582,8 @@ def _execute_reflect(
             store.record_evaluation(
                 execution_id, seed, repaired_candidate.source, result.model_dump_json()
             )
+        if is_online_memory:
+            store.record_retrieval_impact(retrieval_id, final_results, repaired_results)
         made_improvement = _has_repair_improvement(final_results, repaired_results)
         seen_ast_hashes.add(_normalized_ast_hash(repaired_candidate.source))
         final_candidate = repaired_candidate

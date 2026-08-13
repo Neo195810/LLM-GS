@@ -369,6 +369,12 @@ failure_strategy:
         "memory_snapshot_id"
     ]
     assert report["audit"]["retrievals"]
+    retrieval = report["audit"]["retrievals"][0]
+    assert retrieval["version"] == 2
+    assert retrieval["subsequent_improvement"] is False
+    assert retrieval["subsequent_failure_type_changed"] is False
+    assert retrieval["subsequent_success"] is False
+    assert retrieval["subsequent_attempted"] is True
     assert report["audit"]["repairs"][0]["round"] == 1
     assert report["audit"]["resource_usage"] == {
         "episode_evaluations": 2,

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from llm_gs.contracts import (
+    EpisodeResult,
     ExperimentManifest,
     ExperimentReport,
     MemoryEntry,
@@ -405,11 +406,65 @@ class WorkspaceStore:
             "protocol": "online-v1",
         }
 
-    def save_retrieval_outcome(self, execution_id: str, outcome: RetrievalOutcome) -> None:
+    def save_retrieval_outcome(self, execution_id: str, outcome: RetrievalOutcome) -> int:
         with self._connect() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 "INSERT INTO retrieval_outcomes(execution_id, outcome_json) VALUES (?, ?)",
                 (execution_id, outcome.model_dump_json()),
+            )
+        if cursor.lastrowid is None:
+            raise RuntimeError("retrieval outcome insert did not return an identifier")
+        return cursor.lastrowid
+
+    def record_retrieval_impact(
+        self,
+        retrieval_id: int,
+        previous: list[EpisodeResult],
+        subsequent: list[EpisodeResult],
+    ) -> None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT outcome_json FROM retrieval_outcomes WHERE id = ?", (retrieval_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"retrieval outcome not found: {retrieval_id}")
+            outcome = RetrievalOutcome.model_validate_json(row[0])
+            updated = outcome.model_copy(
+                update={
+                    "subsequent_attempted": True,
+                    "subsequent_improvement": sum(item.normalized_progress for item in subsequent)
+                    > sum(item.normalized_progress for item in previous),
+                    "subsequent_failure_type_changed": {
+                        item.failure_type for item in subsequent
+                    }
+                    != {item.failure_type for item in previous},
+                    "subsequent_success": any(item.outcome == "success" for item in subsequent),
+                }
+            )
+            connection.execute(
+                "UPDATE retrieval_outcomes SET outcome_json = ? WHERE id = ?",
+                (updated.model_dump_json(), retrieval_id),
+            )
+
+    def record_no_retrieval_impact(self, retrieval_id: int) -> None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT outcome_json FROM retrieval_outcomes WHERE id = ?", (retrieval_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"retrieval outcome not found: {retrieval_id}")
+            outcome = RetrievalOutcome.model_validate_json(row[0])
+            updated = outcome.model_copy(
+                update={
+                    "subsequent_attempted": False,
+                    "subsequent_improvement": False,
+                    "subsequent_failure_type_changed": False,
+                    "subsequent_success": False,
+                }
+            )
+            connection.execute(
+                "UPDATE retrieval_outcomes SET outcome_json = ? WHERE id = ?",
+                (updated.model_dump_json(), retrieval_id),
             )
 
     def execution_audit(self, execution_id: str) -> dict[str, object]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 
 from llm_gs.ast_features import normalized_ast_hash
@@ -17,7 +18,15 @@ RETRIEVER_ORDER = (
     "improvement,novelty,normalized_ast_hash,entry_id"
 )
 RETRIEVER_WEIGHTS = "1,1,1,1,1,1,1,1,1"
-MEMORY_CONTEXT_LIMIT = 512
+MEMORY_CONTEXT_LIMIT = 2048
+MEMORY_CONTEXT_SERIALIZER_VERSION = "memory-context-v1"
+_MEMORY_ENTRY_FIELDS = (
+    "entry_id",
+    "failure_type",
+    "failure_reason",
+    "initial_marker_count",
+    "remaining_marker_count",
+)
 
 
 def curate_clean_house_attempt(
@@ -124,12 +133,56 @@ class StructuredRetriever:
 
 
 def serialize_memory_context(entries: list[MemoryEntry]) -> str:
-    context = "\n".join(
-        f"failure={entry.failure_reason}; remaining={entry.evidence['remaining_marker_count']}"
-        for entry in entries
+    """Serialize retrieved facts as data, never as instructions from prior attempts."""
+    context = json.dumps(
+        {
+            "version": MEMORY_CONTEXT_SERIALIZER_VERSION,
+            "kind": "retrieved_experience_data",
+            "entries": [
+                {
+                    "entry_id": entry.entry_id,
+                    "failure_type": entry.failure_type,
+                    "failure_reason": entry.failure_reason,
+                    "initial_marker_count": entry.evidence["initial_marker_count"],
+                    "remaining_marker_count": entry.evidence["remaining_marker_count"],
+                }
+                for entry in entries
+            ],
+        },
+        separators=(",", ":"),
+        sort_keys=True,
     )
     if len(context) > MEMORY_CONTEXT_LIMIT:
         raise ValueError("memory context exceeds the configured budget")
+    return context
+
+
+def serialize_repair_context(result: EpisodeResult, entries: list[MemoryEntry]) -> str:
+    """Combine allowlisted current evidence and retrieved facts for a repair request."""
+    evidence = result.evaluation_evidence or {}
+    initial = evidence.get("initial_marker_count")
+    remaining = evidence.get("remaining_marker_count")
+    if not isinstance(initial, int) or not isinstance(remaining, int):
+        raise ValueError("repair context requires allowlisted marker-count evidence")
+    retrieved = json.loads(serialize_memory_context(entries))
+    context = json.dumps(
+        {
+            "version": MEMORY_CONTEXT_SERIALIZER_VERSION,
+            "kind": "post_failure_repair_data",
+            "current_failure": {
+                "failure_type": result.failure_type,
+                "failure_reason": result.failure_reason,
+                "initial_marker_count": initial,
+                "remaining_marker_count": remaining,
+            },
+            "retrieved_memory": retrieved["entries"],
+            "entry_fields": _MEMORY_ENTRY_FIELDS,
+        },
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    if len(context) > MEMORY_CONTEXT_LIMIT:
+        raise ValueError("repair context exceeds the configured budget")
     return context
 
 

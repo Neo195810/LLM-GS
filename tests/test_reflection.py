@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from llm_gs.contracts import CandidateProgram, EpisodeResult, RepairIntent
+from llm_gs.memory import curate_clean_house_attempt, serialize_repair_context
 from llm_gs.reflection import RepairCycle, RepeatedRepairError
 
 
@@ -42,3 +43,21 @@ def test_reflection_stops_repeated_ast_and_exhausted_cycles() -> None:
         cycle.repair(parent, diagnosis, intent, parent, repair_round=1)
     with pytest.raises(ValueError, match="exhausted"):
         cycle.repair(parent, diagnosis, intent, CandidateProgram(source="DEF run m( move m)"), 2)
+
+
+def test_diagnosis_uses_allowlisted_retrieved_failure_data() -> None:
+    result = EpisodeResult(
+        outcome="partial_completion",
+        failure_type="task_failure",
+        failure_reason="current_failure",
+        evaluation_evidence={"initial_marker_count": 2, "remaining_marker_count": 2},
+    )
+    entry = curate_clean_house_attempt(
+        "prior",
+        "DEF run m( move m)",
+        result.model_copy(update={"failure_reason": "retrieved_failure"}),
+    )
+
+    diagnosis = RepairCycle().diagnose(result, 0, serialize_repair_context(result, [entry]))
+
+    assert "retrieved_failure" in diagnosis.observation

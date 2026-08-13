@@ -67,7 +67,10 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
     is_clean_house = specification.task.name == "CleanHouse"
     repair_rounds = (
         specification.failure_strategy.max_repair_cycles
-        if specification.failure_strategy.name != "regenerate"
+        if (
+            specification.failure_strategy.name != "regenerate"
+            or specification.seed_suite is not None
+        )
         else 0
     )
     candidate_budget = 1 + repair_rounds

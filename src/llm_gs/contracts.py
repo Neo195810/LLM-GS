@@ -148,12 +148,16 @@ class RetrievalCandidateComponents(StrictContract):
 
 
 class RetrievalOutcome(StrictContract):
-    version: Literal[1] = 1
+    version: Literal[2] = 2
     query_failure_type: str
     query_failure_reason: str
     selected_entry_ids: list[str]
     reason_codes: dict[str, list[str]]
     candidate_components: dict[str, RetrievalCandidateComponents]
+    subsequent_improvement: bool | None = None
+    subsequent_failure_type_changed: bool | None = None
+    subsequent_success: bool | None = None
+    subsequent_attempted: bool | None = None
 
 
 class ExperimentReport(StrictContract):

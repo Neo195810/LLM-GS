@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from llm_gs.ast_features import normalized_ast_hash
 from llm_gs.contracts import CandidateProgram, Diagnosis, EpisodeResult, RepairAttempt, RepairIntent
 from llm_gs.proposer import _validate_dsl
@@ -15,13 +17,25 @@ class RepairCycle:
             raise ValueError("maximum repairs cannot be negative")
         self._maximum_repairs = maximum_repairs
 
-    def diagnose(self, result: EpisodeResult, evidence_index: int) -> Diagnosis:
+    def diagnose(
+        self, result: EpisodeResult, evidence_index: int, retrieved_data: str | None = None
+    ) -> Diagnosis:
         if result.evaluation_evidence is None:
             raise ValueError("diagnosis requires episode evaluation evidence")
         reason = result.failure_reason or "unknown failure"
+        memory_observation = ""
+        if retrieved_data is not None:
+            payload = json.loads(retrieved_data)
+            entries = payload.get("retrieved_memory", [])
+            if not isinstance(entries, list):
+                raise ValueError("diagnosis requires allowlisted retrieved memory data")
+            reasons = [entry.get("failure_reason") for entry in entries if isinstance(entry, dict)]
+            allowed_reasons = [reason for reason in reasons if isinstance(reason, str)]
+            if allowed_reasons:
+                memory_observation = f" Retrieved failures include {allowed_reasons[0]}."
         return Diagnosis(
             evidence_index=evidence_index,
-            observation=f"Observed {reason} in episode evidence.",
+            observation=f"Observed {reason} in episode evidence.{memory_observation}",
             hypothesis="The candidate needs a different action sequence to make progress.",
         )
 

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from llm_gs.contracts import EpisodeResult
-from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_memory_context
+from llm_gs.memory import (
+    StructuredRetriever,
+    curate_clean_house_attempt,
+    serialize_memory_context,
+    serialize_repair_context,
+)
 from llm_gs.storage import WorkspaceStore
 
 
@@ -25,6 +30,17 @@ def test_memory_curator_and_retriever_are_deterministic_and_allowlisted() -> Non
     assert sum("selected" in codes for codes in outcome.reason_codes.values()) == 1
     assert sum("not_selected" in codes for codes in outcome.reason_codes.values()) == 1
     assert "terminal_state" not in serialize_memory_context(entries)
+
+
+def test_repair_context_is_versioned_allowlisted_data_not_historical_instructions() -> None:
+    entry = curate_clean_house_attempt("attempt", "DEF run m( move m)", _failure())
+
+    context = serialize_repair_context(_failure(), [entry])
+
+    assert '"version":"memory-context-v1"' in context
+    assert '"kind":"post_failure_repair_data"' in context
+    assert "DEF run" not in context
+    assert "terminal_state" not in context
 
 
 def test_retrieval_scores_observable_features_and_has_a_stable_tiebreaker() -> None:
