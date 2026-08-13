@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictContract(BaseModel):
@@ -18,6 +18,22 @@ class SeedSpecification(StrictContract):
     search: int = 0
 
 
+class SeedSuiteSpecification(StrictContract):
+    version: Literal[1] = 1
+    memory_training: list[int] = Field(min_length=1)
+    development: list[int] = Field(min_length=1)
+    held_out: list[int] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def partitions_are_disjoint(self) -> SeedSuiteSpecification:
+        partitions = (self.memory_training, self.development, self.held_out)
+        if sum(len(partition) for partition in partitions) != len(
+            set().union(*[set(partition) for partition in partitions])
+        ):
+            raise ValueError("seed suite partitions must be disjoint")
+        return self
+
+
 class FailureStrategySpecification(StrictContract):
     name: Literal["regenerate", "reflect", "memory_repair", "memory_reflect"] = "regenerate"
     max_repair_cycles: int = Field(default=3, ge=0, le=3)
@@ -27,10 +43,17 @@ class ExperimentSpecification(StrictContract):
     spec_version: Literal[1] = 1
     display_name: str = Field(min_length=1)
     task: TaskSpecification
-    seeds: SeedSpecification
+    seeds: SeedSpecification | None = None
+    seed_suite: SeedSuiteSpecification | None = None
     failure_strategy: FailureStrategySpecification = Field(
         default_factory=FailureStrategySpecification
     )
+
+    @model_validator(mode="after")
+    def has_exactly_one_seed_definition(self) -> ExperimentSpecification:
+        if (self.seeds is None) == (self.seed_suite is None):
+            raise ValueError("provide exactly one of seeds or seed_suite")
+        return self
 
 
 class ExperimentManifest(StrictContract):

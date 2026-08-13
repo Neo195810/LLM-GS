@@ -62,10 +62,20 @@ class WorkspaceStore:
                 "INSERT OR IGNORE INTO executions(experiment_id, execution_id, status, candidate_source, model_requests) VALUES (?, ?, 'running', ?, ?)",
                 (experiment_id, execution_id, candidate_source, model_requests),
             )
-            seeds = manifest.specification["seeds"]
-            if not isinstance(seeds, dict) or not isinstance(seeds.get("task"), list):
+            specification = manifest.specification
+            seeds = specification.get("seeds")
+            seed_suite = specification.get("seed_suite")
+            if isinstance(seeds, dict) and isinstance(seeds.get("task"), list):
+                task_seeds = seeds["task"]
+            elif isinstance(seed_suite, dict):
+                task_seeds = [
+                    seed
+                    for partition in ("memory_training", "development", "held_out")
+                    for seed in seed_suite.get(partition, [])
+                ]
+            else:
                 raise ValueError("resolved manifest contains invalid task seeds")
-            for seed in seeds["task"]:
+            for seed in task_seeds:
                 connection.execute(
                     "INSERT OR IGNORE INTO work_units(execution_id, task_seed, status) VALUES (?, ?, 'pending')",
                     (execution_id, int(seed)),
@@ -183,13 +193,15 @@ class WorkspaceStore:
             ).fetchall()
         return [MemoryEntry.model_validate_json(row[0]) for row in rows]
 
-    def freeze_memory_snapshot(self, execution_id: str) -> list[MemoryEntry]:
+    def freeze_memory_snapshot(
+        self, execution_id: str, entries: list[MemoryEntry] | None = None
+    ) -> list[MemoryEntry]:
         """Persist the exact read-only memory membership available to one execution."""
         try:
             return self.memory_snapshot_entries(execution_id)
         except ValueError:
             pass
-        entries = self.memory_entries()
+        entries = self.memory_entries() if entries is None else sorted(entries, key=lambda entry: entry.entry_id)
         snapshot_payload = canonical_json(
             {
                 "retriever_version": RETRIEVER_VERSION,

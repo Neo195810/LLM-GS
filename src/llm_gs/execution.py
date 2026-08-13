@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Protocol, TypedDict, runtime_checkable
 
 from llm_gs.contracts import (
     CandidateProgram,
@@ -9,9 +9,10 @@ from llm_gs.contracts import (
     EvaluationEvidence,
     ExperimentManifest,
     ExperimentReport,
+    MemoryEntry,
     RepairIntent,
 )
-from llm_gs.manifest import CLEAN_HOUSE_PROMPT, OFFLINE_PROMPT
+from llm_gs.manifest import CLEAN_HOUSE_PROMPT, FINAL_CANDIDATE_SELECTION_RULE, OFFLINE_PROMPT
 from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_memory_context
 from llm_gs.reflection import RepairCycle, RepeatedRepairError, _normalized_ast_hash
 from llm_gs.storage import WorkspaceStore
@@ -24,6 +25,13 @@ class ModelClient(Protocol):
 
 class Evaluator(Protocol):
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult: ...
+
+
+class ResolvedSeedSuite(TypedDict):
+    version: int
+    memory_training: list[int]
+    development: list[int]
+    held_out: list[int]
 
 
 @runtime_checkable
@@ -168,6 +176,8 @@ def execute_resumable(
     evaluator: Evaluator,
     stop_after: int | None = None,
 ) -> tuple[ExperimentReport | None, str]:
+    if isinstance(manifest.specification.get("seed_suite"), dict):
+        return _execute_frozen_memory_protocol(manifest, experiment_id, store, model, evaluator)
     if manifest.failure_strategy["name"] in {"reflect", "memory_repair", "memory_reflect"}:
         return _execute_reflect(manifest, experiment_id, store, model, evaluator, stop_after)
     work = store.next_pending_work(experiment_id)
@@ -206,6 +216,211 @@ def execute_resumable(
     )
     store.save(manifest, report)
     return report, "completed"
+
+
+def _execute_frozen_memory_protocol(
+    manifest: ExperimentManifest,
+    experiment_id: str,
+    store: WorkspaceStore,
+    model: ModelClient,
+    evaluator: Evaluator,
+) -> tuple[ExperimentReport, str]:
+    """Build Frozen Memory, select on development seeds, then evaluate held-out once."""
+    if not isinstance(model, Repairer):
+        raise ValueError("frozen memory protocol requires a repair-capable model")
+    suite = _seed_suite(manifest)
+    execution_id = store.active_execution_id(experiment_id)
+    if execution_id is not None:
+        raise ValueError("resuming the frozen memory protocol is not yet supported")
+
+    execution_id = store.next_execution_id(experiment_id)
+    initial_candidate = model.propose(CLEAN_HOUSE_PROMPT)
+    store.begin_execution_for_experiment(
+        manifest,
+        experiment_id,
+        execution_id,
+        initial_candidate.source,
+        initial_candidate.model_requests,
+    )
+    training_results = _evaluate_candidate(
+        store, execution_id, initial_candidate, suite["memory_training"], evaluator
+    )
+    training_entries = [
+        curate_clean_house_attempt(
+            f"{execution_id}:memory-training:{index}", initial_candidate.source, result
+        )
+        for index, result in enumerate(training_results)
+        if result.outcome != "success"
+    ]
+    training_entries = _balanced_memory_entries(training_entries)
+    for entry in training_entries:
+        store.save_memory_entry(entry)
+    snapshot_entries = store.freeze_memory_snapshot(execution_id, training_entries)
+
+    candidates: list[tuple[CandidateProgram, list[EpisodeResult]]] = []
+    current_candidate = initial_candidate
+    current_results = _evaluate_candidate(
+        store, execution_id, current_candidate, suite["development"], evaluator
+    )
+    candidates.append((current_candidate, current_results))
+    strategy = str(manifest.failure_strategy["name"])
+    cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]))
+    seen_ast_hashes = {_normalized_ast_hash(current_candidate.source)}
+    for repair_round in range(1, int(manifest.failure_strategy["max_repair_cycles"]) + 1):
+        failed_results = [result for result in current_results if result.outcome != "success"]
+        if not failed_results:
+            break
+        failed_result = failed_results[0]
+        retrieved, retrieval = StructuredRetriever(tuple(snapshot_entries)).retrieve(failed_result)
+        store.save_retrieval_outcome(execution_id, retrieval)
+        memory_context = serialize_memory_context(retrieved)
+        prompt_prefix = (
+            "Reflect on evidence then repair" if strategy == "memory_reflect" else "Repair"
+        )
+        try:
+            repaired_candidate = reflect_once(
+                current_candidate,
+                failed_result,
+                model,
+                cycle,
+                execution_id,
+                store,
+                f"{prompt_prefix} CleanHouse using memory: {memory_context}",
+                repair_round=repair_round,
+                seen_ast_hashes=seen_ast_hashes,
+                reflect=strategy != "memory_repair",
+            )
+        except RepeatedRepairError:
+            break
+        if store.model_requests(execution_id) + repaired_candidate.model_requests > int(
+            manifest.budgets["model_requests"]
+        ):
+            break
+        store.add_model_requests(execution_id, repaired_candidate.model_requests)
+        current_candidate = repaired_candidate
+        current_results = _evaluate_candidate(
+            store, execution_id, current_candidate, suite["development"], evaluator
+        )
+        candidates.append((current_candidate, current_results))
+        seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source))
+
+    selected_candidate, selection = _select_final_candidate(candidates)
+    held_out_results = _evaluate_candidate(
+        store, execution_id, selected_candidate, suite["held_out"], evaluator
+    )
+    audit = store.execution_audit(execution_id)
+    total_episode_evaluations = (
+        sum(len(results) for _, results in candidates)
+        + len(training_results)
+        + len(held_out_results)
+    )
+    audit["frozen_memory_protocol"] = {
+        "memory_snapshot_id": store.memory_snapshot_id(execution_id),
+        "primary_metric": {
+            "name": "held_out_success_rate",
+            "value": _success_rate(held_out_results),
+        },
+        "secondary_metrics": {
+            "development_candidate_count": len(candidates),
+            "episode_evaluations": total_episode_evaluations,
+            "model_requests": store.model_requests(execution_id),
+            "repair_attempts": len(candidates) - 1,
+        },
+        "seed_suite": suite,
+        "selection": {
+            **selection,
+            "held_out_evaluations": len(held_out_results),
+            "rule": FINAL_CANDIDATE_SELECTION_RULE,
+            "selected_before_held_out": True,
+        },
+    }
+    report = _report_from_results(
+        experiment_id,
+        execution_id,
+        held_out_results,
+        store.model_requests(execution_id),
+        candidate_programs=len(candidates),
+        audit=audit,
+    ).model_copy(update={"episode_evaluations": total_episode_evaluations})
+    store.save(manifest, report)
+    return report, "completed"
+
+
+def _evaluate_candidate(
+    store: WorkspaceStore,
+    execution_id: str,
+    candidate: CandidateProgram,
+    seeds: list[int],
+    evaluator: Evaluator,
+) -> list[EpisodeResult]:
+    results = [evaluator.evaluate(candidate, seed) for seed in seeds]
+    for seed, result in zip(seeds, results, strict=True):
+        store.record_evaluation(execution_id, seed, candidate.source, result.model_dump_json())
+    return results
+
+
+def _seed_suite(manifest: ExperimentManifest) -> ResolvedSeedSuite:
+    seed_suite = manifest.specification.get("seed_suite")
+    if not isinstance(seed_suite, dict):
+        raise ValueError("resolved manifest contains invalid seed suite")
+    if any(
+        not isinstance(seed_suite.get(partition), list)
+        for partition in ("memory_training", "development", "held_out")
+    ):
+        raise ValueError("resolved manifest contains invalid seed suite")
+    return {
+        "version": int(seed_suite["version"]),
+        "memory_training": [int(seed) for seed in seed_suite["memory_training"]],
+        "development": [int(seed) for seed in seed_suite["development"]],
+        "held_out": [int(seed) for seed in seed_suite["held_out"]],
+    }
+
+
+def _select_final_candidate(
+    candidates: list[tuple[CandidateProgram, list[EpisodeResult]]],
+) -> tuple[CandidateProgram, dict[str, object]]:
+    if not candidates:
+        raise ValueError("cannot select a final candidate without development results")
+
+    def key(item: tuple[CandidateProgram, list[EpisodeResult]]) -> tuple[float | int | str, ...]:
+        candidate, results = item
+        outcomes = [result.outcome for result in results]
+        outcome_rank = 0 if all(outcome == "success" for outcome in outcomes) else 1
+        progress = [result.normalized_progress for result in results]
+        return (
+            outcome_rank,
+            -_success_rate(results),
+            -(sum(progress) / len(progress)),
+            -min(progress),
+            sum(result.episode_evaluations for result in results),
+            _normalized_ast_hash(candidate.source),
+        )
+
+    selected, results = min(candidates, key=key)
+    return selected, {
+        "candidate_source_sha256": _normalized_ast_hash(selected.source),
+        "development_success_rate": _success_rate(results),
+        "development_mean_normalized_progress": sum(
+            result.normalized_progress for result in results
+        )
+        / len(results),
+        "development_worst_normalized_progress": min(
+            result.normalized_progress for result in results
+        ),
+    }
+
+
+def _success_rate(results: list[EpisodeResult]) -> float:
+    return sum(result.outcome == "success" for result in results) / len(results)
+
+
+def _balanced_memory_entries(entries: list[MemoryEntry]) -> list[MemoryEntry]:
+    """Keep one stable representative per shared failure category for Frozen Memory."""
+    representatives: dict[tuple[str, str], MemoryEntry] = {}
+    for entry in entries:
+        key = (entry.failure_type, entry.failure_reason)
+        representatives.setdefault(key, entry)
+    return list(representatives.values())
 
 
 def _execute_reflect(

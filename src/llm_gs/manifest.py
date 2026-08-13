@@ -14,6 +14,10 @@ from llm_gs.memory import RETRIEVER_ORDER, RETRIEVER_VERSION, RETRIEVER_WEIGHTS
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
 CLEAN_HOUSE_PROMPT = "Produce one deterministic CleanHouse DSL candidate."
+FINAL_CANDIDATE_SELECTION_RULE = (
+    "attempt_outcome,success_proportion,mean_normalized_progress,"
+    "worst_normalized_progress,lower_episode_cost,stable_identity"
+)
 
 
 def canonical_json(value: object) -> str:
@@ -67,6 +71,18 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         else 0
     )
     candidate_budget = 1 + repair_rounds
+    seed_suite = specification.seed_suite
+    if specification.seeds is None and seed_suite is None:
+        raise ValueError("resolved specification has no seed definition")
+    if specification.seeds is not None:
+        task_seed_count = len(specification.seeds.task) * candidate_budget
+    else:
+        assert seed_suite is not None
+        task_seed_count = (
+            len(seed_suite.memory_training)
+            + len(seed_suite.development) * candidate_budget
+            + len(seed_suite.held_out)
+        )
     # OpenAIProposer permits up to three schema/DSL correction requests for
     # every candidate, so the request budget must include that bounded retry.
     model_request_budget = candidate_budget * 3 if is_clean_house else candidate_budget
@@ -77,6 +93,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "evaluator": "v1-clean-house-adapter-v1" if is_clean_house else "offline-echo-v1",
             "proposer": "fake-openai-v1",
             "reporter": "deterministic-json-v1",
+            "final_candidate_selector": "lexicographic-v1",
         },
         contracts={
             "parser": "karel-dsl-v1" if is_clean_house else "offline-dsl-v1",
@@ -101,17 +118,31 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "name": specification.task.name,
             **({"outcome_classifier_version": 1} if is_clean_house else {}),
         },
-        search_strategy={"name": "single_candidate", "seed": specification.seeds.search},
+        search_strategy={
+            "name": "single_candidate",
+            "seed": specification.seeds.search if specification.seeds is not None else 0,
+        },
         failure_strategy=specification.failure_strategy.model_dump(mode="json"),
         budgets={
-            "episode_evaluations": len(specification.seeds.task) * candidate_budget,
+            "episode_evaluations": task_seed_count,
             "input_tokens": 4096,
             "model_requests": model_request_budget,
             "output_tokens": 1024,
         },
         memory_snapshot={
-            "id": "none",
+            "id": "frozen-from-memory-training" if specification.seed_suite else "none",
             "read_only": True,
+            **({"protocol": "frozen-v1"} if specification.seed_suite else {}),
+            **(
+                {"curation": "balanced-failure-representatives-v1"}
+                if specification.seed_suite
+                else {}
+            ),
+            **(
+                {"selection_rule": FINAL_CANDIDATE_SELECTION_RULE}
+                if specification.seed_suite
+                else {}
+            ),
             "retriever_version": RETRIEVER_VERSION,
             "retriever_order": RETRIEVER_ORDER,
             "retriever_weights": RETRIEVER_WEIGHTS,

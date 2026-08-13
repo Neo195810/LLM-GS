@@ -466,6 +466,86 @@ failure_strategy:
     assert run.returncode == 0, run.stderr
 
 
+def test_frozen_memory_protocol_uses_isolated_seed_suite_and_reports_held_out_only(
+    tmp_path: Path,
+) -> None:
+    specification = tmp_path / "frozen-memory.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-frozen-memory
+task:
+  name: CleanHouse
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+failure_strategy:
+  name: memory_repair
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert validation["manifest"]["memory_snapshot"]["protocol"] == "frozen-v1"
+    assert validation["manifest"]["budgets"]["episode_evaluations"] == 4
+
+    run = run_cli("run", str(specification), "--workspace", str(workspace))
+    assert run.returncode == 0, run.stderr
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    )
+
+    protocol = report["audit"]["frozen_memory_protocol"]
+    assert protocol["seed_suite"] == {
+        "development": [2],
+        "held_out": [3],
+        "memory_training": [1],
+        "version": 1,
+    }
+    assert protocol["memory_snapshot_id"].startswith("snapshot_")
+    assert protocol["selection"]["selected_before_held_out"] is True
+    assert protocol["selection"]["held_out_evaluations"] == 1
+    assert protocol["primary_metric"] == {
+        "name": "held_out_success_rate",
+        "value": 0.0,
+    }
+    assert report["outcomes"] == {"partial_completion": 1}
+    assert report["episode_evaluations"] == 4
+
+
+def test_seed_suite_rejects_overlapping_partitions(tmp_path: Path) -> None:
+    specification = tmp_path / "overlapping.yaml"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: overlapping-seed-suite
+task:
+  name: CleanHouse
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [1]
+  held_out: [2]
+""",
+        encoding="utf-8",
+    )
+
+    result = run_cli("validate", str(specification))
+
+    assert result.returncode == 2
+    assert "disjoint" in result.stderr
+
+
 def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     tmp_path: Path,
 ) -> None:
@@ -485,8 +565,9 @@ def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     assert first["experiment_id"] == second["experiment_id"]
     assert first["manifest"] == second["manifest"]
     assert first["manifest"]["components"] == {
-        "evaluator": "offline-echo-v1",
-        "proposer": "fake-openai-v1",
+            "evaluator": "offline-echo-v1",
+        "final_candidate_selector": "lexicographic-v1",
+            "proposer": "fake-openai-v1",
         "reporter": "deterministic-json-v1",
     }
     assert first["manifest"]["contracts"] == {
