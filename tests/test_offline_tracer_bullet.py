@@ -445,7 +445,7 @@ failure_strategy:
     validation = json.loads(run_cli("validate", str(specification)).stdout)
     assert (
         validation["manifest"]["memory_snapshot"]["retriever_version"]
-        == "structured-clean-house-v2"
+        == "structured-clean-house-v3"
     )
 
     run = run_cli("run", str(specification), "--workspace", str(workspace))
@@ -486,6 +486,6 @@ def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
             "task,failure_type,failure_reason,state_distance,evidence_quality,"
             "improvement,novelty,normalized_ast_hash,entry_id"
         ),
-        "retriever_version": "structured-clean-house-v2",
+        "retriever_version": "structured-clean-house-v3",
         "retriever_weights": "1,1,1,1,1,1,1,1,1",
     }

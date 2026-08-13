@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
+from llm_gs.ast_features import normalized_ast_hash
 from llm_gs.contracts import (
     EpisodeResult,
     MemoryEntry,
@@ -10,7 +11,7 @@ from llm_gs.contracts import (
     RetrievalOutcome,
 )
 
-RETRIEVER_VERSION = "structured-clean-house-v2"
+RETRIEVER_VERSION = "structured-clean-house-v3"
 RETRIEVER_ORDER = (
     "task,failure_type,failure_reason,state_distance,evidence_quality,"
     "improvement,novelty,normalized_ast_hash,entry_id"
@@ -29,7 +30,8 @@ def curate_clean_house_attempt(
     initial = evidence.get("initial_marker_count")
     if not isinstance(remaining, int) or not isinstance(initial, int):
         raise ValueError("memory requires allowlisted marker-count evidence")
-    normalized_hash = hashlib.sha256(" ".join(source.split()).encode()).hexdigest()
+    normalized_hash = normalized_ast_hash(source)
+    entry_id = hashlib.sha256(f"{source_attempt_id}:{normalized_hash}".encode()).hexdigest()
     entry_id = hashlib.sha256(f"{source_attempt_id}:{normalized_hash}".encode()).hexdigest()
     return MemoryEntry(
         entry_id=entry_id,
@@ -38,7 +40,11 @@ def curate_clean_house_attempt(
         failure_reason=result.failure_reason,
         normalized_ast_hash=normalized_hash,
         state_features={"initial_marker_count": initial, "remaining_marker_count": remaining},
-        evidence={"remaining_marker_count": remaining, "failure_reason": result.failure_reason},
+        evidence={
+            "initial_marker_count": initial,
+            "remaining_marker_count": remaining,
+            "failure_reason": result.failure_reason,
+        },
         source_attempt_id=source_attempt_id,
     )
 
@@ -58,6 +64,12 @@ class StructuredRetriever:
         if not isinstance(query_remaining, int):
             raise ValueError("retrieval requires allowlisted marker-count evidence")
         components: dict[str, RetrievalCandidateComponents] = {}
+        ast_occurrences = {
+            entry.normalized_ast_hash: sum(
+                other.normalized_ast_hash == entry.normalized_ast_hash for other in self.entries
+            )
+            for entry in self.entries
+        }
         for entry in self.entries:
             remaining = entry.state_features["remaining_marker_count"]
             improvement = entry.state_features["initial_marker_count"] - remaining
@@ -67,9 +79,9 @@ class StructuredRetriever:
                 failure_reason_match=entry.failure_reason == result.failure_reason,
                 state_distance=abs(remaining - query_remaining),
                 ast_feature=entry.normalized_ast_hash,
-                evidence_quality=len(entry.evidence),
+                evidence_quality=_evidence_quality(entry.evidence),
                 improvement=improvement,
-                novelty=1,
+                novelty=1 if ast_occurrences[entry.normalized_ast_hash] == 1 else 0,
             )
         ranked = sorted(
             self.entries,
@@ -119,3 +131,13 @@ def serialize_memory_context(entries: list[MemoryEntry]) -> str:
     if len(context) > MEMORY_CONTEXT_LIMIT:
         raise ValueError("memory context exceeds the configured budget")
     return context
+
+
+def _evidence_quality(evidence: dict[str, int | str]) -> int:
+    return sum(
+        (
+            isinstance(evidence.get("initial_marker_count"), int),
+            isinstance(evidence.get("remaining_marker_count"), int),
+            isinstance(evidence.get("failure_reason"), str),
+        )
+    )

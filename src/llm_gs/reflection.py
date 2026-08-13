@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-
+from llm_gs.ast_features import normalized_ast_hash
 from llm_gs.contracts import CandidateProgram, Diagnosis, EpisodeResult, RepairAttempt, RepairIntent
 from llm_gs.proposer import _validate_dsl
 
@@ -38,8 +37,8 @@ class RepairCycle:
         if repair_round > self._maximum_repairs:
             raise ValueError("repair cycle limit exhausted")
         _validate_dsl(candidate.source)
-        candidate_hash = _normalized_ast_hash(candidate.source)
-        prior_hashes = seen_ast_hashes or {_normalized_ast_hash(parent.source)}
+        candidate_hash = normalized_ast_hash(candidate.source)
+        prior_hashes = seen_ast_hashes or {normalized_ast_hash(parent.source)}
         if candidate_hash in prior_hashes:
             raise RepeatedRepairError("repair repeated an attempted AST")
         return RepairAttempt(
@@ -53,7 +52,7 @@ class RepairCycle:
 
 
 def _normalized_ast_hash(source: str) -> str:
-    return hashlib.sha256(" ".join(source.split()).encode()).hexdigest()
+    return normalized_ast_hash(source)
 
 
 def _ast_difference(parent: str, child: str) -> str:

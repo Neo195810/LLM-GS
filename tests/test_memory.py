@@ -27,6 +27,30 @@ def test_memory_curator_and_retriever_are_deterministic_and_allowlisted() -> Non
     assert "terminal_state" not in serialize_memory_context(entries)
 
 
+def test_retrieval_scores_observable_features_and_has_a_stable_tiebreaker() -> None:
+    closest = curate_clean_house_attempt("closest", "DEF run m( move m)", _failure())
+    farther = curate_clean_house_attempt(
+        "farther",
+        "DEF run m( turnLeft m)",
+        EpisodeResult(
+            outcome="partial_completion",
+            failure_type="task_failure",
+            failure_reason="no_markers_collected",
+            evaluation_evidence={"initial_marker_count": 11, "remaining_marker_count": 8},
+        ),
+    )
+
+    first, first_outcome = StructuredRetriever((farther, closest)).retrieve(_failure(), limit=2)
+    second, second_outcome = StructuredRetriever((closest, farther)).retrieve(_failure(), limit=2)
+
+    assert [entry.entry_id for entry in first] == [closest.entry_id, farther.entry_id]
+    assert [entry.entry_id for entry in second] == [closest.entry_id, farther.entry_id]
+    assert first_outcome == second_outcome
+    assert first_outcome.candidate_components[closest.entry_id].evidence_quality == 3
+    assert first_outcome.candidate_components[closest.entry_id].improvement == 0
+    assert first_outcome.candidate_components[closest.entry_id].novelty == 1
+
+
 def test_memory_provenance_survives_store_restart(tmp_path) -> None:
     entry = curate_clean_house_attempt("attempt-1", "DEF run m( turnLeft m)", _failure())
     store = WorkspaceStore(tmp_path)
