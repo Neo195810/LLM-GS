@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from llm_gs.contracts import EpisodeResult
+import pytest
+
+from llm_gs.contracts import EpisodeResult, ExperimentSpecification
+from llm_gs.manifest import resolve_manifest
 from llm_gs.memory import (
     StructuredRetriever,
     curate_clean_house_attempt,
@@ -130,3 +133,63 @@ def test_online_memory_lineages_are_isolated_deterministic_and_append_only(tmp_p
         "parent_snapshot_id": store.memory_snapshot_id("exec_000001"),
         "protocol": "online-v1",
     }
+
+
+def test_frozen_protocol_arms_must_keep_paired_seed_suites_and_budgets(tmp_path) -> None:
+    store = WorkspaceStore(tmp_path)
+    first = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "first",
+                "task": {"name": "CleanHouse"},
+                "seed_suite": {
+                    "memory_training": [1],
+                    "development": [2],
+                    "held_out": [3],
+                },
+                "failure_strategy": {"name": "reflect", "max_repair_cycles": 1},
+            }
+        )
+    )
+    paired_arm = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "paired",
+                "task": {"name": "CleanHouse"},
+                "seed_suite": {
+                    "memory_training": [1],
+                    "development": [2],
+                    "held_out": [3],
+                },
+                "failure_strategy": {"name": "memory_repair", "max_repair_cycles": 1},
+            }
+        )
+    )
+    mismatched_arm = paired_arm.model_copy(
+        update={
+            "specification": {
+                **paired_arm.specification,
+                "seed_suite": {
+                    "version": 1,
+                    "memory_training": [4],
+                    "development": [5],
+                    "held_out": [6],
+                },
+            }
+        }
+    )
+    budget_mismatched_arm = paired_arm.model_copy(
+        update={
+            "budgets": {
+                **paired_arm.budgets,
+                "episode_evaluations": paired_arm.budgets["episode_evaluations"] + 1,
+            }
+        }
+    )
+
+    store.preregister_paired_protocol(first)
+    store.preregister_paired_protocol(paired_arm)
+    with pytest.raises(ValueError, match="paired seed suite or budget"):
+        store.preregister_paired_protocol(mismatched_arm)
+    with pytest.raises(ValueError, match="paired seed suite or budget"):
+        store.preregister_paired_protocol(budget_mismatched_arm)

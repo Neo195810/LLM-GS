@@ -583,7 +583,7 @@ failure_strategy:
 
     assert first.returncode == 0, first.stderr
     assert second.returncode == 2
-    assert "already preregistered" in second.stderr
+    assert "paired seed suite or budget" in second.stderr
 
 
 def test_frozen_memory_reuses_its_completed_report_without_repeating_held_out(

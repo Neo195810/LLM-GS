@@ -234,6 +234,7 @@ def _execute_frozen_memory_protocol(
     if execution_id is not None:
         raise ValueError("resuming the frozen memory protocol is not yet supported")
 
+    store.preregister_paired_protocol(manifest)
     store.preregister_frozen_manifest(manifest, experiment_id)
     if store.has_completed_execution(experiment_id):
         return store.latest_report(experiment_id), "completed"

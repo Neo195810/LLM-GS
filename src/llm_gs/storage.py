@@ -75,6 +75,35 @@ class WorkspaceStore:
                 (experiment_id, canonical_json(manifest.model_dump(mode="json"))),
             )
 
+    def preregister_paired_protocol(self, manifest: ExperimentManifest) -> None:
+        """Ensure comparable Frozen arms use one seed suite and resource budget."""
+        specification = manifest.specification
+        seed_suite = specification.get("seed_suite")
+        if not isinstance(seed_suite, dict):
+            raise ValueError("paired protocol registration requires a seed suite")
+        pairing = canonical_json(
+            {
+                "task": manifest.task["name"],
+                "search_seed": manifest.search_strategy["seed"],
+                "replicate": manifest.search_strategy["replicate"],
+            }
+        )
+        seed_suite_json = canonical_json(seed_suite)
+        budgets_json = canonical_json(manifest.budgets)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT seed_suite_json, budgets_json FROM paired_protocol_registrations "
+                "WHERE pairing_json = ?",
+                (pairing,),
+            ).fetchone()
+            if row is not None and (str(row[0]) != seed_suite_json or str(row[1]) != budgets_json):
+                raise ValueError("paired seed suite or budget does not match the registered protocol")
+            connection.execute(
+                "INSERT OR IGNORE INTO paired_protocol_registrations("
+                "pairing_json, seed_suite_json, budgets_json) VALUES (?, ?, ?)",
+                (pairing, seed_suite_json, budgets_json),
+            )
+
     def begin_execution_for_experiment(
         self,
         manifest: ExperimentManifest,
@@ -602,6 +631,7 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS execution_memory_lineages (execution_id TEXT PRIMARY KEY, lineage_id TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS memory_lineage_entries (lineage_id TEXT NOT NULL, entry_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (lineage_id, entry_id), UNIQUE(lineage_id, position));
         CREATE TABLE IF NOT EXISTS frozen_manifest_registrations (arm_json TEXT PRIMARY KEY, experiment_id TEXT NOT NULL UNIQUE);
+        CREATE TABLE IF NOT EXISTS paired_protocol_registrations (pairing_json TEXT PRIMARY KEY, seed_suite_json TEXT NOT NULL, budgets_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
         """)
         return connection
