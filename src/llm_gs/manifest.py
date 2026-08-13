@@ -72,9 +72,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "parser": "karel-dsl-v1" if is_clean_house else "offline-dsl-v1",
             "prompt_sha256": sha256_bytes(
                 (CLEAN_HOUSE_PROMPT if is_clean_house else OFFLINE_PROMPT).encode("utf-8")
-            ).removeprefix(
-                "sha256:"
-            ),
+            ).removeprefix("sha256:"),
             **({"outcome_classifier": "clean-house-v1"} if is_clean_house else {}),
         },
         runtime={
@@ -94,7 +92,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             **({"outcome_classifier_version": 1} if is_clean_house else {}),
         },
         search_strategy={"name": "single_candidate", "seed": specification.seeds.search},
-        failure_strategy={"max_repair_cycles": 0, "name": "regenerate"},
+        failure_strategy=specification.failure_strategy.model_dump(mode="json"),
         budgets={
             "episode_evaluations": 1,
             "input_tokens": 4096,

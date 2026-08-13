@@ -228,6 +228,44 @@ seeds:
     assert report["outcomes"] == {"partial_completion": 2}
 
 
+def test_reflect_strategy_runs_a_repaired_candidate_after_failure(tmp_path: Path) -> None:
+    specification = tmp_path / "reflect.yaml"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-reflect
+task:
+  name: CleanHouse
+seeds:
+  task: [7]
+failure_strategy:
+  name: reflect
+  max_repair_cycles: 3
+""",
+        encoding="utf-8",
+    )
+
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert validation["manifest"]["failure_strategy"] == {
+        "name": "reflect",
+        "max_repair_cycles": 3,
+    }
+
+    workspace = tmp_path / "workspace"
+    run = run_cli("run", str(specification), "--workspace", str(workspace))
+    assert run.returncode == 0, run.stderr
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    )
+    assert report["episode_evaluations"] == 2
+
+
 def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     tmp_path: Path,
 ) -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from llm_gs.contracts import (
     CandidateProgram,
@@ -12,7 +12,7 @@ from llm_gs.contracts import (
 )
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, OFFLINE_PROMPT
 from llm_gs.reflection import RepairCycle
-from llm_gs.storage import WorkspaceStore
+from llm_gs.storage import PendingWork, WorkspaceStore
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 
 
@@ -24,6 +24,7 @@ class Evaluator(Protocol):
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult: ...
 
 
+@runtime_checkable
 class Repairer(Protocol):
     def repair(self, prompt: str) -> CandidateProgram: ...
 
@@ -99,6 +100,26 @@ def execute(
     if not isinstance(task_seeds, dict) or not isinstance(task_seeds.get("task"), list):
         raise ValueError("resolved manifest contains invalid task seeds")
     results = [evaluator.evaluate(candidate, int(seed)) for seed in task_seeds["task"]]
+    if (
+        manifest.failure_strategy["name"] == "reflect"
+        and results[0].outcome != "success"
+        and isinstance(model, Repairer)
+    ):
+        cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]))
+        diagnosis = cycle.diagnose(results[0], evidence_index=0)
+        repair_source = model.repair(f"Repair CleanHouse using: {diagnosis.observation}")
+        repair = cycle.repair(
+            candidate,
+            diagnosis,
+            RepairIntent(
+                intended_change="replace the stalled action sequence",
+                preserved_behavior="a complete valid Karel DSL program",
+            ),
+            repair_source.source,
+            round=1,
+        )
+        candidate = repair.candidate
+        results = [evaluator.evaluate(candidate, int(seed)) for seed in task_seeds["task"]]
     outcomes: dict[str, int] = {}
     evidence: list[EvaluationEvidence] = []
     for result in results:
@@ -117,7 +138,7 @@ def execute(
     return ExperimentReport(
         experiment_id=experiment_id,
         execution_id=execution_id,
-        candidate_programs=1,
+        candidate_programs=candidate.model_requests,
         episode_evaluations=sum(result.episode_evaluations for result in results),
         model_requests=candidate.model_requests,
         outcomes=outcomes,
@@ -133,6 +154,8 @@ def execute_resumable(
     evaluator: Evaluator,
     stop_after: int | None = None,
 ) -> tuple[ExperimentReport | None, str]:
+    if manifest.failure_strategy["name"] == "reflect":
+        return _execute_reflect(manifest, experiment_id, store, model, evaluator)
     work = store.next_pending_work(experiment_id)
     if work is None and store.active_execution_id(experiment_id) is None:
         new_execution_id = store.next_execution_id(experiment_id)
@@ -165,6 +188,55 @@ def execute_resumable(
     )
     store.save(manifest, report)
     return report, "completed"
+
+
+def _execute_reflect(
+    manifest: ExperimentManifest,
+    experiment_id: str,
+    store: WorkspaceStore,
+    model: ModelClient,
+    evaluator: Evaluator,
+) -> tuple[ExperimentReport, str]:
+    if not isinstance(model, Repairer):
+        raise ValueError("reflect strategy requires a repair-capable model")
+    execution_id = store.next_execution_id(experiment_id)
+    candidate = model.propose(CLEAN_HOUSE_PROMPT)
+    store.begin_execution_for_experiment(
+        manifest, experiment_id, execution_id, candidate.source, candidate.model_requests
+    )
+    seed = _task_seeds(manifest)[0]
+    initial_result = evaluator.evaluate(candidate, seed)
+    store.complete_work(
+        PendingWork(execution_id, seed, candidate.source, candidate.model_requests),
+        initial_result.model_dump_json(),
+    )
+    final_candidate = candidate
+    final_result = initial_result
+    if initial_result.outcome != "success":
+        final_candidate = reflect_once(
+            candidate,
+            initial_result,
+            model,
+            RepairCycle(int(manifest.failure_strategy["max_repair_cycles"])),
+            execution_id,
+            store,
+        )
+        final_result = evaluator.evaluate(final_candidate, seed)
+    report = _report_from_results(
+        experiment_id,
+        execution_id,
+        [initial_result, final_result] if final_candidate != candidate else [initial_result],
+        candidate.model_requests + final_candidate.model_requests - 1,
+    )
+    store.save(manifest, report)
+    return report, "completed"
+
+
+def _task_seeds(manifest: ExperimentManifest) -> list[int]:
+    seeds = manifest.specification["seeds"]
+    if not isinstance(seeds, dict) or not isinstance(seeds.get("task"), list):
+        raise ValueError("resolved manifest contains invalid task seeds")
+    return [int(seed) for seed in seeds["task"]]
 
 
 def _report_from_results(

@@ -18,11 +18,19 @@ class SeedSpecification(StrictContract):
     search: int = 0
 
 
+class FailureStrategySpecification(StrictContract):
+    name: Literal["regenerate", "reflect"] = "regenerate"
+    max_repair_cycles: int = Field(default=0, ge=0, le=3)
+
+
 class ExperimentSpecification(StrictContract):
     spec_version: Literal[1] = 1
     display_name: str = Field(min_length=1)
     task: TaskSpecification
     seeds: SeedSpecification
+    failure_strategy: FailureStrategySpecification = Field(
+        default_factory=FailureStrategySpecification
+    )
 
 
 class ExperimentManifest(StrictContract):
