@@ -853,6 +853,21 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS execution_failures (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, execution_id TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS execution_replacements (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, failed_execution_id TEXT NOT NULL, replacement_execution_id TEXT NOT NULL, UNIQUE(experiment_id, failed_execution_id, replacement_execution_id));
         """)
+        replacement_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(execution_replacements)")
+        }
+        if "failed_execution_id" not in replacement_columns:
+            connection.execute("ALTER TABLE execution_replacements RENAME TO execution_replacements_v1")
+            connection.execute(
+                "CREATE TABLE execution_replacements (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, "
+                "failed_execution_id TEXT NOT NULL, replacement_execution_id TEXT NOT NULL, "
+                "UNIQUE(experiment_id, failed_execution_id, replacement_execution_id))"
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO execution_replacements(experiment_id, failed_execution_id, replacement_execution_id) "
+                "SELECT experiment_id, execution_id, execution_id FROM execution_replacements_v1"
+            )
+            connection.execute("DROP TABLE execution_replacements_v1")
         return connection
 
 
@@ -959,14 +974,20 @@ def _validate_bundle_references(
         not isinstance(row, dict) or row.get("artifact_hash") not in artifacts for row in evaluations
     ):
         raise ValueError("export bundle is missing a referenced artifact")
-    for table in ("execution_failures", "execution_replacements"):
-        rows = records[table]
-        if not isinstance(rows, list) or any(
-            not isinstance(row, dict)
-            or row.get("execution_id") not in execution_ids | {None}
-            for row in rows
-        ):
-            raise ValueError(f"export bundle has invalid {table} references")
+    failures = records["execution_failures"]
+    if not isinstance(failures, list) or any(
+        not isinstance(row, dict) or row.get("execution_id") not in execution_ids | {None}
+        for row in failures
+    ):
+        raise ValueError("export bundle has invalid execution failure references")
+    replacements = records["execution_replacements"]
+    if not isinstance(replacements, list) or any(
+        not isinstance(row, dict)
+        or row.get("failed_execution_id") not in execution_ids
+        or row.get("replacement_execution_id") not in execution_ids
+        for row in replacements
+    ):
+        raise ValueError("export bundle has invalid execution replacement references")
 
 
 def _validate_record_schemas(connection: sqlite3.Connection, records: dict[str, object]) -> None:

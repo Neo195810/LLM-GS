@@ -10,6 +10,7 @@ from typing import NoReturn
 
 from pydantic import BaseModel
 
+from llm_gs.contracts import ExperimentManifest, ExperimentReport
 from llm_gs.execution import (
     CleanHouseEvaluator,
     FakeOpenAIClient,
@@ -30,33 +31,9 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
     manifest = resolve_manifest(load_specification(args.specification))
     resolved_experiment_id = experiment_id(manifest)
     store = WorkspaceStore(args.workspace)
-    try:
-        report, status = execute_resumable(
-            manifest,
-            resolved_experiment_id,
-            store,
-            _model_client(args),
-            CleanHouseEvaluator()
-            if manifest.task["name"] == "CleanHouse"
-            else OfflineEchoEvaluator(),
-            args.stop_after,
-        )
-    except ModelOutputFailure as error:
-        store.record_execution_failure(
-            resolved_experiment_id,
-            store.active_execution_id(resolved_experiment_id),
-            "model_output",
-            str(error),
-        )
-        raise
-    except (OSError, sqlite3.Error) as error:
-        store.record_execution_failure(
-            resolved_experiment_id,
-            store.active_execution_id(resolved_experiment_id),
-            "infrastructure",
-            str(error),
-        )
-        raise ValueError(f"infrastructure failure: {error}") from error
+    report, status = _execute_with_failure_recording(
+        manifest, resolved_experiment_id, store, args, args.stop_after
+    )
     return {
         "execution_id": report.execution_id
         if report
@@ -66,16 +43,47 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
+def _execute_with_failure_recording(
+    manifest: ExperimentManifest,
+    experiment_id: str,
+    store: WorkspaceStore,
+    args: argparse.Namespace,
+    stop_after: int | None = None,
+) -> tuple[ExperimentReport | None, str]:
+    try:
+        report, status = execute_resumable(
+            manifest,
+            experiment_id,
+            store,
+            _model_client(args),
+            CleanHouseEvaluator()
+            if manifest.task["name"] == "CleanHouse"
+            else OfflineEchoEvaluator(),
+            stop_after,
+        )
+    except ModelOutputFailure as error:
+        store.record_execution_failure(
+            experiment_id,
+            store.active_execution_id(experiment_id),
+            "model_output",
+            str(error),
+        )
+        raise ValueError(f"model output failure: {error}") from error
+    except (OSError, sqlite3.Error) as error:
+        store.record_execution_failure(
+            experiment_id,
+            store.active_execution_id(experiment_id),
+            "infrastructure",
+            str(error),
+        )
+        raise ValueError(f"infrastructure failure: {error}") from error
+    return report, status
+
+
 def _resume(args: argparse.Namespace) -> dict[str, object]:
     store = WorkspaceStore(args.workspace)
     manifest = store.manifest(args.experiment_id)
-    report, status = execute_resumable(
-        manifest,
-        args.experiment_id,
-        store,
-        _model_client(args),
-        CleanHouseEvaluator() if manifest.task["name"] == "CleanHouse" else OfflineEchoEvaluator(),
-    )
+    report, status = _execute_with_failure_recording(manifest, args.experiment_id, store, args)
     return {
         "execution_id": report.execution_id if report else "",
         "experiment_id": args.experiment_id,
