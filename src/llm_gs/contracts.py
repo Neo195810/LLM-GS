@@ -40,6 +40,26 @@ class FailureStrategySpecification(StrictContract):
     max_repair_cycles: int = Field(default=3, ge=0, le=3)
 
 
+class SearchStrategySpecification(StrictContract):
+    name: Literal["single_candidate", "cem"] = "single_candidate"
+    population_size: int = Field(default=1, ge=1)
+    elite_count: int = Field(default=1, ge=1)
+
+    @model_validator(mode="after")
+    def has_valid_elite_count(self) -> SearchStrategySpecification:
+        if self.elite_count > self.population_size:
+            raise ValueError("elite_count must not exceed population_size")
+        if self.name == "single_candidate" and (self.population_size, self.elite_count) != (1, 1):
+            raise ValueError("single_candidate requires population_size and elite_count of one")
+        return self
+
+
+class ResolvedSearchStrategyConfiguration(SearchStrategySpecification):
+    version: Literal["v1"] = "v1"
+    seed: int = 0
+    replicate: int = Field(default=0, ge=0)
+
+
 class ExperimentSpecification(StrictContract):
     spec_version: Literal[1] = 1
     display_name: str = Field(min_length=1)
@@ -47,6 +67,9 @@ class ExperimentSpecification(StrictContract):
     seeds: SeedSpecification | None = None
     seed_suite: SeedSuiteSpecification | None = None
     memory_snapshot_id: str | None = None
+    search_strategy: SearchStrategySpecification = Field(
+        default_factory=SearchStrategySpecification
+    )
     failure_strategy: FailureStrategySpecification = Field(
         default_factory=FailureStrategySpecification
     )

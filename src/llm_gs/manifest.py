@@ -129,7 +129,8 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             **({"outcome_classifier_version": 1} if is_clean_house else {}),
         },
         search_strategy={
-            "name": "single_candidate",
+            **specification.search_strategy.model_dump(mode="json"),
+            "version": "v1",
             "seed": specification.seeds.search if specification.seeds is not None else 0,
             "replicate": specification.seeds.replicate if specification.seeds is not None else 0,
         },

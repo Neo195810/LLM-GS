@@ -11,10 +11,12 @@ from llm_gs.contracts import (
     ExperimentReport,
     MemoryEntry,
     RepairIntent,
+    ResolvedSearchStrategyConfiguration,
 )
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, FINAL_CANDIDATE_SELECTION_RULE, OFFLINE_PROMPT
 from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_repair_context
 from llm_gs.reflection import RepairCycle, RepeatedRepairError, _normalized_ast_hash
+from llm_gs.search import ScoredCandidate, resolve_search_strategy
 from llm_gs.storage import WorkspaceStore
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 
@@ -345,7 +347,7 @@ def _execute_frozen_memory_protocol(
         candidates.append((current_candidate, current_results))
         seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source))
 
-    selected_candidate, selection = _select_final_candidate(candidates)
+    selected_candidate, selection = _select_final_candidate(candidates, manifest.search_strategy)
     held_out_results = _evaluate_candidate(
         store, execution_id, selected_candidate, suite["held_out"], evaluator
     )
@@ -420,36 +422,18 @@ def _seed_suite(manifest: ExperimentManifest) -> ResolvedSeedSuite:
 
 def _select_final_candidate(
     candidates: list[tuple[CandidateProgram, list[EpisodeResult]]],
+    search_strategy_configuration: dict[str, str | int],
 ) -> tuple[CandidateProgram, dict[str, object]]:
     if not candidates:
         raise ValueError("cannot select a final candidate without development results")
-
-    def key(item: tuple[CandidateProgram, list[EpisodeResult]]) -> tuple[float | int | str, ...]:
-        candidate, results = item
-        outcomes = [result.outcome for result in results]
-        outcome_rank = 0 if all(outcome == "success" for outcome in outcomes) else 1
-        progress = [result.normalized_progress for result in results]
-        return (
-            outcome_rank,
-            -_success_rate(results),
-            -(sum(progress) / len(progress)),
-            -min(progress),
-            sum(result.episode_evaluations for result in results),
-            _normalized_ast_hash(candidate.source),
-        )
-
-    selected, results = min(candidates, key=key)
-    return selected, {
-        "candidate_source_sha256": _normalized_ast_hash(selected.source),
-        "development_success_rate": _success_rate(results),
-        "development_mean_normalized_progress": sum(
-            result.normalized_progress for result in results
-        )
-        / len(results),
-        "development_worst_normalized_progress": min(
-            result.normalized_progress for result in results
-        ),
-    }
+    scored_candidates = tuple(
+        ScoredCandidate(candidate, tuple(results)) for candidate, results in candidates
+    )
+    configuration = ResolvedSearchStrategyConfiguration.model_validate(
+        search_strategy_configuration
+    )
+    selected_index, provenance = resolve_search_strategy(configuration).select(scored_candidates)
+    return candidates[selected_index][0], provenance
 
 
 def _success_rate(results: list[EpisodeResult]) -> float:

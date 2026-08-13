@@ -613,6 +613,61 @@ failure_strategy:
     assert report["episode_evaluations"] == 4
 
 
+def test_frozen_memory_cem_records_candidate_selection_provenance(tmp_path: Path) -> None:
+    specification = tmp_path / "cem.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-cem
+task:
+  name: CleanHouse
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+search_strategy:
+  name: cem
+  population_size: 2
+  elite_count: 1
+failure_strategy:
+  name: reflect
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert validation["manifest"]["search_strategy"] == {
+        "elite_count": 1,
+        "name": "cem",
+        "population_size": 2,
+        "replicate": 0,
+        "seed": 0,
+        "version": "v1",
+    }
+
+    assert run_cli("run", str(specification), "--workspace", str(workspace)).returncode == 0
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    )
+
+    selection = report["audit"]["frozen_memory_protocol"]["selection"]
+    assert selection["strategy"] == "cem"
+    assert selection["version"] == "v1"
+    assert selection["configured_population_size"] == 2
+    assert selection["configured_elite_count"] == 1
+    assert selection["observed_population_size"] == 2
+    assert len(selection["elite_candidates"]) == 1
+
+
 def test_seed_suite_rejects_overlapping_partitions(tmp_path: Path) -> None:
     specification = tmp_path / "overlapping.yaml"
     specification.write_text(
