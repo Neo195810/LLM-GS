@@ -551,6 +551,66 @@ seed_suite:
     assert "disjoint" in result.stderr
 
 
+def test_frozen_memory_registers_one_manifest_per_task_and_method_arm(tmp_path: Path) -> None:
+    first_specification = tmp_path / "first.yaml"
+    second_specification = tmp_path / "second.yaml"
+    workspace = tmp_path / "workspace"
+    specification = """\
+spec_version: 1
+display_name: frozen-memory
+task:
+  name: CleanHouse
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+failure_strategy:
+  name: memory_repair
+  max_repair_cycles: {cycles}
+"""
+    first_specification.write_text(specification.format(cycles=1), encoding="utf-8")
+    second_specification.write_text(specification.format(cycles=0), encoding="utf-8")
+
+    first = run_cli("run", str(first_specification), "--workspace", str(workspace))
+    second = run_cli("run", str(second_specification), "--workspace", str(workspace))
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 2
+    assert "already preregistered" in second.stderr
+
+
+def test_frozen_memory_reuses_its_completed_report_without_repeating_held_out(
+    tmp_path: Path,
+) -> None:
+    specification = tmp_path / "frozen-memory.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: frozen-memory
+task:
+  name: CleanHouse
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+failure_strategy:
+  name: memory_repair
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    first = run_cli("run", str(specification), "--workspace", str(workspace))
+    second = run_cli("run", str(specification), "--workspace", str(workspace))
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert json.loads(first.stdout) == json.loads(second.stdout)
+
+
 def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     tmp_path: Path,
 ) -> None:

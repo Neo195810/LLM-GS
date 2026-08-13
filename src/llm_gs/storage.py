@@ -45,6 +45,35 @@ class WorkspaceStore:
             ).fetchone()
         return f"exec_{(int(row[0]) if row else 0) + 1:06d}"
 
+    def preregister_frozen_manifest(
+        self, manifest: ExperimentManifest, experiment_id: str
+    ) -> None:
+        """Reserve one immutable formal manifest for a task and method arm."""
+        arm = canonical_json(
+            {
+                "failure_strategy": manifest.failure_strategy["name"],
+                "search_strategy": manifest.search_strategy["name"],
+                "task": manifest.task["name"],
+            }
+        )
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO frozen_manifest_registrations(arm_json, experiment_id) VALUES (?, ?)",
+                (arm, experiment_id),
+            )
+            row = connection.execute(
+                "SELECT experiment_id FROM frozen_manifest_registrations WHERE arm_json = ?",
+                (arm,),
+            ).fetchone()
+            if row is None or str(row[0]) != experiment_id:
+                raise ValueError(
+                    "a different Frozen Memory manifest is already preregistered for this task and method arm"
+                )
+            connection.execute(
+                "INSERT OR IGNORE INTO experiments(experiment_id, manifest_json) VALUES (?, ?)",
+                (experiment_id, canonical_json(manifest.model_dump(mode="json"))),
+            )
+
     def begin_execution_for_experiment(
         self,
         manifest: ExperimentManifest,
@@ -439,6 +468,14 @@ class WorkspaceStore:
             raise ValueError(f"report not found for experiment {experiment_id}")
         return ExperimentReport.model_validate_json(row[0])
 
+    def has_completed_execution(self, experiment_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM executions WHERE experiment_id = ? AND status = 'completed' LIMIT 1",
+                (experiment_id,),
+            ).fetchone()
+        return row is not None
+
     def completed_episode_results(self, execution_id: str) -> list[str]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -509,6 +546,7 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS memory_lineages (lineage_id TEXT PRIMARY KEY, parent_snapshot_id TEXT NOT NULL, arm_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS execution_memory_lineages (execution_id TEXT PRIMARY KEY, lineage_id TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS memory_lineage_entries (lineage_id TEXT NOT NULL, entry_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (lineage_id, entry_id), UNIQUE(lineage_id, position));
+        CREATE TABLE IF NOT EXISTS frozen_manifest_registrations (arm_json TEXT PRIMARY KEY, experiment_id TEXT NOT NULL UNIQUE);
         CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
         """)
         return connection

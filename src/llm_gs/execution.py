@@ -233,6 +233,10 @@ def _execute_frozen_memory_protocol(
     if execution_id is not None:
         raise ValueError("resuming the frozen memory protocol is not yet supported")
 
+    store.preregister_frozen_manifest(manifest, experiment_id)
+    if store.has_completed_execution(experiment_id):
+        return store.latest_report(experiment_id), "completed"
+
     execution_id = store.next_execution_id(experiment_id)
     initial_candidate = model.propose(CLEAN_HOUSE_PROMPT)
     store.begin_execution_for_experiment(
