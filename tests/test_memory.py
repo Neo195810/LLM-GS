@@ -18,10 +18,12 @@ def test_memory_curator_and_retriever_are_deterministic_and_allowlisted() -> Non
     first = curate_clean_house_attempt("attempt-2", "DEF run m( turnLeft m)", _failure())
     second = curate_clean_house_attempt("attempt-1", "DEF run m( move m)", _failure())
 
-    entries, outcome = StructuredRetriever((first, second)).retrieve(_failure())
+    entries, outcome = StructuredRetriever((first, second)).retrieve(_failure(), limit=1)
 
     assert [entry.entry_id for entry in entries] == outcome.selected_entry_ids
-    assert all("task_compatible" in codes for codes in outcome.reason_codes.values())
+    assert set(outcome.candidate_components) == {first.entry_id, second.entry_id}
+    assert sum("selected" in codes for codes in outcome.reason_codes.values()) == 1
+    assert sum("not_selected" in codes for codes in outcome.reason_codes.values()) == 1
     assert "terminal_state" not in serialize_memory_context(entries)
 
 
@@ -31,3 +33,15 @@ def test_memory_provenance_survives_store_restart(tmp_path) -> None:
     store.save_memory_entry(entry)
 
     assert WorkspaceStore(tmp_path).memory_entries() == [entry]
+
+
+def test_memory_snapshot_is_read_only_and_excludes_current_execution_entries(tmp_path) -> None:
+    prior = curate_clean_house_attempt("prior", "DEF run m( move m)", _failure())
+    current = curate_clean_house_attempt("current", "DEF run m( turnLeft m)", _failure())
+    store = WorkspaceStore(tmp_path)
+    store.save_memory_entry(prior)
+
+    assert store.freeze_memory_snapshot("exec_000001") == [prior]
+    store.save_memory_entry(current)
+
+    assert store.memory_snapshot_entries("exec_000001") == [prior]

@@ -13,7 +13,7 @@ from llm_gs.contracts import (
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, OFFLINE_PROMPT
 from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_memory_context
 from llm_gs.reflection import RepairCycle
-from llm_gs.storage import PendingWork, WorkspaceStore
+from llm_gs.storage import WorkspaceStore
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 
 
@@ -32,7 +32,7 @@ class Repairer(Protocol):
 
 class FakeOpenAIClient:
     def propose(self, prompt: str) -> CandidateProgram:
-        if prompt.startswith(("Repair CleanHouse", "Reflect then repair CleanHouse")):
+        if prompt.startswith(("Repair CleanHouse", "Reflect on evidence then repair CleanHouse")):
             return CandidateProgram(source="DEF run m( move m)")
         if prompt == CLEAN_HOUSE_PROMPT:
             return CandidateProgram(source="DEF run m( turnLeft m)")
@@ -206,27 +206,39 @@ def _execute_reflect(
     store.begin_execution_for_experiment(
         manifest, experiment_id, execution_id, candidate.source, candidate.model_requests
     )
-    seed = _task_seeds(manifest)[0]
-    initial_result = evaluator.evaluate(candidate, seed)
-    store.complete_work(
-        PendingWork(execution_id, seed, candidate.source, candidate.model_requests),
-        initial_result.model_dump_json(),
+    seeds = _task_seeds(manifest)
+    strategy = str(manifest.failure_strategy["name"])
+    snapshot_entries = (
+        store.freeze_memory_snapshot(execution_id)
+        if strategy in {"memory_repair", "memory_reflect"}
+        else []
     )
+    initial_results: list[EpisodeResult] = []
+    for seed in seeds:
+        work = store.next_pending_work(experiment_id)
+        if work is None:
+            raise ValueError("reflect execution is missing pending work")
+        initial_result = evaluator.evaluate(candidate, seed)
+        store.complete_work(work, initial_result.model_dump_json())
+        initial_results.append(initial_result)
     final_candidate = candidate
-    final_result = initial_result
-    if initial_result.outcome != "success":
-        strategy = str(manifest.failure_strategy["name"])
+    final_results = initial_results
+    failed_results = [result for result in initial_results if result.outcome != "success"]
+    if failed_results:
+        initial_result = failed_results[0]
         if strategy in {"memory_repair", "memory_reflect"}:
-            memory_entry = curate_clean_house_attempt(
-                f"{execution_id}:initial", candidate.source, initial_result
-            )
-            store.save_memory_entry(memory_entry)
-            retrieved, retrieval = StructuredRetriever(tuple(store.memory_entries())).retrieve(
+            for index, result in enumerate(failed_results):
+                store.save_memory_entry(
+                    curate_clean_house_attempt(
+                        f"{execution_id}:initial:{index}", candidate.source, result
+                    )
+                )
+            retrieved, retrieval = StructuredRetriever(tuple(snapshot_entries)).retrieve(
                 initial_result
             )
             store.save_retrieval_outcome(execution_id, retrieval)
             memory_context = serialize_memory_context(retrieved)
-            prefix = "Reflect then repair" if strategy == "memory_reflect" else "Repair"
+            prefix = "Reflect on evidence then repair" if strategy == "memory_reflect" else "Repair"
             repair_prompt = f"{prefix} CleanHouse using memory: {memory_context}"
         else:
             repair_prompt = None
@@ -239,11 +251,22 @@ def _execute_reflect(
             store,
             repair_prompt,
         )
-        final_result = evaluator.evaluate(final_candidate, seed)
+        final_results = [evaluator.evaluate(final_candidate, seed) for seed in seeds]
+        for seed, result in zip(seeds, final_results, strict=True):
+            store.record_evaluation(
+                execution_id, seed, final_candidate.source, result.model_dump_json()
+            )
+        for index, result in enumerate(final_results):
+            if result.outcome != "success" and strategy in {"memory_repair", "memory_reflect"}:
+                store.save_memory_entry(
+                    curate_clean_house_attempt(
+                        f"{execution_id}:repair:1:{index}", final_candidate.source, result
+                    )
+                )
     report = _report_from_results(
         experiment_id,
         execution_id,
-        [initial_result, final_result] if final_candidate != candidate else [initial_result],
+        initial_results + final_results if final_candidate != candidate else initial_results,
         candidate.model_requests + final_candidate.model_requests,
         candidate_programs=2 if final_candidate != candidate else 1,
     )

@@ -10,7 +10,7 @@ import yaml
 from pydantic import ValidationError
 
 from llm_gs.contracts import ExperimentManifest, ExperimentSpecification
-from llm_gs.memory import RETRIEVER_VERSION
+from llm_gs.memory import RETRIEVER_ORDER, RETRIEVER_VERSION, RETRIEVER_WEIGHTS
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
 CLEAN_HOUSE_PROMPT = "Produce one deterministic CleanHouse DSL candidate."
@@ -104,7 +104,8 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "id": "none",
             "read_only": True,
             "retriever_version": RETRIEVER_VERSION,
-            "retriever_order": "task,failure_type,failure_reason,normalized_ast_hash,entry_id",
+            "retriever_order": RETRIEVER_ORDER,
+            "retriever_weights": RETRIEVER_WEIGHTS,
         },
         specification=specification.model_dump(mode="json", exclude={"display_name"}),
     )

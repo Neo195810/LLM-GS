@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from llm_gs.contracts import (
     RetrievalOutcome,
 )
 from llm_gs.manifest import canonical_json
+from llm_gs.memory import RETRIEVER_VERSION
 from llm_gs.proposer import ModelRequestRecord
 
 
@@ -86,27 +88,49 @@ class WorkspaceStore:
         return PendingWork(str(row[0]), int(row[1]), str(row[2]), int(row[3]))
 
     def complete_work(self, work: PendingWork, episode_json: str) -> None:
-        artifact_hash = self._put_artifact(episode_json.encode("utf-8"))
         with self._connect() as connection:
-            connection.execute(
-                "INSERT OR IGNORE INTO artifacts(artifact_hash) VALUES (?)", (artifact_hash,)
-            )
-            connection.execute(
-                "INSERT INTO program_attempts(execution_id, source) VALUES (?, ?)",
-                (work.execution_id, work.candidate_source),
-            )
-            connection.execute(
-                "INSERT INTO episode_evaluations(execution_id, task_seed, episode_json, artifact_hash) VALUES (?, ?, ?, ?)",
-                (work.execution_id, work.seed, episode_json, artifact_hash),
+            self._record_evaluation(
+                connection, work.execution_id, work.seed, work.candidate_source, episode_json
             )
             connection.execute(
                 "UPDATE work_units SET status = 'completed' WHERE execution_id = ? AND task_seed = ?",
                 (work.execution_id, work.seed),
             )
-            connection.execute(
-                "UPDATE executions SET episode_evaluations = episode_evaluations + 1 WHERE execution_id = ?",
-                (work.execution_id,),
+
+    def record_evaluation(
+        self, execution_id: str, seed: int, candidate_source: str, episode_json: str
+    ) -> None:
+        artifact_hash = self._put_artifact(episode_json.encode("utf-8"))
+        with self._connect() as connection:
+            self._record_evaluation(
+                connection, execution_id, seed, candidate_source, episode_json, artifact_hash
             )
+
+    def _record_evaluation(
+        self,
+        connection: sqlite3.Connection,
+        execution_id: str,
+        seed: int,
+        candidate_source: str,
+        episode_json: str,
+        artifact_hash: str | None = None,
+    ) -> None:
+        artifact_hash = artifact_hash or self._put_artifact(episode_json.encode("utf-8"))
+        connection.execute(
+            "INSERT OR IGNORE INTO artifacts(artifact_hash) VALUES (?)", (artifact_hash,)
+        )
+        connection.execute(
+            "INSERT INTO program_attempts(execution_id, source) VALUES (?, ?)",
+            (execution_id, candidate_source),
+        )
+        connection.execute(
+            "INSERT INTO episode_evaluations(execution_id, task_seed, episode_json, artifact_hash) VALUES (?, ?, ?, ?)",
+            (execution_id, seed, episode_json, artifact_hash),
+        )
+        connection.execute(
+            "UPDATE executions SET episode_evaluations = episode_evaluations + 1 WHERE execution_id = ?",
+            (execution_id,),
+        )
 
     def save_model_request_records(
         self, execution_id: str, records: list[ModelRequestRecord]
@@ -158,6 +182,40 @@ class WorkspaceStore:
                 "SELECT entry_json FROM memory_entries ORDER BY entry_id"
             ).fetchall()
         return [MemoryEntry.model_validate_json(row[0]) for row in rows]
+
+    def freeze_memory_snapshot(self, execution_id: str) -> list[MemoryEntry]:
+        """Persist the exact read-only memory membership available to one execution."""
+        entries = self.memory_entries()
+        snapshot_payload = canonical_json(
+            {
+                "retriever_version": RETRIEVER_VERSION,
+                "entries": [entry.model_dump(mode="json") for entry in entries],
+            }
+        )
+        snapshot_id = f"snapshot_{hashlib.sha256(snapshot_payload.encode()).hexdigest()}"
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO memory_snapshots(snapshot_id, snapshot_json) VALUES (?, ?)",
+                (snapshot_id, snapshot_payload),
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO execution_memory_snapshots(execution_id, snapshot_id) VALUES (?, ?)",
+                (execution_id, snapshot_id),
+            )
+        return entries
+
+    def memory_snapshot_entries(self, execution_id: str) -> list[MemoryEntry]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT s.snapshot_json FROM execution_memory_snapshots e
+                JOIN memory_snapshots s ON s.snapshot_id = e.snapshot_id
+                WHERE e.execution_id = ?""",
+                (execution_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"memory snapshot not found for execution {execution_id}")
+        snapshot = json.loads(str(row[0]))
+        return [MemoryEntry.model_validate(entry) for entry in snapshot["entries"]]
 
     def save_retrieval_outcome(self, execution_id: str, outcome: RetrievalOutcome) -> None:
         with self._connect() as connection:
@@ -237,6 +295,8 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, PRIMARY KEY (execution_id, attempt));
         CREATE TABLE IF NOT EXISTS repair_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, round INTEGER NOT NULL, parent_source TEXT NOT NULL, candidate_source TEXT NOT NULL, diagnosis_json TEXT NOT NULL, intent_json TEXT NOT NULL, normalized_ast_difference TEXT NOT NULL, UNIQUE(execution_id, round));
         CREATE TABLE IF NOT EXISTS memory_entries (entry_id TEXT PRIMARY KEY, entry_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS memory_snapshots (snapshot_id TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS execution_memory_snapshots (execution_id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
         """)
         return connection

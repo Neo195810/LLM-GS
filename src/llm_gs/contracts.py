@@ -111,12 +111,24 @@ class MemoryEntry(StrictContract):
     source_attempt_id: str
 
 
+class RetrievalCandidateComponents(StrictContract):
+    task_compatible: bool
+    failure_type_match: bool
+    failure_reason_match: bool
+    state_distance: int = Field(ge=0)
+    ast_feature: str
+    evidence_quality: int = Field(ge=0)
+    improvement: int
+    novelty: int = Field(ge=0)
+
+
 class RetrievalOutcome(StrictContract):
     version: Literal[1] = 1
     query_failure_type: str
     query_failure_reason: str
     selected_entry_ids: list[str]
     reason_codes: dict[str, list[str]]
+    candidate_components: dict[str, RetrievalCandidateComponents]
 
 
 class ExperimentReport(StrictContract):

@@ -301,6 +301,42 @@ failure_strategy:
     assert report["candidate_programs"] == 2
 
 
+def test_memory_repair_evaluates_the_same_full_seed_set_before_and_after_repair(
+    tmp_path: Path,
+) -> None:
+    specification = tmp_path / "memory-repair-multi-seed.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-memory-repair-multi-seed
+task:
+  name: CleanHouse
+seeds:
+  task: [7, 8]
+failure_strategy:
+  name: memory_repair
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    run = run_cli("run", str(specification), "--workspace", str(workspace))
+
+    assert run.returncode == 0, run.stderr
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            json.loads(run_cli("validate", str(specification)).stdout)["experiment_id"],
+        ).stdout
+    )
+    assert report["episode_evaluations"] == 4
+    assert sum(report["outcomes"].values()) == 4
+
+
 def test_memory_reflect_runs_with_the_frozen_retriever_manifest(tmp_path: Path) -> None:
     specification = tmp_path / "memory-reflect.yaml"
     workspace = tmp_path / "workspace"
@@ -321,7 +357,7 @@ failure_strategy:
     validation = json.loads(run_cli("validate", str(specification)).stdout)
     assert (
         validation["manifest"]["memory_snapshot"]["retriever_version"]
-        == "structured-clean-house-v1"
+        == "structured-clean-house-v2"
     )
 
     run = run_cli("run", str(specification), "--workspace", str(workspace))
@@ -358,6 +394,10 @@ def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     assert first["manifest"]["memory_snapshot"] == {
         "id": "none",
         "read_only": True,
-        "retriever_order": "task,failure_type,failure_reason,normalized_ast_hash,entry_id",
-        "retriever_version": "structured-clean-house-v1",
+        "retriever_order": (
+            "task,failure_type,failure_reason,state_distance,evidence_quality,"
+            "improvement,novelty,normalized_ast_hash,entry_id"
+        ),
+        "retriever_version": "structured-clean-house-v2",
+        "retriever_weights": "1,1,1,1,1,1,1,1,1",
     }
