@@ -8,6 +8,10 @@ version = "0.1.0"
 description = "A reproducible program-synthesis research platform"
 requires-python = ">=3.11,<3.12"
 dependencies = [
+  "gymnasium>=0.29.1,<1",
+  "minigrid>=2.5.0,<3",
+  "numpy>=1.26,<3",
+  "Pillow>=10,<12",
   "pydantic>=2.11,<3",
   "PyYAML>=6.0.2,<7",
 ]
@@ -24,7 +28,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/llm_gs"]
+packages = ["src/llm_gs", "prog_policies"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

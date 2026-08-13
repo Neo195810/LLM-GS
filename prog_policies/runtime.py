@@ -23,7 +23,7 @@ def build_karel_env_args(args: Any) -> dict[str, Any]:
         "env_width": 8,
         "crashable": _value(args, "crashable", False),
         "leaps_behaviour": True,
-        "max_calls": 10000,
+        "max_calls": _value(args, "max_calls", 10000),
     }
 
     if task in {"StairClimber", "StairClimberSparse", "TopOff", "FourCorners"}:
@@ -64,8 +64,12 @@ def create_task_envs(args: Any, num_envs: int | None = None):
     return task_envs, dsl
 
 
-def create_replay_environment(task: str, environment_index: int, args: dict[str, Any] | None = None):
+def create_replay_environment(
+    task: str, environment_index: int, args: dict[str, Any] | None = None
+):
     replay_args = dict(args or {})
     replay_args["task"] = task
-    task_envs, dsl = create_task_envs(SimpleNamespace(**replay_args), num_envs=environment_index + 1)
+    task_envs, dsl = create_task_envs(
+        SimpleNamespace(**replay_args), num_envs=environment_index + 1
+    )
     return task_envs[environment_index], dsl
