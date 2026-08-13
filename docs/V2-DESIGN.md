@@ -64,6 +64,11 @@ The Structured Retrieval implementation may calibrate its deterministic ordering
 - A fake OpenAI client runs a complete offline experiment in default CI.
 - Live OpenAI smoke tests require explicit manual activation and never run in default CI.
 
+The legacy V1 local-LLM/EventReporter test module is intentionally excluded from the V2
+suite because it imports LangChain, which is not a V2 dependency. V1 behavior is preserved
+through the deterministic V1 adapter-equivalence tests; running the legacy local-LLM suite,
+if needed, requires the V1 environment rather than `uv run pytest` for V2.
+
 Primary paired analysis includes only preregistered complete pairs, while reports retain every Execution and explicitly show missingness, Infrastructure Failures, Model Output Failures, exclusions, and bounded replacement executions. Incomplete or failed activity is never silently omitted.
 
 Before any held-out execution, exactly one Experiment Manifest is preregistered for every Task and method arm being reported. Alternate Manifests remain visible as separate exploratory experiments; all preregistered held-out outcomes are reported, and no Manifest may be selected or suppressed after observing held-out results.
