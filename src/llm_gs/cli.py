@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -16,7 +17,7 @@ from llm_gs.execution import (
     execute_resumable,
 )
 from llm_gs.manifest import experiment_id, load_specification, resolve_manifest
-from llm_gs.proposer import OpenAIProposer
+from llm_gs.proposer import ModelOutputFailure, OpenAIProposer
 from llm_gs.storage import WorkspaceStore
 
 
@@ -29,14 +30,33 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
     manifest = resolve_manifest(load_specification(args.specification))
     resolved_experiment_id = experiment_id(manifest)
     store = WorkspaceStore(args.workspace)
-    report, status = execute_resumable(
-        manifest,
-        resolved_experiment_id,
-        store,
-        _model_client(args),
-        CleanHouseEvaluator() if manifest.task["name"] == "CleanHouse" else OfflineEchoEvaluator(),
-        args.stop_after,
-    )
+    try:
+        report, status = execute_resumable(
+            manifest,
+            resolved_experiment_id,
+            store,
+            _model_client(args),
+            CleanHouseEvaluator()
+            if manifest.task["name"] == "CleanHouse"
+            else OfflineEchoEvaluator(),
+            args.stop_after,
+        )
+    except ModelOutputFailure as error:
+        store.record_execution_failure(
+            resolved_experiment_id,
+            store.active_execution_id(resolved_experiment_id),
+            "model_output",
+            str(error),
+        )
+        raise
+    except (OSError, sqlite3.Error) as error:
+        store.record_execution_failure(
+            resolved_experiment_id,
+            store.active_execution_id(resolved_experiment_id),
+            "infrastructure",
+            str(error),
+        )
+        raise ValueError(f"infrastructure failure: {error}") from error
     return {
         "execution_id": report.execution_id
         if report

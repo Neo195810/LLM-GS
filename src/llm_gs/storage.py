@@ -554,7 +554,17 @@ class WorkspaceStore:
         return ExperimentReport.model_validate_json(row[0])
 
     def reporting_view(self, experiment_id: str) -> dict[str, object]:
-        report = self.latest_report(experiment_id).model_dump(mode="json")
+        try:
+            report = self.latest_report(experiment_id).model_dump(mode="json")
+        except ValueError:
+            report = {
+                "experiment_id": experiment_id,
+                "execution_id": "",
+                "outcomes": {},
+                "model_requests": 0,
+                "episode_evaluations": 0,
+                "audit": {},
+            }
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT execution_id, status, model_requests, episode_evaluations FROM executions "
@@ -591,6 +601,10 @@ class WorkspaceStore:
                 "model_output": next((int(count) for kind, count in failures if kind == "model_output"), 0),
                 "replacements": int(replacements[0]) if replacements else 0,
             },
+            "failure_rates": {
+                "infrastructure": _rate(failures, "infrastructure", len(executions)),
+                "model_output": _rate(failures, "model_output", len(executions)),
+            },
         }
 
     def record_execution_failure(
@@ -605,11 +619,14 @@ class WorkspaceStore:
                 (experiment_id, execution_id, kind, detail),
             )
 
-    def record_replacement_execution(self, experiment_id: str, execution_id: str) -> None:
+    def record_replacement_execution(
+        self, experiment_id: str, failed_execution_id: str, replacement_execution_id: str
+    ) -> None:
         with self._connect() as connection:
             connection.execute(
-                "INSERT INTO execution_replacements(experiment_id, execution_id) VALUES (?, ?)",
-                (experiment_id, execution_id),
+                "INSERT INTO execution_replacements(experiment_id, failed_execution_id, "
+                "replacement_execution_id) VALUES (?, ?, ?)",
+                (experiment_id, failed_execution_id, replacement_execution_id),
             )
 
     def inspect_execution(self, execution_id: str) -> dict[str, object]:
@@ -834,7 +851,7 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS paired_protocol_registrations (pairing_json TEXT PRIMARY KEY, seed_suite_json TEXT NOT NULL, budgets_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS execution_failures (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, execution_id TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS execution_replacements (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, execution_id TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS execution_replacements (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, failed_execution_id TEXT NOT NULL, replacement_execution_id TEXT NOT NULL, UNIQUE(experiment_id, failed_execution_id, replacement_execution_id));
         """)
         return connection
 
@@ -865,6 +882,11 @@ def _success_rate_from_outcomes(outcomes: object) -> float:
         return 0.0
     total = sum(value for value in outcomes.values() if isinstance(value, int))
     return int(outcomes.get("success", 0)) / total if total else 0.0
+
+
+def _rate(failures: list[tuple[object, object]], kind: str, denominator: int) -> float:
+    count = next((int(value) for name, value in failures if name == kind and isinstance(value, int)), 0)
+    return count / denominator if denominator else 0.0
 
 
 def _query_records(

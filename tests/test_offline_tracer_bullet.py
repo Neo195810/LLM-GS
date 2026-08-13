@@ -176,7 +176,7 @@ def test_report_derives_failure_and_replacement_visibility_from_persisted_record
     store = WorkspaceStore(workspace)
     store.record_execution_failure(experiment_id, "exec_000001", "infrastructure", "timeout")
     store.record_execution_failure(experiment_id, None, "model_output", "schema invalid")
-    store.record_replacement_execution(experiment_id, "exec_000001")
+    store.record_replacement_execution(experiment_id, "exec_000001", "exec_000001")
 
     report = json.loads(
         run_cli("report", "--workspace", str(workspace), "--experiment-id", experiment_id).stdout
