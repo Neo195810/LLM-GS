@@ -185,6 +185,10 @@ class WorkspaceStore:
 
     def freeze_memory_snapshot(self, execution_id: str) -> list[MemoryEntry]:
         """Persist the exact read-only memory membership available to one execution."""
+        try:
+            return self.memory_snapshot_entries(execution_id)
+        except ValueError:
+            pass
         entries = self.memory_entries()
         snapshot_payload = canonical_json(
             {
@@ -203,6 +207,25 @@ class WorkspaceStore:
                 (execution_id, snapshot_id),
             )
         return entries
+
+    def memory_snapshot_id(self, execution_id: str) -> str:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT snapshot_id FROM execution_memory_snapshots WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"memory snapshot not found for execution {execution_id}")
+        return str(row[0])
+
+    def execution_candidate_source(self, execution_id: str) -> str:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT candidate_source FROM executions WHERE execution_id = ?", (execution_id,)
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"execution not found: {execution_id}")
+        return str(row[0])
 
     def memory_snapshot_entries(self, execution_id: str) -> list[MemoryEntry]:
         with self._connect() as connection:

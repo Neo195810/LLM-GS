@@ -169,7 +169,7 @@ def execute_resumable(
     stop_after: int | None = None,
 ) -> tuple[ExperimentReport | None, str]:
     if manifest.failure_strategy["name"] in {"reflect", "memory_repair", "memory_reflect"}:
-        return _execute_reflect(manifest, experiment_id, store, model, evaluator)
+        return _execute_reflect(manifest, experiment_id, store, model, evaluator, stop_after)
     work = store.next_pending_work(experiment_id)
     if work is None and store.active_execution_id(experiment_id) is None:
         new_execution_id = store.next_execution_id(experiment_id)
@@ -210,14 +210,19 @@ def _execute_reflect(
     store: WorkspaceStore,
     model: ModelClient,
     evaluator: Evaluator,
-) -> tuple[ExperimentReport, str]:
+    stop_after: int | None = None,
+) -> tuple[ExperimentReport | None, str]:
     if not isinstance(model, Repairer):
         raise ValueError("reflect strategy requires a repair-capable model")
-    execution_id = store.next_execution_id(experiment_id)
-    candidate = model.propose(CLEAN_HOUSE_PROMPT)
-    store.begin_execution_for_experiment(
-        manifest, experiment_id, execution_id, candidate.source, candidate.model_requests
-    )
+    execution_id = store.active_execution_id(experiment_id)
+    if execution_id is None:
+        execution_id = store.next_execution_id(experiment_id)
+        candidate = model.propose(CLEAN_HOUSE_PROMPT)
+        store.begin_execution_for_experiment(
+            manifest, experiment_id, execution_id, candidate.source, candidate.model_requests
+        )
+    else:
+        candidate = CandidateProgram(source=store.execution_candidate_source(execution_id))
     seeds = _task_seeds(manifest)
     strategy = str(manifest.failure_strategy["name"])
     snapshot_entries = (
@@ -225,14 +230,18 @@ def _execute_reflect(
         if strategy in {"memory_repair", "memory_reflect"}
         else []
     )
-    initial_results: list[EpisodeResult] = []
-    for seed in seeds:
-        work = store.next_pending_work(experiment_id)
-        if work is None:
-            raise ValueError("reflect execution is missing pending work")
-        initial_result = evaluator.evaluate(candidate, seed)
+    completed_rows = store.completed_episode_results(execution_id)
+    initial_results = [EpisodeResult.model_validate_json(row) for row in completed_rows]
+    completed = 0
+    work = store.next_pending_work(experiment_id)
+    while work is not None:
+        initial_result = evaluator.evaluate(candidate, work.seed)
         store.complete_work(work, initial_result.model_dump_json())
         initial_results.append(initial_result)
+        completed += 1
+        if stop_after is not None and completed >= stop_after:
+            return None, "interrupted"
+        work = store.next_pending_work(experiment_id)
     final_candidate = candidate
     final_results = initial_results
     all_results = list(initial_results)

@@ -42,6 +42,9 @@ def test_memory_snapshot_is_read_only_and_excludes_current_execution_entries(tmp
     store.save_memory_entry(prior)
 
     assert store.freeze_memory_snapshot("exec_000001") == [prior]
+    snapshot_id = store.memory_snapshot_id("exec_000001")
     store.save_memory_entry(current)
 
     assert store.memory_snapshot_entries("exec_000001") == [prior]
+    assert store.freeze_memory_snapshot("exec_000001") == [prior]
+    assert store.memory_snapshot_id("exec_000001") == snapshot_id

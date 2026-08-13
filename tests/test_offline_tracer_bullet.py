@@ -393,6 +393,38 @@ failure_strategy:
     assert sum(report["outcomes"].values()) == 4
 
 
+def test_memory_repair_resumes_with_its_frozen_snapshot(tmp_path: Path) -> None:
+    specification = tmp_path / "memory-repair-resume.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-memory-repair-resume
+task:
+  name: CleanHouse
+seeds:
+  task: [7, 8]
+failure_strategy:
+  name: memory_repair
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+
+    interrupted = run_cli(
+        "run", str(specification), "--workspace", str(workspace), "--stop-after", "1"
+    )
+    assert json.loads(interrupted.stdout)["status"] == "interrupted"
+
+    resumed = run_cli(
+        "resume", "--workspace", str(workspace), "--experiment-id", validation["experiment_id"]
+    )
+
+    assert resumed.returncode == 0, resumed.stderr
+    assert json.loads(resumed.stdout)["execution_id"] == "exec_000001"
+
+
 def test_memory_reflect_runs_with_the_frozen_retriever_manifest(tmp_path: Path) -> None:
     specification = tmp_path / "memory-reflect.yaml"
     workspace = tmp_path / "workspace"
