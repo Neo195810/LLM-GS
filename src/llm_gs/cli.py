@@ -102,7 +102,7 @@ def _model_client(args: argparse.Namespace) -> FakeOpenAIClient | OpenAIProposer
         return FakeOpenAIClient()
     if args.max_cost_usd is None or args.max_cost_usd <= 0:
         raise ValueError("live OpenAI requires a positive --max-cost-usd")
-    return OpenAIProposer()
+    return OpenAIProposer(max_cost_usd=args.max_cost_usd)
 
 
 def _fail(message: str) -> NoReturn:

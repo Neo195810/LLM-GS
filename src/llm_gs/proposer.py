@@ -7,6 +7,7 @@ from typing import Protocol, cast
 from openai import OpenAI
 
 from llm_gs.contracts import CandidateProgram
+from prog_policies.karel.dsl import KarelDSL
 
 MODEL_NAME = "gpt-5.6-luna"
 REASONING_EFFORT = "medium"
@@ -49,16 +50,20 @@ class OpenAIProposer:
         client: ResponsesClient | None = None,
         input_token_limit: int = 4096,
         output_token_limit: int = 1024,
+        max_cost_usd: float = 1.0,
     ) -> None:
         self._client: ResponsesClient = (
             client if client is not None else cast(ResponsesClient, OpenAI().responses)
         )
         self._input_token_limit = input_token_limit
         self._output_token_limit = output_token_limit
+        self._max_cost_usd = max_cost_usd
         self.records: list[ModelRequestRecord] = []
 
     def propose(self, prompt: str) -> CandidateProgram:
         request_prompt = prompt
+        if _token_estimate(request_prompt) > self._input_token_limit:
+            raise ModelOutputFailure("request input exceeds the configured token budget")
         for attempt in range(1, 4):
             response = self._client.create(
                 model=MODEL_NAME,
@@ -72,7 +77,7 @@ class OpenAIProposer:
                 source = _proposal_source(response)
                 _validate_dsl(source)
                 return CandidateProgram(source=source, model_requests=attempt)
-            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+            except (AssertionError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 if attempt == 3:
                     raise ModelOutputFailure(
                         "model output failed schema or DSL validation"
@@ -86,10 +91,12 @@ class OpenAIProposer:
         output_tokens = int(getattr(usage, "output_tokens", 0))
         details = getattr(usage, "input_tokens_details", None)
         cached_tokens = int(getattr(details, "cached_tokens", 0))
-        total_limit = self._input_token_limit + self._output_token_limit
-        used_tokens = input_tokens + output_tokens
-        if used_tokens > total_limit:
+        if input_tokens > self._input_token_limit or output_tokens > self._output_token_limit:
             raise ModelOutputFailure("model request exceeds the configured token budget")
+        used_tokens = input_tokens + output_tokens
+        if _estimated_cost_usd(input_tokens, output_tokens) > self._max_cost_usd:
+            raise ModelOutputFailure("model request exceeds the configured cost cap")
+        total_limit = self._input_token_limit + self._output_token_limit
         warning = "token_budget_80_percent" if used_tokens * 100 >= total_limit * 80 else None
         self.records.append(
             ModelRequestRecord(
@@ -115,8 +122,16 @@ def _proposal_source(response: object) -> str:
 
 
 def _validate_dsl(source: str) -> None:
-    if not source.startswith("DEF run"):
-        raise ValueError("proposal is not a DSL program")
+    KarelDSL().parse_str_to_node(source)  # type: ignore[no-untyped-call]
+
+
+def _token_estimate(prompt: str) -> int:
+    return (len(prompt.encode("utf-8")) + 3) // 4
+
+
+def _estimated_cost_usd(input_tokens: int, output_tokens: int) -> float:
+    """Conservative per-request ceiling used only to enforce an explicit client cap."""
+    return input_tokens * 0.000_005 + output_tokens * 0.000_015
 
 
 def _correction_prompt(original_prompt: str, validation_error: str) -> str:

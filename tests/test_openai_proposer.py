@@ -21,7 +21,9 @@ class FakeResponses:
 
     def create(self, **kwargs: object) -> object:
         self.calls.append(kwargs)
-        return SimpleNamespace(output_text=self._outputs.pop(0), usage=self._usage, status="completed")
+        return SimpleNamespace(
+            output_text=self._outputs.pop(0), usage=self._usage, status="completed"
+        )
 
 
 def test_openai_proposer_uses_pinned_structured_responses_request() -> None:
@@ -49,7 +51,9 @@ def test_openai_proposer_uses_pinned_structured_responses_request() -> None:
 
 
 def test_openai_proposer_corrects_invalid_output_at_most_twice() -> None:
-    responses = FakeResponses(["not json", '{"source":"not dsl"}', '{"source":"DEF run m( turnLeft m)"}'])
+    responses = FakeResponses(
+        ["not json", '{"source":"not dsl"}', '{"source":"DEF run m( turnLeft m)"}']
+    )
 
     candidate = OpenAIProposer(responses).propose("make a program")
 
@@ -59,7 +63,27 @@ def test_openai_proposer_corrects_invalid_output_at_most_twice() -> None:
 
 
 def test_openai_proposer_blocks_token_budget_overrun() -> None:
-    responses = FakeResponses(['{"source":"DEF run m( turnLeft m)"}'], input_tokens=9, output_tokens=2)
+    responses = FakeResponses(
+        ['{"source":"DEF run m( turnLeft m)"}'], input_tokens=9, output_tokens=2
+    )
 
     with pytest.raises(ModelOutputFailure, match="token budget"):
-        OpenAIProposer(responses, input_token_limit=8, output_token_limit=2).propose("make a program")
+        OpenAIProposer(responses, input_token_limit=8, output_token_limit=2).propose(
+            "make a program"
+        )
+
+
+def test_openai_proposer_retries_an_invalid_karel_dsl() -> None:
+    responses = FakeResponses(
+        ['{"source":"DEF run invalid"}', '{"source":"DEF run m( turnLeft m)"}']
+    )
+
+    assert OpenAIProposer(responses).propose("make a program").model_requests == 2
+
+
+def test_openai_proposer_blocks_input_before_sending_a_request() -> None:
+    responses = FakeResponses(['{"source":"DEF run m( turnLeft m)"}'])
+
+    with pytest.raises(ModelOutputFailure, match="input exceeds"):
+        OpenAIProposer(responses, input_token_limit=1).propose("this prompt is too large")
+    assert responses.calls == []

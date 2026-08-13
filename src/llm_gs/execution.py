@@ -130,13 +130,15 @@ def execute_resumable(
     if not rows:
         raise ValueError("no execution work is available to resume")
     results = [EpisodeResult.model_validate_json(row) for row in rows]
-    report = _report_from_results(experiment_id, active_execution_id, results)
+    report = _report_from_results(
+        experiment_id, active_execution_id, results, store.model_requests(active_execution_id)
+    )
     store.save(manifest, report)
     return report, "completed"
 
 
 def _report_from_results(
-    experiment_id: str, execution_id: str, results: list[EpisodeResult]
+    experiment_id: str, execution_id: str, results: list[EpisodeResult], model_requests: int
 ) -> ExperimentReport:
     outcomes: dict[str, int] = {}
     evidence: list[EvaluationEvidence] = []
@@ -158,7 +160,7 @@ def _report_from_results(
         execution_id=execution_id,
         candidate_programs=1,
         episode_evaluations=sum(result.episode_evaluations for result in results),
-        model_requests=1,
+        model_requests=model_requests,
         outcomes=outcomes,
         evaluation_evidence=evidence,
     )

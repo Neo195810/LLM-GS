@@ -164,6 +164,15 @@ class WorkspaceStore:
             raise ValueError(f"experiment not found: {experiment_id}")
         return ExperimentManifest.model_validate_json(row[0])
 
+    def model_requests(self, execution_id: str) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT model_requests FROM executions WHERE execution_id = ?", (execution_id,)
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"execution not found: {execution_id}")
+        return int(row[0])
+
     def _put_artifact(self, content: bytes) -> str:
         digest = hashlib.sha256(content).hexdigest()
         path = self._artifacts / digest
