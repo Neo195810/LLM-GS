@@ -162,6 +162,32 @@ def test_cli_exports_and_imports_a_self_verifying_experiment_bundle(tmp_path: Pa
     )
 
 
+def test_report_derives_failure_and_replacement_visibility_from_persisted_records(
+    tmp_path: Path,
+) -> None:
+    specification = tmp_path / "experiment.yaml"
+    workspace = tmp_path / "workspace"
+    write_specification(specification)
+    experiment_id = json.loads(run_cli("validate", str(specification)).stdout)["experiment_id"]
+    assert run_cli("run", str(specification), "--workspace", str(workspace)).returncode == 0
+
+    from llm_gs.storage import WorkspaceStore
+
+    store = WorkspaceStore(workspace)
+    store.record_execution_failure(experiment_id, "exec_000001", "infrastructure", "timeout")
+    store.record_execution_failure(experiment_id, None, "model_output", "schema invalid")
+    store.record_replacement_execution(experiment_id, "exec_000001")
+
+    report = json.loads(
+        run_cli("report", "--workspace", str(workspace), "--experiment-id", experiment_id).stdout
+    )
+    assert report["failure_classes"] == {
+        "infrastructure": 1,
+        "model_output": 1,
+        "replacements": 1,
+    }
+
+
 def test_invalid_specification_stops_before_execution_work(tmp_path: Path) -> None:
     specification = tmp_path / "invalid.yaml"
     workspace = tmp_path / "must-not-exist"

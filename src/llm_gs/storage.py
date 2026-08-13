@@ -561,6 +561,14 @@ class WorkspaceStore:
                 "WHERE experiment_id = ? ORDER BY execution_id",
                 (experiment_id,),
             ).fetchall()
+            failures = connection.execute(
+                "SELECT kind, COUNT(*) FROM execution_failures WHERE experiment_id = ? GROUP BY kind",
+                (experiment_id,),
+            ).fetchall()
+            replacements = connection.execute(
+                "SELECT COUNT(*) FROM execution_replacements WHERE experiment_id = ?",
+                (experiment_id,),
+            ).fetchone()
         protocol = str(report["audit"].get("memory_protocol", "none"))
         executions = [
             {
@@ -578,8 +586,31 @@ class WorkspaceStore:
             "costs": {"model_requests": report["model_requests"], "episode_evaluations": report["episode_evaluations"]},
             "executions": executions,
             "missingness": {"incomplete_executions": sum(item["status"] != "completed" for item in executions)},
-            "failure_classes": {"infrastructure": 0, "model_output": 0, "replacements": 0},
+            "failure_classes": {
+                "infrastructure": next((int(count) for kind, count in failures if kind == "infrastructure"), 0),
+                "model_output": next((int(count) for kind, count in failures if kind == "model_output"), 0),
+                "replacements": int(replacements[0]) if replacements else 0,
+            },
         }
+
+    def record_execution_failure(
+        self, experiment_id: str, execution_id: str | None, kind: str, detail: str
+    ) -> None:
+        if kind not in {"infrastructure", "model_output"}:
+            raise ValueError("unknown execution failure kind")
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO execution_failures(experiment_id, execution_id, kind, detail) "
+                "VALUES (?, ?, ?, ?)",
+                (experiment_id, execution_id, kind, detail),
+            )
+
+    def record_replacement_execution(self, experiment_id: str, execution_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO execution_replacements(experiment_id, execution_id) VALUES (?, ?)",
+                (experiment_id, execution_id),
+            )
 
     def inspect_execution(self, execution_id: str) -> dict[str, object]:
         return self.execution_audit(execution_id)
@@ -606,6 +637,16 @@ class WorkspaceStore:
                 "retrieval_outcomes": _records_for_executions(connection, "retrieval_outcomes", execution_ids),
                 "execution_memory_snapshots": _records_for_executions(
                     connection, "execution_memory_snapshots", execution_ids
+                ),
+                "execution_failures": _query_records(
+                    connection,
+                    "SELECT * FROM execution_failures WHERE experiment_id = ? ORDER BY id",
+                    (experiment_id,),
+                ),
+                "execution_replacements": _query_records(
+                    connection,
+                    "SELECT * FROM execution_replacements WHERE experiment_id = ? ORDER BY id",
+                    (experiment_id,),
                 ),
             }
             snapshot_ids = [str(row["snapshot_id"]) for row in records["execution_memory_snapshots"]]
@@ -658,6 +699,12 @@ class WorkspaceStore:
         if len(execution_ids) != len(executions):
             raise ValueError("export bundle has duplicate execution identifiers")
         _validate_bundle_references(records, {str(item) for item in execution_ids}, artifacts)
+        for table in ("execution_failures", "execution_replacements"):
+            rows = records[table]
+            if not isinstance(rows, list) or any(
+                not isinstance(row, dict) or row.get("experiment_id") != imported_id for row in rows
+            ):
+                raise ValueError(f"export bundle has invalid {table} experiment references")
         with self._connect() as connection:
             existing = connection.execute(
                 "SELECT 1 FROM experiments WHERE experiment_id = ?", (imported_id,)
@@ -786,6 +833,8 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS frozen_manifest_registrations (arm_json TEXT PRIMARY KEY, experiment_id TEXT NOT NULL UNIQUE);
         CREATE TABLE IF NOT EXISTS paired_protocol_registrations (pairing_json TEXT PRIMARY KEY, seed_suite_json TEXT NOT NULL, budgets_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS execution_failures (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, execution_id TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS execution_replacements (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, execution_id TEXT NOT NULL);
         """)
         return connection
 
@@ -801,6 +850,8 @@ _EXPORT_TABLES = frozenset(
         "retrieval_outcomes",
         "execution_memory_snapshots",
         "memory_snapshots",
+        "execution_failures",
+        "execution_replacements",
     }
 )
 
@@ -858,7 +909,12 @@ def _insert_records(connection: sqlite3.Connection, table: str, rows: list[objec
 def _validate_bundle_references(
     records: dict[str, object], execution_ids: set[str], artifacts: dict[object, object]
 ) -> None:
-    execution_tables = _EXPORT_TABLES - {"executions", "memory_snapshots"}
+    execution_tables = _EXPORT_TABLES - {
+        "executions",
+        "memory_snapshots",
+        "execution_failures",
+        "execution_replacements",
+    }
     for table in execution_tables:
         rows = records[table]
         if not isinstance(rows, list) or any(
@@ -881,6 +937,14 @@ def _validate_bundle_references(
         not isinstance(row, dict) or row.get("artifact_hash") not in artifacts for row in evaluations
     ):
         raise ValueError("export bundle is missing a referenced artifact")
+    for table in ("execution_failures", "execution_replacements"):
+        rows = records[table]
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict)
+            or row.get("execution_id") not in execution_ids | {None}
+            for row in rows
+        ):
+            raise ValueError(f"export bundle has invalid {table} references")
 
 
 def _validate_record_schemas(connection: sqlite3.Connection, records: dict[str, object]) -> None:
