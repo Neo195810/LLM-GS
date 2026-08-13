@@ -116,6 +116,16 @@ class PromptGenerator:
         )
         return user_prompt
 
+    def get_task_context(self) -> str:
+        """Stable semantic task description used for skill-RAG retrieval/indexing."""
+        return "\n".join((
+            f"Environment: {self.env_name}",
+            f"Map: {self.task_template.map_desc}",
+            f"Agent: {self.task_template.agent_position_desc}",
+            f"Goal: {self.task_template.goal_desc}",
+            f"Return: {self.task_template.return_desc}",
+        ))
+
     def get_system_prompt_python(self) -> str:
         system_prompt = (
             self._env_desc_python()

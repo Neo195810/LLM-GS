@@ -8,6 +8,7 @@ sys.path.append(".")
 sys.path.append("./leaps")
 
 from llm import LLMProgramGenerator
+from llm.prompt_generator import PromptGenerator
 from prog_policies.utils import get_env_name
 from prog_policies.karel import KarelDSL
 from prog_policies.minigrid.dsl import MinigridDSL
@@ -20,6 +21,7 @@ from prog_policies.utils.save_file import (
     outside_seed_save_log_file,
 )
 from prog_policies.utils.evaluate_and_search import *
+from prog_policies.skills import SkillLibrary
 
 
 def karel_env(args):
@@ -147,6 +149,11 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str, default="output")
     parser.add_argument("--output_name", type=str, default="0")
     parser.add_argument("--save_step", type=int, default=5000)
+    parser.add_argument("--use_skill_library", action="store_true", help="Retrieve verified DSL skills and use them as LLM/search seeds")
+    parser.add_argument("--skill_library_path", type=str, default="output/skills.json", help="JSON file shared across tasks")
+    parser.add_argument("--skill_top_k", type=int, default=3, help="Maximum retrieved skills")
+    parser.add_argument("--skill_min_reward", type=float, default=1.0, help="Only persist solutions at or above this reward")
+    parser.add_argument("--skill_embedding_model", type=str, default="nomic-embed-text", help="Ollama embedding model for skill RAG")
 
     args = parser.parse_args()
 
@@ -196,11 +203,25 @@ if __name__ == "__main__":
     log["args"] = vars(args)
     log["seed"] = args.seed
 
+    skill_library = SkillLibrary(args.skill_library_path, get_env_name(args.task), args.skill_embedding_model)
+    task_context = PromptGenerator(args.task).get_task_context()
+    retrieved_skills = skill_library.retrieve(args.task, task_context, args.skill_top_k) if args.use_skill_library else []
     llm_program_generator = LLMProgramGenerator(
-        args.seed, args.task, dsl, args.llm_program_num, args.temperature, args.top_p
+        args.seed, args.task, dsl, args.llm_program_num, args.temperature, args.top_p,
+        retrieved_skills=retrieved_skills,
     )
     program_list, llm_log = llm_program_generator.get_program_list_python_to_dsl()
+    # A stored fragment is wrapped as a complete program, so it can be evaluated and
+    # immediately become a hill-climbing seed even if the LLM ignores it.
+    if args.use_skill_library:
+        for skill in retrieved_skills:
+            try:
+                program_list.append(dsl.parse_str_to_node(skill["dsl_program"]))
+            except Exception:
+                continue
+        program_list = list({dsl.parse_node_to_str(p): p for p in program_list}.values())
     log["llm_log"] = [llm_log]
+    log["retrieved_skills"] = retrieved_skills
 
     init_time = time.time()
 
@@ -290,3 +311,6 @@ if __name__ == "__main__":
         search_method.record,
         search_method.program_record,
     )
+    if args.use_skill_library and best_prog is not None and best_reward >= args.skill_min_reward:
+        count = skill_library.extract_and_store(best_prog, best_reward, args.task, dsl, task_context)
+        print(f"Stored {count} verified skills in {args.skill_library_path}")

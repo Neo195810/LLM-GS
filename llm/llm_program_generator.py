@@ -1,8 +1,7 @@
 from __future__ import annotations
 import math
-import os
 from typing import Dict, List
-from langchain_openai import ChatOpenAI
+from langchain_community.chat_models import ChatOllama
 from langchain_core.messages import HumanMessage, SystemMessage
 import numpy as np
 
@@ -12,7 +11,8 @@ from prog_policies.utils import get_env_name
 from prog_policies.base import BaseDSL, dsl_nodes
 
 
-CHATGPT_KEY = os.getenv("OPENAI_KEY")
+OLLAMA_MODEL = "qwen3-coder:30b"
+OLLAMA_BASE_URL = "http://localhost:11434"
 
 class LLMProgramGenerator:
     def __init__(
@@ -26,6 +26,7 @@ class LLMProgramGenerator:
         action_shots: int = 0,
         perception_shots: int = 0,
         program_shots: int = 0,
+        retrieved_skills: list[dict] | None = None,
     ) -> None:
         self.seed = seed
         self.task = task
@@ -33,7 +34,7 @@ class LLMProgramGenerator:
         self.dsl = dsl
         self.ratio = 1.5
         self.llm_program_num = llm_program_num
-        self.model_name = "gpt-4-turbo-2024-04-09"
+        self.model_name = OLLAMA_MODEL
         self.temperature = temperature
         self.top_p = top_p
 
@@ -43,6 +44,7 @@ class LLMProgramGenerator:
         self.action_shots = action_shots
         self.perception_shots = perception_shots
         self.program_shots = program_shots
+        self.retrieved_skills = retrieved_skills or []
         self.prompt_generator = PromptGenerator(
             self.task,
             self.action_shots,
@@ -50,29 +52,41 @@ class LLMProgramGenerator:
             self.program_shots,
         )
 
+    def get_llm_backend_info(self) -> dict:
+        """Return the active LLM backend configuration."""
+        return {
+            "backend": "ollama",
+            "model": self.model_name,
+            "base_url": OLLAMA_BASE_URL,
+        }
+
     def _call_llm(
         self,
         system_prompt: str,
         user_prompt: str,
         llm_program_num: int,
     ) -> str | List[str | Dict]:
-        chatgpt = ChatOpenAI(
-            api_key=CHATGPT_KEY,
-            model=self.model_name,
-            temperature=self.temperature,
-            n=llm_program_num,
-            model_kwargs={"top_p": self.top_p},
-        )
-        response = chatgpt.generate(
+        """Call the local Ollama model."""
+        messages = [
             [
-                [
-                    SystemMessage(content=system_prompt),
-                    HumanMessage(content=user_prompt),
-                ]
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt),
             ]
-        ).generations[0]
+        ]
 
-        return list(map(lambda x: x.text, response))
+        llm = ChatOllama(
+            model=self.model_name,
+            base_url=OLLAMA_BASE_URL,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            num_predict=4096,
+        )
+
+        responses = []
+        for _ in range(llm_program_num):
+            result = llm.generate(messages)
+            responses.append(result.generations[0][0].text)
+        return responses
 
     def _get_program_list_from_llm_response_python_to_dsl(self, response) -> list[str]:
         program_str_list = []
@@ -121,10 +135,11 @@ class LLMProgramGenerator:
         program_num = self.llm_program_num
         while len(program_list) < program_num:
             attempts += 1
-            seed = self.np_rng.randint(0, 2**32)
+            seed = int(self.np_rng.randint(0, 2**31 - 1))
             llm_program_num = math.ceil((program_num - len(program_list)) * self.ratio)
             system_prompt = self.prompt_generator.get_system_prompt_python_to_dsl()
             user_prompt = self.prompt_generator.get_user_prompt_python_to_dsl()
+            user_prompt += self._skill_prompt_block()
             llm_response = self._call_llm(system_prompt, user_prompt, llm_program_num)
             program_str_list = self._get_program_list_from_llm_response_python_to_dsl(llm_response)
             for candidates in program_str_list:
@@ -161,6 +176,13 @@ class LLMProgramGenerator:
         log = {"attemps": attempts, "record_list": record_list}
 
         return program_list, log
+
+    def _skill_prompt_block(self) -> str:
+        """Keep the optional memory out of the base prompt for fair ablations."""
+        if not self.retrieved_skills:
+            return ""
+        from prog_policies.skills import SkillLibrary
+        return SkillLibrary.prompt_block(self.retrieved_skills)
     
     def get_program_list_python(self) -> tuple[list, dict]:
         program_list = []
@@ -169,7 +191,7 @@ class LLMProgramGenerator:
         program_num = self.llm_program_num
         while len(program_list) < program_num:
             attempts += 1
-            seed = self.np_rng.randint(0, 2**32)
+            seed = int(self.np_rng.randint(0, 2**31 - 1))
             llm_program_num = math.ceil((program_num - len(program_list)) * self.ratio)
             system_prompt = self.prompt_generator.get_system_prompt_python()
             user_prompt = self.prompt_generator.get_user_prompt_python()
@@ -213,7 +235,7 @@ class LLMProgramGenerator:
         program_num = self.llm_program_num
         while len(program_list) < program_num:
             attempts += 1
-            seed = self.np_rng.randint(0, 2**32)
+            seed = int(self.np_rng.randint(0, 2**31 - 1))
             llm_program_num = math.ceil((program_num - len(program_list)) * self.ratio)
             system_prompt = self.prompt_generator.get_system_prompt_dsl()
             user_prompt = self.prompt_generator.get_user_prompt_dsl()
@@ -260,7 +282,7 @@ class LLMProgramGenerator:
         program_num = self.llm_program_num
         while len(program_list) < program_num:
             attempts += 1
-            seed = self.np_rng.randint(0, 2**32)
+            seed = int(self.np_rng.randint(0, 2**31 - 1))
             llm_program_num = math.ceil((program_num - len(program_list)) * self.ratio)
             system_prompt = self.prompt_generator.get_system_prompt_python_to_dsl()
             user_prompt = self.prompt_generator.get_user_prompt_revision_regeneration_with_reward(progs_rewards, self.dsl)
@@ -311,7 +333,7 @@ class LLMProgramGenerator:
         program_num = self.llm_program_num
         while len(program_list) < program_num:
             attempts += 1
-            seed = self.np_rng.randint(0, 2**32)
+            seed = int(self.np_rng.randint(0, 2**31 - 1))
             llm_program_num = math.ceil((program_num - len(program_list)) * self.ratio)
             system_prompt = self.prompt_generator.get_system_prompt_python_to_dsl()
             user_prompt = self.prompt_generator.get_user_prompt_revision_regeneration(previous_program_list, self.dsl)
@@ -362,7 +384,7 @@ class LLMProgramGenerator:
         program_num = self.llm_program_num
         while len(program_list) < program_num:
             attempts += 1
-            seed = self.np_rng.randint(0, 2**32)
+            seed = int(self.np_rng.randint(0, 2**31 - 1))
             llm_program_num = math.ceil((program_num - len(program_list)) * self.ratio)
             system_prompt = self.prompt_generator.get_system_prompt_python_to_dsl()
             user_prompt = self.prompt_generator.get_user_prompt_revision_agent_execution_trace(reward, logs, average_reward)
@@ -413,7 +435,7 @@ class LLMProgramGenerator:
         program_num = self.llm_program_num
         while len(program_list) < program_num:
             attempts += 1
-            seed = self.np_rng.randint(0, 2**32)
+            seed = int(self.np_rng.randint(0, 2**31 - 1))
             llm_program_num = math.ceil((program_num - len(program_list)) * self.ratio)
             system_prompt = self.prompt_generator.get_system_prompt_python_to_dsl()
             user_prompt = self.prompt_generator.get_user_prompt_revision_agent_program_execution_trace(reward, logs, average_reward)
