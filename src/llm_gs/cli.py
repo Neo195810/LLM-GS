@@ -14,6 +14,7 @@ from llm_gs.contracts import ExperimentManifest, ExperimentReport
 from llm_gs.execution import (
     CleanHouseEvaluator,
     FakeOpenAIClient,
+    FourCornersEvaluator,
     OfflineEchoEvaluator,
     execute_resumable,
 )
@@ -58,6 +59,8 @@ def _execute_with_failure_recording(
             _model_client(args),
             CleanHouseEvaluator()
             if manifest.task["name"] == "CleanHouse"
+            else FourCornersEvaluator()
+            if manifest.task["name"] == "FourCorners"
             else OfflineEchoEvaluator(),
             stop_after,
         )

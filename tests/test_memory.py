@@ -7,6 +7,7 @@ from llm_gs.manifest import resolve_manifest
 from llm_gs.memory import (
     StructuredRetriever,
     curate_clean_house_attempt,
+    curate_four_corners_attempt,
     serialize_memory_context,
     serialize_repair_context,
 )
@@ -76,6 +77,36 @@ def test_memory_provenance_survives_store_restart(tmp_path) -> None:
     store.save_memory_entry(entry)
 
     assert WorkspaceStore(tmp_path).memory_entries() == [entry]
+
+
+def test_four_corners_memory_retrieval_rejects_clean_house_entries() -> None:
+    four_corners_failure = EpisodeResult(
+        outcome="partial_completion",
+        failure_type="task_failure",
+        failure_reason="no_corner_markers_placed",
+        evaluation_evidence={
+            "goal_marker_count": 4,
+            "correct_marker_count": 0,
+            "placed_marker_count": 0,
+            "incorrect_marker_count": 0,
+        },
+    )
+    four_corners = curate_four_corners_attempt(
+        "four-corners", "DEF run m( turnLeft m)", four_corners_failure
+    )
+    clean_house = curate_clean_house_attempt("clean-house", "DEF run m( move m)", _failure())
+
+    retriever = StructuredRetriever((clean_house, four_corners), task="FourCorners")
+    entries, outcome = retriever.retrieve(four_corners_failure, limit=3)
+
+    assert entries == [four_corners]
+    assert outcome.candidate_components[clean_house.entry_id].task_compatible is False
+
+    entries, _ = StructuredRetriever((clean_house,), task="FourCorners").retrieve(
+        four_corners_failure, limit=3
+    )
+
+    assert entries == []
 
 
 def test_memory_snapshot_is_read_only_and_excludes_current_execution_entries(tmp_path) -> None:

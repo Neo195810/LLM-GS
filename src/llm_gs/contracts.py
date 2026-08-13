@@ -10,7 +10,7 @@ class StrictContract(BaseModel):
 
 
 class TaskSpecification(StrictContract):
-    name: Literal["CleanHouse", "offline.echo"]
+    name: Literal["CleanHouse", "FourCorners", "offline.echo"]
 
 
 class SeedSpecification(StrictContract):
@@ -150,7 +150,7 @@ class RepairAttempt(StrictContract):
 class MemoryEntry(StrictContract):
     version: Literal[1] = 1
     entry_id: str
-    task: Literal["CleanHouse"]
+    task: Literal["CleanHouse", "FourCorners"]
     failure_type: str
     failure_reason: str
     normalized_ast_hash: str

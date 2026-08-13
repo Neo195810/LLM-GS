@@ -33,7 +33,7 @@ def evaluate_v1_baseline(
     )
     terminal_state = json.dumps(
         environment.get_state().tolist(), separators=(",", ":")
-    ) if task_name == "CleanHouse" else json.dumps(
+    ) if task_name in {"CleanHouse", "FourCorners"} else json.dumps(
         {
             "agent_dir": int(environment.unwrapped.agent_dir),
             "agent_pos": [int(value) for value in environment.unwrapped.agent_pos],
@@ -54,6 +54,7 @@ def evaluate_v1_baseline(
     ("task_name", "program_source", "seed", "limits"),
     [
         ("CleanHouse", "DEF run m( turnLeft m)", 7, V1ExecutionLimits(max_calls=10)),
+        ("FourCorners", "DEF run m( turnLeft m)", 7, V1ExecutionLimits(max_calls=10)),
         (
             "CleanHouse",
             "DEF run m( REPEAT R=2 r( turnLeft r) m)",
@@ -95,6 +96,26 @@ def test_clean_house_adapter_emits_versioned_partial_completion_evidence() -> No
         "version": 1,
         "initial_marker_count": 11,
         "remaining_marker_count": 11,
+        "program_call_count": 1,
+        "terminal_state": result.terminal_state,
+    }
+
+
+def test_four_corners_adapter_emits_versioned_goal_progress_evidence() -> None:
+    result = V1Adapter().evaluate_attempt(
+        "FourCorners", "DEF run m( turnLeft m)", 7, V1ExecutionLimits(max_calls=10)
+    )
+
+    assert result.outcome == "partial_completion"
+    assert result.normalized_progress == 0.0
+    assert result.failure_type == "task_failure"
+    assert result.failure_reason == "no_corner_markers_placed"
+    assert result.evaluation_evidence == {
+        "version": 1,
+        "goal_marker_count": 4,
+        "correct_marker_count": 0,
+        "placed_marker_count": 0,
+        "incorrect_marker_count": 0,
         "program_call_count": 1,
         "terminal_state": result.terminal_state,
     }

@@ -5,6 +5,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 
 def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
     environment = os.environ.copy()
@@ -270,6 +272,88 @@ seeds:
     assert report["status"] == "completed"
     assert report["outcomes"] == {"partial_completion": 1}
     assert report["evaluation_evidence"][0]["failure_reason"] == "no_markers_collected"
+
+
+@pytest.mark.parametrize("strategy", ["regenerate", "reflect", "memory_repair", "memory_reflect"])
+def test_four_corners_runs_each_failure_strategy_with_task_specific_evidence(
+    tmp_path: Path, strategy: str
+) -> None:
+    specification = tmp_path / f"four-corners-{strategy}.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        f"""\
+spec_version: 1
+display_name: four-corners-{strategy}
+task:
+  name: FourCorners
+seeds:
+  task: [7]
+failure_strategy:
+  name: {strategy}
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert validation["manifest"]["components"]["evaluator"] == "v1-fourcorners-adapter-v1"
+    run = run_cli("run", str(specification), "--workspace", str(workspace))
+    assert run.returncode == 0, run.stderr
+    report = json.loads(
+        run_cli(
+            "report", "--workspace", str(workspace), "--experiment-id", validation["experiment_id"]
+        ).stdout
+    )
+
+    assert report["evaluation_evidence"][0]["failure_reason"] == "no_corner_markers_placed"
+    assert report["evaluation_evidence"][0]["evidence"]["goal_marker_count"] == 4
+    assert report["episode_evaluations"] <= validation["manifest"]["budgets"]["episode_evaluations"]
+    if strategy.startswith("memory_"):
+        assert report["audit"]["retrievals"][0]["candidate_components"]
+
+
+def test_four_corners_failure_strategies_share_the_same_fixed_budgets(tmp_path: Path) -> None:
+    manifests = []
+    for strategy in ("regenerate", "reflect", "memory_repair", "memory_reflect"):
+        specification = tmp_path / f"four-corners-budget-{strategy}.yaml"
+        specification.write_text(
+            f"""\
+spec_version: 1
+display_name: four-corners-budget-{strategy}
+task:
+  name: FourCorners
+seeds:
+  task: [7]
+  search: 19
+  replicate: 2
+failure_strategy:
+  name: {strategy}
+  max_repair_cycles: 1
+""",
+            encoding="utf-8",
+        )
+        manifests.append(json.loads(run_cli("validate", str(specification)).stdout)["manifest"])
+
+    expected_budgets = {
+        "episode_evaluations": 2,
+        "input_tokens": 4096,
+        "model_requests": 6,
+        "output_tokens": 1024,
+    }
+    expected_search_strategy = {
+        "elite_count": 1,
+        "name": "single_candidate",
+        "population_size": 1,
+        "replicate": 2,
+        "seed": 19,
+        "version": "v1",
+    }
+    assert {frozenset(manifest["budgets"].items()) for manifest in manifests} == {
+        frozenset(expected_budgets.items())
+    }
+    assert {frozenset(manifest["search_strategy"].items()) for manifest in manifests} == {
+        frozenset(expected_search_strategy.items())
+    }
 
 
 def test_clean_house_execution_recovers_pending_work_after_interruption(tmp_path: Path) -> None:

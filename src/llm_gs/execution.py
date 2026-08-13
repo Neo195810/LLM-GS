@@ -13,8 +13,19 @@ from llm_gs.contracts import (
     RepairIntent,
     ResolvedSearchStrategyConfiguration,
 )
-from llm_gs.manifest import CLEAN_HOUSE_PROMPT, FINAL_CANDIDATE_SELECTION_RULE, OFFLINE_PROMPT
-from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_repair_context
+from llm_gs.manifest import (
+    CLEAN_HOUSE_PROMPT,
+    FINAL_CANDIDATE_SELECTION_RULE,
+    FOUR_CORNERS_PROMPT,
+    OFFLINE_PROMPT,
+    task_prompt,
+)
+from llm_gs.memory import (
+    StructuredRetriever,
+    curate_clean_house_attempt,
+    curate_four_corners_attempt,
+    serialize_repair_context,
+)
 from llm_gs.reflection import RepairCycle, RepeatedRepairError, _normalized_ast_hash
 from llm_gs.search import ScoredCandidate, resolve_search_strategy
 from llm_gs.storage import WorkspaceStore
@@ -43,9 +54,9 @@ class Repairer(Protocol):
 
 class FakeOpenAIClient:
     def propose(self, prompt: str) -> CandidateProgram:
-        if prompt.startswith(("Repair CleanHouse", "Reflect on evidence then repair CleanHouse")):
+        if prompt.startswith(("Repair ", "Reflect on evidence then repair ")):
             return CandidateProgram(source="DEF run m( move m)")
-        if prompt == CLEAN_HOUSE_PROMPT:
+        if prompt in {CLEAN_HOUSE_PROMPT, FOUR_CORNERS_PROMPT}:
             return CandidateProgram(source="DEF run m( turnLeft m)")
         if prompt != OFFLINE_PROMPT:
             raise ValueError("fake model received an unknown prompt")
@@ -111,6 +122,22 @@ class CleanHouseEvaluator:
         )
 
 
+class FourCornersEvaluator:
+    def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+        adapter = V1Adapter()
+        limits = V1ExecutionLimits(max_calls=10)
+        adapter.assert_equivalent("FourCorners", candidate.source, task_seed, limits)
+        attempt = adapter.evaluate_attempt("FourCorners", candidate.source, task_seed, limits)
+        return EpisodeResult(
+            outcome=attempt.outcome,
+            normalized_progress=attempt.normalized_progress,
+            failure_type=attempt.failure_type,
+            failure_reason=attempt.failure_reason,
+            evaluation_evidence=attempt.evaluation_evidence,
+            terminal_state=attempt.terminal_state,
+        )
+
+
 def execute(
     manifest: ExperimentManifest,
     experiment_id: str,
@@ -119,7 +146,7 @@ def execute(
     evaluator: Evaluator,
 ) -> ExperimentReport:
     task_name = manifest.task["name"]
-    prompt = CLEAN_HOUSE_PROMPT if task_name == "CleanHouse" else OFFLINE_PROMPT
+    prompt = task_prompt(str(task_name))
     candidate = model.propose(prompt)
     task_seeds = manifest.specification["seeds"]
     if not isinstance(task_seeds, dict) or not isinstance(task_seeds.get("task"), list):
@@ -186,7 +213,7 @@ def execute_resumable(
     work = store.next_pending_work(experiment_id)
     if work is None and store.active_execution_id(experiment_id) is None:
         new_execution_id = store.next_execution_id(experiment_id)
-        prompt = CLEAN_HOUSE_PROMPT if manifest.task["name"] == "CleanHouse" else OFFLINE_PROMPT
+        prompt = task_prompt(str(manifest.task["name"]))
         candidate = model.propose(prompt)
         store.begin_execution_for_experiment(
             manifest, experiment_id, new_execution_id, candidate.source, candidate.model_requests
@@ -242,7 +269,8 @@ def _execute_frozen_memory_protocol(
         return store.latest_report(experiment_id), "completed"
 
     execution_id = store.next_execution_id(experiment_id)
-    initial_candidate = model.propose(CLEAN_HOUSE_PROMPT)
+    task_name = str(manifest.task["name"])
+    initial_candidate = model.propose(task_prompt(task_name))
     store.begin_execution_for_experiment(
         manifest,
         experiment_id,
@@ -254,7 +282,7 @@ def _execute_frozen_memory_protocol(
         store, execution_id, initial_candidate, suite["memory_training"], evaluator
     )
     training_entries = [
-        curate_clean_house_attempt(
+        _curate_attempt(task_name,
             f"{execution_id}:memory-training:{index}", initial_candidate.source, result
         )
         for index, result in enumerate(training_results)
@@ -284,7 +312,7 @@ def _execute_frozen_memory_protocol(
             break
         failed_result = failed_results[0]
         if strategy == "regenerate":
-            replacement = model.propose(CLEAN_HOUSE_PROMPT)
+            replacement = model.propose(task_prompt(task_name))
             if store.model_requests(execution_id) + replacement.model_requests > int(
                 manifest.budgets["model_requests"]
             ):
@@ -302,7 +330,9 @@ def _execute_frozen_memory_protocol(
         memory_context: str | None = None
         retrieval_id: int | None = None
         if strategy in {"memory_repair", "memory_reflect"}:
-            retrieved, retrieval = StructuredRetriever(tuple(snapshot_entries)).retrieve(
+            retrieved, retrieval = StructuredRetriever(
+                tuple(snapshot_entries), task=task_name
+            ).retrieve(
                 failed_result
             )
             retrieval_id = store.save_retrieval_outcome(execution_id, retrieval)
@@ -320,7 +350,7 @@ def _execute_frozen_memory_protocol(
                 cycle,
                 execution_id,
                 store,
-                f"{prompt_prefix} CleanHouse using data: "
+                f"{prompt_prefix} {task_name} using data: "
                 f"{memory_context}",
                 repair_round=repair_round,
                 seen_ast_hashes=seen_ast_hashes,
@@ -462,7 +492,7 @@ def _execute_reflect(
     execution_id = store.active_execution_id(experiment_id)
     if execution_id is None:
         execution_id = store.next_execution_id(experiment_id)
-        candidate = model.propose(CLEAN_HOUSE_PROMPT)
+        candidate = model.propose(task_prompt(str(manifest.task["name"])))
         store.begin_execution_for_experiment(
             manifest, experiment_id, execution_id, candidate.source, candidate.model_requests
         )
@@ -516,7 +546,7 @@ def _execute_reflect(
         initial_result = failed_results[0]
         if is_online_memory:
             updates = [
-                curate_clean_house_attempt(
+                _curate_attempt(str(manifest.task["name"]),
                     f"{execution_id}:repair:{repair_round - 1}:{index}",
                     final_candidate.source,
                     result,
@@ -527,14 +557,15 @@ def _execute_reflect(
             # decision boundary before retrieval and repair.
             store.append_memory_lineage_entries(execution_id, updates)
             retrieved, retrieval = StructuredRetriever(
-                tuple(store.memory_lineage_entries(execution_id))
+                tuple(store.memory_lineage_entries(execution_id)),
+                task=str(manifest.task["name"]),
             ).retrieve(
                 initial_result
             )
             retrieval_id = store.save_retrieval_outcome(execution_id, retrieval)
             memory_context = serialize_repair_context(initial_result, retrieved)
             prefix = "Reflect on evidence then repair" if strategy == "memory_reflect" else "Repair"
-            repair_prompt = f"{prefix} CleanHouse using memory: {memory_context}"
+            repair_prompt = f"{prefix} {manifest.task['name']} using memory: {memory_context}"
         else:
             repair_prompt = None
             memory_context = None
@@ -600,6 +631,16 @@ def _has_repair_improvement(
     return sum(result.normalized_progress for result in repaired) > sum(
         result.normalized_progress for result in previous
     )
+
+
+def _curate_attempt(
+    task_name: str, source_attempt_id: str, source: str, result: EpisodeResult
+) -> MemoryEntry:
+    if task_name == "CleanHouse":
+        return curate_clean_house_attempt(source_attempt_id, source, result)
+    if task_name == "FourCorners":
+        return curate_four_corners_attempt(source_attempt_id, source, result)
+    raise ValueError(f"Task {task_name} does not support Experience Memory")
 
 
 def _task_seeds(manifest: ExperimentManifest) -> list[int]:
