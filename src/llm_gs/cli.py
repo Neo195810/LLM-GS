@@ -9,7 +9,12 @@ from typing import NoReturn
 
 from pydantic import BaseModel
 
-from llm_gs.execution import CleanHouseEvaluator, FakeOpenAIClient, OfflineEchoEvaluator, execute
+from llm_gs.execution import (
+    CleanHouseEvaluator,
+    FakeOpenAIClient,
+    OfflineEchoEvaluator,
+    execute_resumable,
+)
 from llm_gs.manifest import experiment_id, load_specification, resolve_manifest
 from llm_gs.storage import WorkspaceStore
 
@@ -23,19 +28,37 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
     manifest = resolve_manifest(load_specification(args.specification))
     resolved_experiment_id = experiment_id(manifest)
     store = WorkspaceStore(args.workspace)
-    execution_id = store.next_execution_id(resolved_experiment_id)
-    report = execute(
+    report, status = execute_resumable(
         manifest,
         resolved_experiment_id,
-        execution_id,
+        store,
+        FakeOpenAIClient(),
+        CleanHouseEvaluator() if manifest.task["name"] == "CleanHouse" else OfflineEchoEvaluator(),
+        args.stop_after,
+    )
+    return {
+        "execution_id": report.execution_id
+        if report
+        else store.active_execution_id(resolved_experiment_id),
+        "experiment_id": resolved_experiment_id,
+        "status": status,
+    }
+
+
+def _resume(args: argparse.Namespace) -> dict[str, object]:
+    store = WorkspaceStore(args.workspace)
+    manifest = store.manifest(args.experiment_id)
+    report, status = execute_resumable(
+        manifest,
+        args.experiment_id,
+        store,
         FakeOpenAIClient(),
         CleanHouseEvaluator() if manifest.task["name"] == "CleanHouse" else OfflineEchoEvaluator(),
     )
-    store.save(manifest, report)
     return {
-        "execution_id": execution_id,
-        "experiment_id": resolved_experiment_id,
-        "status": report.status,
+        "execution_id": report.execution_id if report else "",
+        "experiment_id": args.experiment_id,
+        "status": status,
     }
 
 
@@ -54,7 +77,13 @@ def _parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run")
     run.add_argument("specification", type=Path)
     run.add_argument("--workspace", type=Path, required=True)
+    run.add_argument("--stop-after", type=int)
     run.set_defaults(handler=_run)
+
+    resume = commands.add_parser("resume")
+    resume.add_argument("--workspace", type=Path, required=True)
+    resume.add_argument("--experiment-id", required=True)
+    resume.set_defaults(handler=_resume)
 
     report = commands.add_parser("report")
     report.add_argument("--workspace", type=Path, required=True)

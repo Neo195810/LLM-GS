@@ -10,6 +10,7 @@ from llm_gs.contracts import (
     ExperimentReport,
 )
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, OFFLINE_PROMPT
+from llm_gs.storage import WorkspaceStore
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 
 
@@ -89,6 +90,72 @@ def execute(
         candidate_programs=1,
         episode_evaluations=sum(result.episode_evaluations for result in results),
         model_requests=candidate.model_requests,
+        outcomes=outcomes,
+        evaluation_evidence=evidence,
+    )
+
+
+def execute_resumable(
+    manifest: ExperimentManifest,
+    experiment_id: str,
+    store: WorkspaceStore,
+    model: ModelClient,
+    evaluator: Evaluator,
+    stop_after: int | None = None,
+) -> tuple[ExperimentReport | None, str]:
+    work = store.next_pending_work(experiment_id)
+    if work is None and store.active_execution_id(experiment_id) is None:
+        new_execution_id = store.next_execution_id(experiment_id)
+        prompt = CLEAN_HOUSE_PROMPT if manifest.task["name"] == "CleanHouse" else OFFLINE_PROMPT
+        candidate = model.propose(prompt)
+        store.begin_execution_for_experiment(
+            manifest, experiment_id, new_execution_id, candidate.source, candidate.model_requests
+        )
+        work = store.next_pending_work(experiment_id)
+    completed = 0
+    while work is not None:
+        result = evaluator.evaluate(CandidateProgram(source=work.candidate_source), work.seed)
+        store.complete_work(work, result.model_dump_json())
+        completed += 1
+        if stop_after is not None and completed >= stop_after:
+            return None, "interrupted"
+        work = store.next_pending_work(experiment_id)
+    active_execution_id = store.active_execution_id(experiment_id)
+    if active_execution_id is None:
+        raise ValueError("no running execution is available to resume")
+    rows = store.completed_episode_results(active_execution_id)
+    if not rows:
+        raise ValueError("no execution work is available to resume")
+    results = [EpisodeResult.model_validate_json(row) for row in rows]
+    report = _report_from_results(experiment_id, active_execution_id, results)
+    store.save(manifest, report)
+    return report, "completed"
+
+
+def _report_from_results(
+    experiment_id: str, execution_id: str, results: list[EpisodeResult]
+) -> ExperimentReport:
+    outcomes: dict[str, int] = {}
+    evidence: list[EvaluationEvidence] = []
+    for result in results:
+        outcomes[result.outcome] = outcomes.get(result.outcome, 0) + 1
+        if result.evaluation_evidence is not None:
+            evidence.append(
+                EvaluationEvidence(
+                    outcome=result.outcome,
+                    normalized_progress=result.normalized_progress,
+                    failure_type=result.failure_type,
+                    failure_reason=result.failure_reason,
+                    evidence=result.evaluation_evidence,
+                    terminal_state=result.terminal_state,
+                )
+            )
+    return ExperimentReport(
+        experiment_id=experiment_id,
+        execution_id=execution_id,
+        candidate_programs=1,
+        episode_evaluations=sum(result.episode_evaluations for result in results),
+        model_requests=1,
         outcomes=outcomes,
         evaluation_evidence=evidence,
     )

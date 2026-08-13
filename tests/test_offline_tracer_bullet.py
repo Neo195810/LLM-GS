@@ -187,6 +187,47 @@ seeds:
     assert report["evaluation_evidence"][0]["failure_reason"] == "no_markers_collected"
 
 
+def test_clean_house_execution_recovers_pending_work_after_interruption(tmp_path: Path) -> None:
+    specification = tmp_path / "clean-house.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-resume
+task:
+  name: CleanHouse
+seeds:
+  task: [7, 8]
+""",
+        encoding="utf-8",
+    )
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+
+    interrupted = run_cli(
+        "run", str(specification), "--workspace", str(workspace), "--stop-after", "1"
+    )
+    assert interrupted.returncode == 0, interrupted.stderr
+    assert json.loads(interrupted.stdout)["status"] == "interrupted"
+
+    resumed = run_cli(
+        "resume",
+        "--workspace",
+        str(workspace),
+        "--experiment-id",
+        validation["experiment_id"],
+    )
+    assert resumed.returncode == 0, resumed.stderr
+    assert json.loads(resumed.stdout)["status"] == "completed"
+
+    report = json.loads(
+        run_cli(
+            "report", "--workspace", str(workspace), "--experiment-id", validation["experiment_id"]
+        ).stdout
+    )
+    assert report["episode_evaluations"] == 2
+    assert report["outcomes"] == {"partial_completion": 2}
+
+
 def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     tmp_path: Path,
 ) -> None:
