@@ -63,8 +63,38 @@ def _resume(args: argparse.Namespace) -> dict[str, object]:
     }
 
 
-def _report(args: argparse.Namespace) -> BaseModel:
-    return WorkspaceStore(args.workspace).latest_report(args.experiment_id)
+def _report(args: argparse.Namespace) -> dict[str, object]:
+    return WorkspaceStore(args.workspace).reporting_view(args.experiment_id)
+
+
+def _memory_build(args: argparse.Namespace) -> dict[str, object]:
+    store = WorkspaceStore(args.workspace)
+    entries = store.freeze_memory_snapshot(args.execution_id)
+    return {
+        "execution_id": args.execution_id,
+        "memory_entries": len(entries),
+        "snapshot_id": store.memory_snapshot_id(args.execution_id),
+    }
+
+
+def _inspect_attempt(args: argparse.Namespace) -> dict[str, object]:
+    return WorkspaceStore(args.workspace).inspect_execution(args.execution_id)
+
+
+def _export(args: argparse.Namespace) -> dict[str, str]:
+    bundle = WorkspaceStore(args.workspace).export_bundle(args.experiment_id)
+    args.output.write_text(json.dumps(bundle, sort_keys=True, indent=2), encoding="utf-8")
+    return {"bundle": str(args.output), "checksum": str(bundle["checksum"])}
+
+
+def _import(args: argparse.Namespace) -> dict[str, str]:
+    try:
+        bundle = json.loads(args.bundle.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read export bundle: {error}") from error
+    if not isinstance(bundle, dict):
+        raise ValueError("export bundle must be a JSON object")
+    return {"experiment_id": WorkspaceStore(args.workspace).import_bundle(bundle)}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -94,6 +124,38 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--workspace", type=Path, required=True)
     report.add_argument("--experiment-id", required=True)
     report.set_defaults(handler=_report)
+
+    memory = commands.add_parser("memory")
+    memory_commands = memory.add_subparsers(dest="memory_command", required=True)
+    memory_build = memory_commands.add_parser("build")
+    memory_build.add_argument("--workspace", type=Path, required=True)
+    memory_build.add_argument("--execution-id", required=True)
+    memory_build.set_defaults(handler=_memory_build)
+
+    evaluate = commands.add_parser("evaluate")
+    evaluate.add_argument("--workspace", type=Path, required=True)
+    evaluate.add_argument("--experiment-id", required=True)
+    evaluate.add_argument("--enable-live-openai", action="store_true")
+    evaluate.add_argument("--max-cost-usd", type=float)
+    evaluate.set_defaults(handler=_resume)
+
+    inspect = commands.add_parser("inspect")
+    inspect_commands = inspect.add_subparsers(dest="inspect_command", required=True)
+    attempt = inspect_commands.add_parser("attempt")
+    attempt.add_argument("--workspace", type=Path, required=True)
+    attempt.add_argument("--execution-id", required=True)
+    attempt.set_defaults(handler=_inspect_attempt)
+
+    export = commands.add_parser("export")
+    export.add_argument("--workspace", type=Path, required=True)
+    export.add_argument("--experiment-id", required=True)
+    export.add_argument("--output", type=Path, required=True)
+    export.set_defaults(handler=_export)
+
+    import_bundle = commands.add_parser("import")
+    import_bundle.add_argument("--workspace", type=Path, required=True)
+    import_bundle.add_argument("--bundle", type=Path, required=True)
+    import_bundle.set_defaults(handler=_import)
     return parser
 
 

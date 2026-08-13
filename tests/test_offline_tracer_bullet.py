@@ -90,7 +90,11 @@ def test_valid_specification_runs_offline_through_a_deterministic_report(
 
     assert first_report.returncode == 0, first_report.stderr
     assert first_report.stdout == second_report.stdout
-    assert json.loads(first_report.stdout) == {
+    report = json.loads(first_report.stdout)
+    assert {key: report[key] for key in (
+        "audit", "candidate_programs", "evaluation_evidence", "episode_evaluations",
+        "execution_id", "experiment_id", "model_requests", "outcomes", "report_version", "status",
+    )} == {
         "audit": {
             "memory_snapshot_id": None,
             "repairs": [],
@@ -107,6 +111,55 @@ def test_valid_specification_runs_offline_through_a_deterministic_report(
         "report_version": 1,
         "status": "completed",
     }
+    assert report["protocol"] == "None"
+    assert report["fixed_budget_success_rate"] == 1.0
+    assert report["missingness"] == {"incomplete_executions": 0}
+
+
+def test_cli_exports_and_imports_a_self_verifying_experiment_bundle(tmp_path: Path) -> None:
+    specification = tmp_path / "experiment.yaml"
+    source_workspace = tmp_path / "source"
+    target_workspace = tmp_path / "target"
+    bundle = tmp_path / "experiment.bundle.json"
+    write_specification(specification)
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert run_cli("run", str(specification), "--workspace", str(source_workspace)).returncode == 0
+
+    exported = run_cli(
+        "export",
+        "--workspace",
+        str(source_workspace),
+        "--experiment-id",
+        validation["experiment_id"],
+        "--output",
+        str(bundle),
+    )
+    imported = run_cli("import", "--workspace", str(target_workspace), "--bundle", str(bundle))
+
+    assert exported.returncode == 0, exported.stderr
+    assert json.loads(exported.stdout)["checksum"].startswith("sha256:")
+    assert imported.returncode == 0, imported.stderr
+    assert json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(target_workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    ) == json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(source_workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    )
+    assert (
+        run_cli("import", "--workspace", str(target_workspace), "--bundle", str(bundle)).returncode
+        == 2
+    )
 
 
 def test_invalid_specification_stops_before_execution_work(tmp_path: Path) -> None:

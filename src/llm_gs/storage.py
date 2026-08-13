@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from base64 import b64decode, b64encode
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from llm_gs.contracts import (
     RepairAttempt,
     RetrievalOutcome,
 )
-from llm_gs.manifest import canonical_json
+from llm_gs.manifest import canonical_json, experiment_id
 from llm_gs.memory import RETRIEVER_VERSION
 from llm_gs.proposer import ModelRequestRecord
 
@@ -552,6 +553,158 @@ class WorkspaceStore:
             raise ValueError(f"report not found for experiment {experiment_id}")
         return ExperimentReport.model_validate_json(row[0])
 
+    def reporting_view(self, experiment_id: str) -> dict[str, object]:
+        report = self.latest_report(experiment_id).model_dump(mode="json")
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT execution_id, status, model_requests, episode_evaluations FROM executions "
+                "WHERE experiment_id = ? ORDER BY execution_id",
+                (experiment_id,),
+            ).fetchall()
+        protocol = str(report["audit"].get("memory_protocol", "none"))
+        executions = [
+            {
+                "execution_id": str(row[0]),
+                "status": str(row[1]),
+                "model_requests": int(row[2]),
+                "episode_evaluations": int(row[3]),
+            }
+            for row in rows
+        ]
+        return {
+            **report,
+            "protocol": "Frozen" if protocol == "frozen-v1" else "Online" if protocol == "online-v1" else "None",
+            "fixed_budget_success_rate": _success_rate_from_outcomes(report["outcomes"]),
+            "costs": {"model_requests": report["model_requests"], "episode_evaluations": report["episode_evaluations"]},
+            "executions": executions,
+            "missingness": {"incomplete_executions": sum(item["status"] != "completed" for item in executions)},
+            "failure_classes": {"infrastructure": 0, "model_output": 0, "replacements": 0},
+        }
+
+    def inspect_execution(self, execution_id: str) -> dict[str, object]:
+        return self.execution_audit(execution_id)
+
+    def export_bundle(self, experiment_id: str) -> dict[str, object]:
+        """Create a portable, checksummed snapshot of one experiment's durable evidence."""
+        with self._connect() as connection:
+            manifest_row = connection.execute(
+                "SELECT manifest_json FROM experiments WHERE experiment_id = ?", (experiment_id,)
+            ).fetchone()
+            if manifest_row is None:
+                raise ValueError(f"experiment not found: {experiment_id}")
+            executions = _query_records(
+                connection, "SELECT * FROM executions WHERE experiment_id = ? ORDER BY execution_id", (experiment_id,)
+            )
+            execution_ids = [str(row["execution_id"]) for row in executions]
+            records = {
+                "executions": executions,
+                "work_units": _records_for_executions(connection, "work_units", execution_ids),
+                "program_attempts": _records_for_executions(connection, "program_attempts", execution_ids),
+                "episode_evaluations": _records_for_executions(connection, "episode_evaluations", execution_ids),
+                "model_request_records": _records_for_executions(connection, "model_request_records", execution_ids),
+                "repair_attempts": _records_for_executions(connection, "repair_attempts", execution_ids),
+                "retrieval_outcomes": _records_for_executions(connection, "retrieval_outcomes", execution_ids),
+                "execution_memory_snapshots": _records_for_executions(
+                    connection, "execution_memory_snapshots", execution_ids
+                ),
+            }
+            snapshot_ids = [str(row["snapshot_id"]) for row in records["execution_memory_snapshots"]]
+            records["memory_snapshots"] = _records_by_values(
+                connection, "memory_snapshots", "snapshot_id", snapshot_ids
+            )
+            artifact_hashes = [str(row["artifact_hash"]) for row in records["episode_evaluations"]]
+        artifacts: dict[str, str] = {}
+        for artifact_hash in sorted(set(artifact_hashes)):
+            digest = artifact_hash.removeprefix("sha256:")
+            path = self._artifacts / digest
+            if not path.is_file():
+                raise ValueError(f"referenced artifact is missing: {artifact_hash}")
+            artifacts[artifact_hash] = b64encode(path.read_bytes()).decode("ascii")
+        payload: dict[str, object] = {
+            "bundle_version": 1,
+            "experiment_id": experiment_id,
+            "manifest": json.loads(str(manifest_row[0])),
+            "records": records,
+            "artifacts": artifacts,
+        }
+        return {**payload, "checksum": _bundle_checksum(payload)}
+
+    def import_bundle(self, bundle: dict[str, object]) -> str:
+        checksum = bundle.get("checksum")
+        payload = {key: value for key, value in bundle.items() if key != "checksum"}
+        if bundle.get("bundle_version") != 1 or not isinstance(checksum, str):
+            raise ValueError("unsupported or unsigned export bundle")
+        if checksum != _bundle_checksum(payload):
+            raise ValueError("export bundle checksum does not match")
+        manifest = ExperimentManifest.model_validate(bundle.get("manifest"))
+        imported_id = bundle.get("experiment_id")
+        if not isinstance(imported_id, str) or experiment_id(manifest) != imported_id:
+            raise ValueError("export bundle experiment identity does not match its manifest")
+        records = bundle.get("records")
+        artifacts = bundle.get("artifacts")
+        if not isinstance(records, dict) or not isinstance(artifacts, dict):
+            raise ValueError("export bundle has invalid records or artifacts")
+        if set(records) != _EXPORT_TABLES:
+            raise ValueError("export bundle record tables do not match the bundle schema")
+        executions = records.get("executions")
+        if not isinstance(executions, list) or any(not isinstance(row, dict) for row in executions):
+            raise ValueError("export bundle has invalid executions")
+        execution_ids = {row.get("execution_id") for row in executions}
+        if not all(
+            isinstance(row.get("execution_id"), str) and row.get("experiment_id") == imported_id
+            for row in executions
+        ):
+            raise ValueError("export bundle execution identity does not match its experiment")
+        if len(execution_ids) != len(executions):
+            raise ValueError("export bundle has duplicate execution identifiers")
+        _validate_bundle_references(records, {str(item) for item in execution_ids}, artifacts)
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT 1 FROM experiments WHERE experiment_id = ?", (imported_id,)
+            ).fetchone()
+            if existing is not None:
+                raise ValueError("experiment evidence already exists; import refuses to overwrite it")
+            _validate_record_schemas(connection, records)
+        for artifact_hash, encoded in artifacts.items():
+            if not isinstance(artifact_hash, str) or not isinstance(encoded, str):
+                raise ValueError("export bundle has invalid artifact data")
+            content = b64decode(encoded, validate=True)
+            if f"sha256:{hashlib.sha256(content).hexdigest()}" != artifact_hash:
+                raise ValueError(f"artifact hash does not match: {artifact_hash}")
+        decoded_artifacts = {
+            artifact_hash: b64decode(encoded, validate=True)
+            for artifact_hash, encoded in artifacts.items()
+            if isinstance(artifact_hash, str) and isinstance(encoded, str)
+        }
+        staging = self._workspace / ".import-staging"
+        staging.mkdir(exist_ok=True)
+        for artifact_hash, content in decoded_artifacts.items():
+            (staging / artifact_hash.removeprefix("sha256:")).write_bytes(content)
+        for artifact_hash in decoded_artifacts:
+            path = self._artifacts / artifact_hash.removeprefix("sha256:")
+            (staging / artifact_hash.removeprefix("sha256:")).replace(path)
+        staging.rmdir()
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT manifest_json FROM experiments WHERE experiment_id = ?", (imported_id,)
+            ).fetchone()
+            manifest_json = canonical_json(manifest.model_dump(mode="json"))
+            if existing is not None and str(existing[0]) != manifest_json:
+                raise ValueError("import conflicts with existing experiment evidence")
+            if existing is not None:
+                raise ValueError("experiment evidence already exists; import refuses to overwrite it")
+            connection.execute(
+                "INSERT INTO experiments(experiment_id, manifest_json) VALUES (?, ?)",
+                (imported_id, manifest_json),
+            )
+            for table, rows in records.items():
+                if table not in _EXPORT_TABLES or not isinstance(rows, list):
+                    continue
+                _insert_records(connection, table, rows)
+            for artifact_hash in artifacts:
+                connection.execute("INSERT OR IGNORE INTO artifacts(artifact_hash) VALUES (?)", (artifact_hash,))
+        return imported_id
+
     def has_completed_execution(self, experiment_id: str) -> bool:
         with self._connect() as connection:
             row = connection.execute(
@@ -635,3 +788,110 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
         """)
         return connection
+
+
+_EXPORT_TABLES = frozenset(
+    {
+        "executions",
+        "work_units",
+        "program_attempts",
+        "episode_evaluations",
+        "model_request_records",
+        "repair_attempts",
+        "retrieval_outcomes",
+        "execution_memory_snapshots",
+        "memory_snapshots",
+    }
+)
+
+
+def _bundle_checksum(payload: dict[str, object]) -> str:
+    return f"sha256:{hashlib.sha256(canonical_json(payload).encode()).hexdigest()}"
+
+
+def _success_rate_from_outcomes(outcomes: object) -> float:
+    if not isinstance(outcomes, dict):
+        return 0.0
+    total = sum(value for value in outcomes.values() if isinstance(value, int))
+    return int(outcomes.get("success", 0)) / total if total else 0.0
+
+
+def _query_records(
+    connection: sqlite3.Connection, query: str, parameters: tuple[object, ...]
+) -> list[dict[str, object]]:
+    cursor = connection.execute(query, parameters)
+    columns = [str(item[0]) for item in cursor.description or []]
+    return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+
+
+def _records_for_executions(
+    connection: sqlite3.Connection, table: str, execution_ids: list[str]
+) -> list[dict[str, object]]:
+    return _records_by_values(connection, table, "execution_id", execution_ids)
+
+
+def _records_by_values(
+    connection: sqlite3.Connection, table: str, column: str, values: list[str]
+) -> list[dict[str, object]]:
+    if not values:
+        return []
+    placeholders = ", ".join("?" for _ in values)
+    return _query_records(
+        connection,
+        f"SELECT * FROM {table} WHERE {column} IN ({placeholders}) ORDER BY rowid",
+        tuple(values),
+    )
+
+
+def _insert_records(connection: sqlite3.Connection, table: str, rows: list[object]) -> None:
+    for row in rows:
+        if not isinstance(row, dict) or not row:
+            raise ValueError(f"export bundle has invalid {table} record")
+        columns = list(row)
+        placeholders = ", ".join("?" for _ in columns)
+        connection.execute(
+            f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
+            tuple(row[column] for column in columns),
+        )
+
+
+def _validate_bundle_references(
+    records: dict[str, object], execution_ids: set[str], artifacts: dict[object, object]
+) -> None:
+    execution_tables = _EXPORT_TABLES - {"executions", "memory_snapshots"}
+    for table in execution_tables:
+        rows = records[table]
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict) or row.get("execution_id") not in execution_ids for row in rows
+        ):
+            raise ValueError(f"export bundle has invalid {table} execution references")
+    snapshots = records["memory_snapshots"]
+    if not isinstance(snapshots, list) or any(not isinstance(row, dict) for row in snapshots):
+        raise ValueError("export bundle has invalid memory snapshots")
+    snapshot_ids = {
+        row["snapshot_id"] for row in snapshots if isinstance(row.get("snapshot_id"), str)
+    }
+    snapshot_links = records["execution_memory_snapshots"]
+    if not isinstance(snapshot_links, list) or any(
+        not isinstance(row, dict) or row.get("snapshot_id") not in snapshot_ids for row in snapshot_links
+    ):
+        raise ValueError("export bundle has invalid memory snapshot references")
+    evaluations = records["episode_evaluations"]
+    if not isinstance(evaluations, list) or any(
+        not isinstance(row, dict) or row.get("artifact_hash") not in artifacts for row in evaluations
+    ):
+        raise ValueError("export bundle is missing a referenced artifact")
+
+
+def _validate_record_schemas(connection: sqlite3.Connection, records: dict[str, object]) -> None:
+    for table in _EXPORT_TABLES:
+        rows = records[table]
+        if not isinstance(rows, list):
+            raise ValueError(f"export bundle has invalid {table} rows")
+        columns = {
+            str(row[1])
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        for row in rows:
+            if not isinstance(row, dict) or set(row) != columns:
+                raise ValueError(f"export bundle {table} record schema does not match")
