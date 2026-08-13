@@ -72,3 +72,45 @@ def test_memory_snapshot_is_read_only_and_excludes_current_execution_entries(tmp
     assert store.memory_snapshot_entries("exec_000001") == [prior]
     assert store.freeze_memory_snapshot("exec_000001") == [prior]
     assert store.memory_snapshot_id("exec_000001") == snapshot_id
+
+
+def test_online_memory_lineages_are_isolated_deterministic_and_append_only(tmp_path) -> None:
+    starting = curate_clean_house_attempt("starting", "DEF run m( move m)", _failure())
+    arm_one_update = curate_clean_house_attempt(
+        "arm-one", "DEF run m( turnLeft m)", _failure("stalled")
+    )
+    arm_two_update = curate_clean_house_attempt(
+        "arm-two", "DEF run m( turnRight m)", _failure("blocked")
+    )
+    store = WorkspaceStore(tmp_path)
+
+    first_lineage = store.fork_memory_lineage(
+        "exec_000001", [starting], {"method": "memory_repair", "replicate": 0}
+    )
+    shared_snapshot_id = store.memory_snapshot_id("exec_000001")
+    second_lineage = store.fork_memory_lineage(
+        "exec_000002",
+        [],
+        {"method": "memory_repair", "replicate": 1},
+        parent_snapshot_id=shared_snapshot_id,
+    )
+    rerun_lineage = store.fork_memory_lineage(
+        "exec_000003",
+        [],
+        {"method": "memory_repair", "replicate": 0},
+        parent_snapshot_id=shared_snapshot_id,
+    )
+    store.append_memory_lineage_entries("exec_000001", [arm_one_update])
+    store.append_memory_lineage_entries("exec_000002", [arm_two_update])
+
+    assert first_lineage == WorkspaceStore(tmp_path).memory_lineage_id("exec_000001")
+    assert first_lineage != second_lineage
+    assert first_lineage != rerun_lineage
+    assert store.memory_lineage_entries("exec_000001") == [starting, arm_one_update]
+    assert store.memory_lineage_entries("exec_000002") == [starting, arm_two_update]
+    assert store.memory_lineage_entries("exec_000003") == [starting]
+    assert store.memory_lineage_audit("exec_000001") == {
+        "lineage_id": first_lineage,
+        "parent_snapshot_id": store.memory_snapshot_id("exec_000001"),
+        "protocol": "online-v1",
+    }

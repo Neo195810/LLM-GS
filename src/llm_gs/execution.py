@@ -309,6 +309,7 @@ def _execute_frozen_memory_protocol(
         store, execution_id, selected_candidate, suite["held_out"], evaluator
     )
     audit = store.execution_audit(execution_id)
+    audit["memory_protocol"] = str(manifest.memory_snapshot.get("protocol", "none"))
     total_episode_evaluations = (
         sum(len(results) for _, results in candidates)
         + len(training_results)
@@ -444,11 +445,22 @@ def _execute_reflect(
         candidate = CandidateProgram(source=store.execution_candidate_source(execution_id))
     seeds = _task_seeds(manifest)
     strategy = str(manifest.failure_strategy["name"])
-    snapshot_entries = (
-        store.freeze_memory_snapshot(execution_id)
-        if strategy in {"memory_repair", "memory_reflect"}
-        else []
-    )
+    is_online_memory = strategy in {"memory_repair", "memory_reflect"}
+    if is_online_memory:
+        store.fork_memory_lineage(
+            execution_id,
+            [],
+            {
+                "method": strategy,
+                "replicate": int(manifest.search_strategy["replicate"]),
+                "search_strategy": str(manifest.search_strategy["name"]),
+            },
+            parent_snapshot_id=(
+                str(manifest.memory_snapshot["id"])
+                if manifest.memory_snapshot["id"] != "fork-on-run"
+                else None
+            ),
+        )
     completed_rows = store.completed_episode_results(execution_id)
     initial_results = [EpisodeResult.model_validate_json(row) for row in completed_rows]
     completed = 0
@@ -477,16 +489,21 @@ def _execute_reflect(
         if not failed_results:
             break
         initial_result = failed_results[0]
-        if strategy in {"memory_repair", "memory_reflect"}:
-            for index, result in enumerate(failed_results):
-                store.save_memory_entry(
-                    curate_clean_house_attempt(
-                        f"{execution_id}:repair:{repair_round - 1}:{index}",
-                        final_candidate.source,
-                        result,
-                    )
+        if is_online_memory:
+            updates = [
+                curate_clean_house_attempt(
+                    f"{execution_id}:repair:{repair_round - 1}:{index}",
+                    final_candidate.source,
+                    result,
                 )
-            retrieved, retrieval = StructuredRetriever(tuple(snapshot_entries)).retrieve(
+                for index, result in enumerate(failed_results)
+            ]
+            # The full seed set has completed, so this is a stable sequential
+            # decision boundary before retrieval and repair.
+            store.append_memory_lineage_entries(execution_id, updates)
+            retrieved, retrieval = StructuredRetriever(
+                tuple(store.memory_lineage_entries(execution_id))
+            ).retrieve(
                 initial_result
             )
             store.save_retrieval_outcome(execution_id, retrieval)
@@ -519,15 +536,6 @@ def _execute_reflect(
             store.record_evaluation(
                 execution_id, seed, repaired_candidate.source, result.model_dump_json()
             )
-        for index, result in enumerate(repaired_results):
-            if result.outcome != "success" and strategy in {"memory_repair", "memory_reflect"}:
-                store.save_memory_entry(
-                    curate_clean_house_attempt(
-                        f"{execution_id}:repair:{repair_round}:{index}",
-                        repaired_candidate.source,
-                        result,
-                    )
-                )
         made_improvement = _has_repair_improvement(final_results, repaired_results)
         seen_ast_hashes.add(_normalized_ast_hash(repaired_candidate.source))
         final_candidate = repaired_candidate
@@ -535,13 +543,17 @@ def _execute_reflect(
         all_results.extend(repaired_results)
         if not made_improvement:
             break
+    audit = store.execution_audit(execution_id)
+    audit["memory_protocol"] = str(manifest.memory_snapshot.get("protocol", "none"))
+    if is_online_memory:
+        audit["memory_lineage"] = store.memory_lineage_audit(execution_id)
     report = _report_from_results(
         experiment_id,
         execution_id,
         all_results,
         store.model_requests(execution_id),
         candidate_programs=len(all_results) // len(seeds),
-        audit=store.execution_audit(execution_id),
+        audit=audit,
     )
     store.save(manifest, report)
     return report, "completed"

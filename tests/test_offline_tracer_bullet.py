@@ -363,6 +363,11 @@ failure_strategy:
     )
     assert report["candidate_programs"] == 2
     assert report["audit"]["memory_snapshot_id"].startswith("snapshot_")
+    assert report["audit"]["memory_protocol"] == "online-v1"
+    assert report["audit"]["memory_lineage"]["protocol"] == "online-v1"
+    assert report["audit"]["memory_lineage"]["parent_snapshot_id"] == report["audit"][
+        "memory_snapshot_id"
+    ]
     assert report["audit"]["retrievals"]
     assert report["audit"]["repairs"][0]["round"] == 1
     assert report["audit"]["resource_usage"] == {

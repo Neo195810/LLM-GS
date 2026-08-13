@@ -86,6 +86,13 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
     # OpenAIProposer permits up to three schema/DSL correction requests for
     # every candidate, so the request budget must include that bounded retry.
     model_request_budget = candidate_budget * 3 if is_clean_house else candidate_budget
+    memory_protocol = (
+        "frozen-v1"
+        if specification.seed_suite is not None
+        else "online-v1"
+        if specification.failure_strategy.name in {"memory_repair", "memory_reflect"}
+        else "none"
+    )
     return ExperimentManifest(
         code={"source_sha256": _source_identity()},
         dependencies={"uv_lock_sha256": _dependency_identity()},
@@ -121,6 +128,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         search_strategy={
             "name": "single_candidate",
             "seed": specification.seeds.search if specification.seeds is not None else 0,
+            "replicate": specification.seeds.replicate if specification.seeds is not None else 0,
         },
         failure_strategy=specification.failure_strategy.model_dump(mode="json"),
         budgets={
@@ -130,9 +138,17 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "output_tokens": 1024,
         },
         memory_snapshot={
-            "id": "frozen-from-memory-training" if specification.seed_suite else "none",
-            "read_only": True,
-            **({"protocol": "frozen-v1"} if specification.seed_suite else {}),
+            "id": (
+                "frozen-from-memory-training"
+                if specification.seed_suite
+                else specification.memory_snapshot_id
+                if specification.memory_snapshot_id is not None
+                else "fork-on-run"
+                if memory_protocol == "online-v1"
+                else "none"
+            ),
+            "read_only": memory_protocol != "online-v1",
+            **({"protocol": memory_protocol} if memory_protocol != "none" else {}),
             **(
                 {"curation": "balanced-failure-representatives-v1"}
                 if specification.seed_suite

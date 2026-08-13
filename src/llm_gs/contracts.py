@@ -16,6 +16,7 @@ class TaskSpecification(StrictContract):
 class SeedSpecification(StrictContract):
     task: list[int] = Field(min_length=1)
     search: int = 0
+    replicate: int = Field(default=0, ge=0)
 
 
 class SeedSuiteSpecification(StrictContract):
@@ -45,6 +46,7 @@ class ExperimentSpecification(StrictContract):
     task: TaskSpecification
     seeds: SeedSpecification | None = None
     seed_suite: SeedSuiteSpecification | None = None
+    memory_snapshot_id: str | None = None
     failure_strategy: FailureStrategySpecification = Field(
         default_factory=FailureStrategySpecification
     )

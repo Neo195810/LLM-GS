@@ -220,6 +220,16 @@ class WorkspaceStore:
             )
         return entries
 
+    def memory_snapshot_entries_by_id(self, snapshot_id: str) -> list[MemoryEntry]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT snapshot_json FROM memory_snapshots WHERE snapshot_id = ?", (snapshot_id,)
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"memory snapshot not found: {snapshot_id}")
+        snapshot = json.loads(str(row[0]))
+        return [MemoryEntry.model_validate(entry) for entry in snapshot["entries"]]
+
     def memory_snapshot_id(self, execution_id: str) -> str:
         with self._connect() as connection:
             row = connection.execute(
@@ -251,6 +261,120 @@ class WorkspaceStore:
             raise ValueError(f"memory snapshot not found for execution {execution_id}")
         snapshot = json.loads(str(row[0]))
         return [MemoryEntry.model_validate(entry) for entry in snapshot["entries"]]
+
+    def fork_memory_lineage(
+        self,
+        execution_id: str,
+        starting_entries: list[MemoryEntry],
+        arm_identity: dict[str, str | int],
+        parent_snapshot_id: str | None = None,
+    ) -> str:
+        """Create the deterministic, isolated Online Memory view for one experiment arm."""
+        if parent_snapshot_id is None:
+            snapshot_entries = self.freeze_memory_snapshot(execution_id, starting_entries)
+            snapshot_id = self.memory_snapshot_id(execution_id)
+        else:
+            snapshot_entries = self.memory_snapshot_entries_by_id(parent_snapshot_id)
+            snapshot_id = parent_snapshot_id
+            with self._connect() as connection:
+                connection.execute(
+                    "INSERT OR IGNORE INTO execution_memory_snapshots(execution_id, snapshot_id) VALUES (?, ?)",
+                    (execution_id, snapshot_id),
+                )
+        lineage_payload = canonical_json(
+            {
+                "arm": arm_identity,
+                "execution_id": execution_id,
+                "parent_snapshot_id": snapshot_id,
+                "protocol": "online-v1",
+            }
+        )
+        lineage_id = f"lineage_{hashlib.sha256(lineage_payload.encode()).hexdigest()}"
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT lineage_id FROM execution_memory_lineages WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if existing is not None:
+                if str(existing[0]) != lineage_id:
+                    raise ValueError("execution already belongs to a different memory lineage")
+                return lineage_id
+            connection.execute(
+                "INSERT OR IGNORE INTO memory_lineages(lineage_id, parent_snapshot_id, arm_json) VALUES (?, ?, ?)",
+                (lineage_id, snapshot_id, canonical_json(arm_identity)),
+            )
+            connection.execute(
+                "INSERT INTO execution_memory_lineages(execution_id, lineage_id) VALUES (?, ?)",
+                (execution_id, lineage_id),
+            )
+            for position, entry in enumerate(snapshot_entries):
+                connection.execute(
+                    "INSERT OR IGNORE INTO memory_entries(entry_id, entry_json) VALUES (?, ?)",
+                    (entry.entry_id, entry.model_dump_json()),
+                )
+                connection.execute(
+                    "INSERT OR IGNORE INTO memory_lineage_entries(lineage_id, entry_id, position) VALUES (?, ?, ?)",
+                    (lineage_id, entry.entry_id, position),
+                )
+        return lineage_id
+
+    def memory_lineage_id(self, execution_id: str) -> str:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT lineage_id FROM execution_memory_lineages WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"memory lineage not found for execution {execution_id}")
+        return str(row[0])
+
+    def append_memory_lineage_entries(
+        self, execution_id: str, entries: list[MemoryEntry]
+    ) -> None:
+        """Append updates after a decision boundary; no other execution can write this lineage."""
+        lineage_id = self.memory_lineage_id(execution_id)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT COALESCE(MAX(position), -1) FROM memory_lineage_entries WHERE lineage_id = ?",
+                (lineage_id,),
+            ).fetchone()
+            position = int(row[0]) + 1 if row is not None else 0
+            for entry in entries:
+                connection.execute(
+                    "INSERT OR IGNORE INTO memory_entries(entry_id, entry_json) VALUES (?, ?)",
+                    (entry.entry_id, entry.model_dump_json()),
+                )
+                cursor = connection.execute(
+                    "INSERT OR IGNORE INTO memory_lineage_entries(lineage_id, entry_id, position) VALUES (?, ?, ?)",
+                    (lineage_id, entry.entry_id, position),
+                )
+                if cursor.rowcount == 1:
+                    position += 1
+
+    def memory_lineage_entries(self, execution_id: str) -> list[MemoryEntry]:
+        lineage_id = self.memory_lineage_id(execution_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT e.entry_json FROM memory_lineage_entries l
+                JOIN memory_entries e ON e.entry_id = l.entry_id
+                WHERE l.lineage_id = ? ORDER BY l.position""",
+                (lineage_id,),
+            ).fetchall()
+        return [MemoryEntry.model_validate_json(row[0]) for row in rows]
+
+    def memory_lineage_audit(self, execution_id: str) -> dict[str, str]:
+        lineage_id = self.memory_lineage_id(execution_id)
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT parent_snapshot_id FROM memory_lineages WHERE lineage_id = ?", (lineage_id,)
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"memory lineage not found for execution {execution_id}")
+        return {
+            "lineage_id": lineage_id,
+            "parent_snapshot_id": str(row[0]),
+            "protocol": "online-v1",
+        }
 
     def save_retrieval_outcome(self, execution_id: str, outcome: RetrievalOutcome) -> None:
         with self._connect() as connection:
@@ -382,6 +506,9 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS memory_entries (entry_id TEXT PRIMARY KEY, entry_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS memory_snapshots (snapshot_id TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS execution_memory_snapshots (execution_id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS memory_lineages (lineage_id TEXT PRIMARY KEY, parent_snapshot_id TEXT NOT NULL, arm_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS execution_memory_lineages (execution_id TEXT PRIMARY KEY, lineage_id TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS memory_lineage_entries (lineage_id TEXT NOT NULL, entry_id TEXT NOT NULL, position INTEGER NOT NULL, PRIMARY KEY (lineage_id, entry_id), UNIQUE(lineage_id, position));
         CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
         """)
         return connection
