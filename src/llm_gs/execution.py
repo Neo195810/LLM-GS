@@ -226,7 +226,8 @@ def _execute_reflect(
         experiment_id,
         execution_id,
         [initial_result, final_result] if final_candidate != candidate else [initial_result],
-        candidate.model_requests + final_candidate.model_requests - 1,
+        candidate.model_requests + final_candidate.model_requests,
+        candidate_programs=2 if final_candidate != candidate else 1,
     )
     store.save(manifest, report)
     return report, "completed"
@@ -240,7 +241,11 @@ def _task_seeds(manifest: ExperimentManifest) -> list[int]:
 
 
 def _report_from_results(
-    experiment_id: str, execution_id: str, results: list[EpisodeResult], model_requests: int
+    experiment_id: str,
+    execution_id: str,
+    results: list[EpisodeResult],
+    model_requests: int,
+    candidate_programs: int = 1,
 ) -> ExperimentReport:
     outcomes: dict[str, int] = {}
     evidence: list[EvaluationEvidence] = []
@@ -260,7 +265,7 @@ def _report_from_results(
     return ExperimentReport(
         experiment_id=experiment_id,
         execution_id=execution_id,
-        candidate_programs=1,
+        candidate_programs=candidate_programs,
         episode_evaluations=sum(result.episode_evaluations for result in results),
         model_requests=model_requests,
         outcomes=outcomes,

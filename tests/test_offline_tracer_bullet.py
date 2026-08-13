@@ -264,6 +264,8 @@ failure_strategy:
         ).stdout
     )
     assert report["episode_evaluations"] == 2
+    assert report["candidate_programs"] == 2
+    assert report["model_requests"] == 2
 
 
 def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
