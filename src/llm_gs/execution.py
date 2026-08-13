@@ -4,6 +4,7 @@ from typing import Protocol, runtime_checkable
 
 from llm_gs.contracts import (
     CandidateProgram,
+    Diagnosis,
     EpisodeResult,
     EvaluationEvidence,
     ExperimentManifest,
@@ -54,8 +55,17 @@ def reflect_once(
     prompt: str | None = None,
     repair_round: int = 1,
     seen_ast_hashes: set[str] | None = None,
+    reflect: bool = True,
 ) -> CandidateProgram:
-    diagnosis = cycle.diagnose(result, evidence_index=0)
+    diagnosis = (
+        cycle.diagnose(result, evidence_index=0)
+        if reflect
+        else Diagnosis(
+            evidence_index=0,
+            observation="Retrieved memory provides a prior repair pattern.",
+            hypothesis="Apply the retrieved repair pattern while preserving valid Karel DSL.",
+        )
+    )
     intent = RepairIntent(
         intended_change="replace the stalled action sequence",
         preserved_behavior="a complete valid Karel DSL program",
@@ -229,9 +239,10 @@ def _execute_reflect(
     cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]))
     maximum_candidates = min(
         1 + int(manifest.failure_strategy["max_repair_cycles"]),
-        int(manifest.budgets["model_requests"]),
         int(manifest.budgets["episode_evaluations"]) // len(seeds),
     )
+    model_request_budget = int(manifest.budgets["model_requests"])
+    model_requests_used = candidate.model_requests
     seen_ast_hashes = {_normalized_ast_hash(candidate.source)}
     for repair_round in range(1, maximum_candidates):
         failed_results = [result for result in final_results if result.outcome != "success"]
@@ -267,9 +278,14 @@ def _execute_reflect(
                 repair_prompt,
                 repair_round=repair_round,
                 seen_ast_hashes=seen_ast_hashes,
+                reflect=strategy != "memory_repair",
             )
         except RepeatedRepairError:
             break
+        if model_requests_used + repaired_candidate.model_requests > model_request_budget:
+            break
+        model_requests_used += repaired_candidate.model_requests
+        store.add_model_requests(execution_id, repaired_candidate.model_requests)
         repaired_results = [evaluator.evaluate(repaired_candidate, seed) for seed in seeds]
         for seed, result in zip(seeds, repaired_results, strict=True):
             store.record_evaluation(
@@ -295,7 +311,7 @@ def _execute_reflect(
         experiment_id,
         execution_id,
         all_results,
-        candidate.model_requests * (len(all_results) // len(seeds)),
+        store.model_requests(execution_id),
         candidate_programs=len(all_results) // len(seeds),
     )
     store.save(manifest, report)

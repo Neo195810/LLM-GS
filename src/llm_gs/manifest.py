@@ -67,6 +67,9 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         else 0
     )
     candidate_budget = 1 + repair_rounds
+    # OpenAIProposer permits up to three schema/DSL correction requests for
+    # every candidate, so the request budget must include that bounded retry.
+    model_request_budget = candidate_budget * 3 if is_clean_house else candidate_budget
     return ExperimentManifest(
         code={"source_sha256": _source_identity()},
         dependencies={"uv_lock_sha256": _dependency_identity()},
@@ -103,7 +106,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         budgets={
             "episode_evaluations": len(specification.seeds.task) * candidate_budget,
             "input_tokens": 4096,
-            "model_requests": candidate_budget,
+            "model_requests": model_request_budget,
             "output_tokens": 1024,
         },
         memory_snapshot={

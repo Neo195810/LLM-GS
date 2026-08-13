@@ -268,6 +268,28 @@ failure_strategy:
     assert report["model_requests"] == 2
 
 
+def test_reflect_manifest_reserves_bounded_model_corrections(tmp_path: Path) -> None:
+    specification = tmp_path / "reflect-budget.yaml"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-reflect-budget
+task:
+  name: CleanHouse
+seeds:
+  task: [7]
+failure_strategy:
+  name: reflect
+  max_repair_cycles: 2
+""",
+        encoding="utf-8",
+    )
+
+    manifest = json.loads(run_cli("validate", str(specification)).stdout)["manifest"]
+
+    assert manifest["budgets"]["model_requests"] == 9
+
+
 def test_reflect_strategy_honors_a_zero_repair_limit(tmp_path: Path) -> None:
     specification = tmp_path / "reflect-zero.yaml"
     workspace = tmp_path / "workspace"

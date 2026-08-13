@@ -275,6 +275,17 @@ class WorkspaceStore:
             raise ValueError(f"execution not found: {execution_id}")
         return int(row[0])
 
+    def add_model_requests(self, execution_id: str, count: int) -> None:
+        if count < 1:
+            raise ValueError("model request count must be positive")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE executions SET model_requests = model_requests + ? WHERE execution_id = ?",
+                (count, execution_id),
+            )
+        if cursor.rowcount != 1:
+            raise ValueError(f"execution not found: {execution_id}")
+
     def _put_artifact(self, content: bytes) -> str:
         digest = hashlib.sha256(content).hexdigest()
         path = self._artifacts / digest
