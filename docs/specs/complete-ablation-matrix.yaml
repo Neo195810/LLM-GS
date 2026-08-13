@@ -1,0 +1,10 @@
+matrix_version: 1
+display_name: complete-frozen-ablation
+seed_suite:
+  version: 1
+  memory_training: [101]
+  development: [102]
+  held_out: [103]
+search_seed: 0
+replicates: [0]
+max_repair_cycles: 1

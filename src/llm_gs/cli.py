@@ -20,7 +20,13 @@ from llm_gs.execution import (
     RedBlueDoorEvaluator,
     execute_resumable,
 )
-from llm_gs.manifest import experiment_id, load_specification, resolve_manifest
+from llm_gs.manifest import (
+    experiment_id,
+    load_ablation_matrix_specification,
+    load_specification,
+    resolve_manifest,
+)
+from llm_gs.matrix import build_matrix_manifests, matrix_report
 from llm_gs.proposer import ModelOutputFailure, OpenAIProposer
 from llm_gs.storage import WorkspaceStore
 
@@ -104,6 +110,41 @@ def _report(args: argparse.Namespace) -> dict[str, object]:
     return WorkspaceStore(args.workspace).reporting_view(args.experiment_id)
 
 
+def _matrix_validate(args: argparse.Namespace) -> dict[str, object]:
+    manifests = build_matrix_manifests(load_ablation_matrix_specification(args.specification))
+    return {
+        "arms": [
+            {"experiment_id": experiment_id(manifest), "manifest": manifest}
+            for manifest in manifests
+        ]
+    }
+
+
+def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
+    manifests = build_matrix_manifests(load_ablation_matrix_specification(args.specification))
+    store = WorkspaceStore(args.workspace)
+    reports = []
+    for manifest in manifests:
+        resolved_experiment_id = experiment_id(manifest)
+        try:
+            report, _ = _execute_with_failure_recording(
+                manifest, resolved_experiment_id, store, args
+            )
+            if report is None:
+                raise ValueError("matrix arm did not produce a completed report")
+        except ValueError:
+            # Failure records are durable evidence. Continue so every preregistered arm is visible.
+            pass
+        reports.append(store.reporting_view(resolved_experiment_id))
+    return matrix_report(reports)
+
+
+def _matrix_report(args: argparse.Namespace) -> dict[str, object]:
+    manifests = build_matrix_manifests(load_ablation_matrix_specification(args.specification))
+    store = WorkspaceStore(args.workspace)
+    return matrix_report([store.reporting_view(experiment_id(manifest)) for manifest in manifests])
+
+
 def _memory_build(args: argparse.Namespace) -> dict[str, object]:
     store = WorkspaceStore(args.workspace)
     entries = store.freeze_memory_snapshot(args.execution_id)
@@ -162,6 +203,22 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--experiment-id", required=True)
     report.set_defaults(handler=_report)
 
+    matrix = commands.add_parser("matrix")
+    matrix_commands = matrix.add_subparsers(dest="matrix_command", required=True)
+    matrix_validate = matrix_commands.add_parser("validate")
+    matrix_validate.add_argument("specification", type=Path)
+    matrix_validate.set_defaults(handler=_matrix_validate)
+    matrix_run = matrix_commands.add_parser("run")
+    matrix_run.add_argument("specification", type=Path)
+    matrix_run.add_argument("--workspace", type=Path, required=True)
+    matrix_run.add_argument("--enable-live-openai", action="store_true")
+    matrix_run.add_argument("--max-cost-usd", type=float)
+    matrix_run.set_defaults(handler=_matrix_run)
+    matrix_report_command = matrix_commands.add_parser("report")
+    matrix_report_command.add_argument("specification", type=Path)
+    matrix_report_command.add_argument("--workspace", type=Path, required=True)
+    matrix_report_command.set_defaults(handler=_matrix_report)
+
     memory = commands.add_parser("memory")
     memory_commands = memory.add_subparsers(dest="memory_command", required=True)
     memory_build = memory_commands.add_parser("build")
@@ -211,9 +268,11 @@ def _fail(message: str) -> NoReturn:
 
 def _serialize(output: object) -> object:
     if isinstance(output, BaseModel):
-        return output.model_dump(mode="json")
+        return _serialize(output.model_dump(mode="json"))
     if isinstance(output, dict):
         return {key: _serialize(value) for key, value in output.items()}
+    if isinstance(output, list):
+        return [_serialize(value) for value in output]
     return output
 
 

@@ -81,6 +81,17 @@ class ExperimentSpecification(StrictContract):
         return self
 
 
+class AblationMatrixSpecification(StrictContract):
+    """The preregistered, paired Task × Search × failure-treatment matrix."""
+
+    matrix_version: Literal[1] = 1
+    display_name: str = Field(min_length=1)
+    seed_suite: SeedSuiteSpecification
+    search_seed: int = 0
+    replicates: list[int] = Field(default_factory=lambda: [0], min_length=1)
+    max_repair_cycles: int = Field(default=3, ge=0, le=3)
+
+
 class ExperimentManifest(StrictContract):
     manifest_version: Literal[1] = 1
     code: dict[str, str]

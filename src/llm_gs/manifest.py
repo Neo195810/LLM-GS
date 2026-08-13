@@ -9,7 +9,11 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from llm_gs.contracts import ExperimentManifest, ExperimentSpecification
+from llm_gs.contracts import (
+    AblationMatrixSpecification,
+    ExperimentManifest,
+    ExperimentSpecification,
+)
 from llm_gs.memory import RETRIEVER_ORDER, RETRIEVER_VERSION, RETRIEVER_WEIGHTS
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
@@ -62,6 +66,19 @@ def load_specification(path: Path) -> ExperimentSpecification:
         raise ValueError("experiment specification must be a YAML mapping")
     try:
         return ExperimentSpecification.model_validate(raw)
+    except ValidationError as error:
+        raise ValueError(str(error)) from error
+
+
+def load_ablation_matrix_specification(path: Path) -> AblationMatrixSpecification:
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as error:
+        raise ValueError(f"cannot read ablation matrix specification: {error}") from error
+    if not isinstance(raw, dict):
+        raise ValueError("ablation matrix specification must be a YAML mapping")
+    try:
+        return AblationMatrixSpecification.model_validate(raw)
     except ValidationError as error:
         raise ValueError(str(error)) from error
 

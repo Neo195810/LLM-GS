@@ -42,9 +42,7 @@ class WorkspaceStore:
 
     def next_execution_id(self, experiment_id: str) -> str:
         with self._connect() as connection:
-            row = connection.execute(
-                "SELECT COUNT(*) FROM executions WHERE experiment_id = ?", (experiment_id,)
-            ).fetchone()
+            row = connection.execute("SELECT COUNT(*) FROM executions").fetchone()
         return f"exec_{(int(row[0]) if row else 0) + 1:06d}"
 
     def preregister_frozen_manifest(
