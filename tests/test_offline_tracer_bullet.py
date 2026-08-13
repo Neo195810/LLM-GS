@@ -59,7 +59,7 @@ def test_valid_specification_runs_offline_through_a_deterministic_report(
         "output_tokens": 1024,
     }
     assert validation["manifest"]["failure_strategy"] == {
-        "max_repair_cycles": 0,
+        "max_repair_cycles": 3,
         "name": "regenerate",
     }
     assert validation["manifest"]["code"]["source_sha256"].startswith("sha256:")
@@ -266,6 +266,40 @@ failure_strategy:
     assert report["episode_evaluations"] == 2
     assert report["candidate_programs"] == 2
     assert report["model_requests"] == 2
+
+
+def test_reflect_strategy_honors_a_zero_repair_limit(tmp_path: Path) -> None:
+    specification = tmp_path / "reflect-zero.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-reflect-zero
+task:
+  name: CleanHouse
+seeds:
+  task: [7]
+failure_strategy:
+  name: reflect
+  max_repair_cycles: 0
+""",
+        encoding="utf-8",
+    )
+
+    run = run_cli("run", str(specification), "--workspace", str(workspace))
+
+    assert run.returncode == 0, run.stderr
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            json.loads(run_cli("validate", str(specification)).stdout)["experiment_id"],
+        ).stdout
+    )
+    assert report["candidate_programs"] == 1
+    assert report["episode_evaluations"] == 1
 
 
 def test_memory_repair_runs_with_persisted_memory_context(tmp_path: Path) -> None:

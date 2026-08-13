@@ -12,7 +12,7 @@ from llm_gs.contracts import (
 )
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, OFFLINE_PROMPT
 from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_memory_context
-from llm_gs.reflection import RepairCycle
+from llm_gs.reflection import RepairCycle, RepeatedRepairError, _normalized_ast_hash
 from llm_gs.storage import WorkspaceStore
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 
@@ -52,6 +52,8 @@ def reflect_once(
     execution_id: str,
     store: WorkspaceStore,
     prompt: str | None = None,
+    repair_round: int = 1,
+    seen_ast_hashes: set[str] | None = None,
 ) -> CandidateProgram:
     diagnosis = cycle.diagnose(result, evidence_index=0)
     intent = RepairIntent(
@@ -59,7 +61,7 @@ def reflect_once(
         preserved_behavior="a complete valid Karel DSL program",
     )
     candidate = repairer.repair(prompt or f"Repair CleanHouse using: {diagnosis.observation}")
-    repair = cycle.repair(parent, diagnosis, intent, candidate.source, round=1)
+    repair = cycle.repair(parent, diagnosis, intent, candidate, repair_round, seen_ast_hashes)
     store.save_repair_attempt(execution_id, repair)
     return repair.candidate
 
@@ -117,8 +119,8 @@ def execute(
                 intended_change="replace the stalled action sequence",
                 preserved_behavior="a complete valid Karel DSL program",
             ),
-            repair_source.source,
-            round=1,
+            repair_source,
+            repair_round=1,
         )
         candidate = repair.candidate
         results = [evaluator.evaluate(candidate, int(seed)) for seed in task_seeds["task"]]
@@ -223,14 +225,26 @@ def _execute_reflect(
         initial_results.append(initial_result)
     final_candidate = candidate
     final_results = initial_results
-    failed_results = [result for result in initial_results if result.outcome != "success"]
-    if failed_results:
+    all_results = list(initial_results)
+    cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]))
+    maximum_candidates = min(
+        1 + int(manifest.failure_strategy["max_repair_cycles"]),
+        int(manifest.budgets["model_requests"]),
+        int(manifest.budgets["episode_evaluations"]) // len(seeds),
+    )
+    seen_ast_hashes = {_normalized_ast_hash(candidate.source)}
+    for repair_round in range(1, maximum_candidates):
+        failed_results = [result for result in final_results if result.outcome != "success"]
+        if not failed_results:
+            break
         initial_result = failed_results[0]
         if strategy in {"memory_repair", "memory_reflect"}:
             for index, result in enumerate(failed_results):
                 store.save_memory_entry(
                     curate_clean_house_attempt(
-                        f"{execution_id}:initial:{index}", candidate.source, result
+                        f"{execution_id}:repair:{repair_round - 1}:{index}",
+                        final_candidate.source,
+                        result,
                     )
                 )
             retrieved, retrieval = StructuredRetriever(tuple(snapshot_entries)).retrieve(
@@ -242,36 +256,60 @@ def _execute_reflect(
             repair_prompt = f"{prefix} CleanHouse using memory: {memory_context}"
         else:
             repair_prompt = None
-        final_candidate = reflect_once(
-            candidate,
-            initial_result,
-            model,
-            RepairCycle(int(manifest.failure_strategy["max_repair_cycles"])),
-            execution_id,
-            store,
-            repair_prompt,
-        )
-        final_results = [evaluator.evaluate(final_candidate, seed) for seed in seeds]
-        for seed, result in zip(seeds, final_results, strict=True):
-            store.record_evaluation(
-                execution_id, seed, final_candidate.source, result.model_dump_json()
+        try:
+            repaired_candidate = reflect_once(
+                final_candidate,
+                initial_result,
+                model,
+                cycle,
+                execution_id,
+                store,
+                repair_prompt,
+                repair_round=repair_round,
+                seen_ast_hashes=seen_ast_hashes,
             )
-        for index, result in enumerate(final_results):
+        except RepeatedRepairError:
+            break
+        repaired_results = [evaluator.evaluate(repaired_candidate, seed) for seed in seeds]
+        for seed, result in zip(seeds, repaired_results, strict=True):
+            store.record_evaluation(
+                execution_id, seed, repaired_candidate.source, result.model_dump_json()
+            )
+        for index, result in enumerate(repaired_results):
             if result.outcome != "success" and strategy in {"memory_repair", "memory_reflect"}:
                 store.save_memory_entry(
                     curate_clean_house_attempt(
-                        f"{execution_id}:repair:1:{index}", final_candidate.source, result
+                        f"{execution_id}:repair:{repair_round}:{index}",
+                        repaired_candidate.source,
+                        result,
                     )
                 )
+        made_improvement = _has_repair_improvement(final_results, repaired_results)
+        seen_ast_hashes.add(_normalized_ast_hash(repaired_candidate.source))
+        final_candidate = repaired_candidate
+        final_results = repaired_results
+        all_results.extend(repaired_results)
+        if not made_improvement:
+            break
     report = _report_from_results(
         experiment_id,
         execution_id,
-        initial_results + final_results if final_candidate != candidate else initial_results,
-        candidate.model_requests + final_candidate.model_requests,
-        candidate_programs=2 if final_candidate != candidate else 1,
+        all_results,
+        candidate.model_requests * (len(all_results) // len(seeds)),
+        candidate_programs=len(all_results) // len(seeds),
     )
     store.save(manifest, report)
     return report, "completed"
+
+
+def _has_repair_improvement(
+    previous: list[EpisodeResult], repaired: list[EpisodeResult]
+) -> bool:
+    if any(result.outcome == "success" for result in repaired):
+        return True
+    return sum(result.normalized_progress for result in repaired) > sum(
+        result.normalized_progress for result in previous
+    )
 
 
 def _task_seeds(manifest: ExperimentManifest) -> list[int]:

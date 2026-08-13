@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from llm_gs.contracts import CandidateProgram, EpisodeResult, RepairIntent
-from llm_gs.reflection import RepairCycle
+from llm_gs.reflection import RepairCycle, RepeatedRepairError
 
 
 def test_reflection_repair_is_evidence_linked_and_has_parent_provenance() -> None:
@@ -21,8 +21,8 @@ def test_reflection_repair_is_evidence_linked_and_has_parent_provenance() -> Non
         parent,
         diagnosis,
         RepairIntent(intended_change="move before turning", preserved_behavior="valid Karel DSL"),
-        "DEF run m( move m)",
-        round=1,
+        CandidateProgram(source="DEF run m( move m)"),
+        repair_round=1,
     )
 
     assert repair.parent_source == parent.source
@@ -38,7 +38,7 @@ def test_reflection_stops_repeated_ast_and_exhausted_cycles() -> None:
     )
     intent = RepairIntent(intended_change="change", preserved_behavior="valid")
 
-    with pytest.raises(ValueError, match="repeated"):
-        cycle.repair(parent, diagnosis, intent, parent.source, round=1)
+    with pytest.raises(RepeatedRepairError, match="repeated"):
+        cycle.repair(parent, diagnosis, intent, parent, repair_round=1)
     with pytest.raises(ValueError, match="exhausted"):
-        cycle.repair(parent, diagnosis, intent, "DEF run m( move m)", round=2)
+        cycle.repair(parent, diagnosis, intent, CandidateProgram(source="DEF run m( move m)"), 2)

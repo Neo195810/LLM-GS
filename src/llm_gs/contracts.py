@@ -20,7 +20,7 @@ class SeedSpecification(StrictContract):
 
 class FailureStrategySpecification(StrictContract):
     name: Literal["regenerate", "reflect", "memory_repair", "memory_reflect"] = "regenerate"
-    max_repair_cycles: int = Field(default=0, ge=0, le=3)
+    max_repair_cycles: int = Field(default=3, ge=0, le=3)
 
 
 class ExperimentSpecification(StrictContract):

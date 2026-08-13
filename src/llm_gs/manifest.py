@@ -61,6 +61,12 @@ def load_specification(path: Path) -> ExperimentSpecification:
 
 def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManifest:
     is_clean_house = specification.task.name == "CleanHouse"
+    repair_rounds = (
+        specification.failure_strategy.max_repair_cycles
+        if specification.failure_strategy.name != "regenerate"
+        else 0
+    )
+    candidate_budget = 1 + repair_rounds
     return ExperimentManifest(
         code={"source_sha256": _source_identity()},
         dependencies={"uv_lock_sha256": _dependency_identity()},
@@ -95,9 +101,9 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         search_strategy={"name": "single_candidate", "seed": specification.seeds.search},
         failure_strategy=specification.failure_strategy.model_dump(mode="json"),
         budgets={
-            "episode_evaluations": 1,
+            "episode_evaluations": len(specification.seeds.task) * candidate_budget,
             "input_tokens": 4096,
-            "model_requests": 1,
+            "model_requests": candidate_budget,
             "output_tokens": 1024,
         },
         memory_snapshot={

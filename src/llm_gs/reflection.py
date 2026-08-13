@@ -6,6 +6,10 @@ from llm_gs.contracts import CandidateProgram, Diagnosis, EpisodeResult, RepairA
 from llm_gs.proposer import _validate_dsl
 
 
+class RepeatedRepairError(ValueError):
+    """Raised when a repair candidate repeats a previously attempted AST."""
+
+
 class RepairCycle:
     def __init__(self, maximum_repairs: int = 3) -> None:
         if maximum_repairs < 0:
@@ -27,21 +31,24 @@ class RepairCycle:
         parent: CandidateProgram,
         diagnosis: Diagnosis,
         intent: RepairIntent,
-        source: str,
-        round: int,
+        candidate: CandidateProgram,
+        repair_round: int,
+        seen_ast_hashes: set[str] | None = None,
     ) -> RepairAttempt:
-        if round > self._maximum_repairs:
+        if repair_round > self._maximum_repairs:
             raise ValueError("repair cycle limit exhausted")
-        _validate_dsl(source)
-        if _normalized_ast_hash(source) == _normalized_ast_hash(parent.source):
-            raise ValueError("repair repeated the parent AST")
+        _validate_dsl(candidate.source)
+        candidate_hash = _normalized_ast_hash(candidate.source)
+        prior_hashes = seen_ast_hashes or {_normalized_ast_hash(parent.source)}
+        if candidate_hash in prior_hashes:
+            raise RepeatedRepairError("repair repeated an attempted AST")
         return RepairAttempt(
             parent_source=parent.source,
-            candidate=CandidateProgram(source=source),
+            candidate=candidate,
             diagnosis=diagnosis,
             intent=intent,
-            normalized_ast_difference=_ast_difference(parent.source, source),
-            round=round,
+            normalized_ast_difference=_ast_difference(parent.source, candidate.source),
+            round=repair_round,
         )
 
 
