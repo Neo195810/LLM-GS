@@ -7,7 +7,13 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from llm_gs.contracts import ExperimentManifest, ExperimentReport, RepairAttempt
+from llm_gs.contracts import (
+    ExperimentManifest,
+    ExperimentReport,
+    MemoryEntry,
+    RepairAttempt,
+    RetrievalOutcome,
+)
 from llm_gs.manifest import canonical_json
 from llm_gs.proposer import ModelRequestRecord
 
@@ -139,6 +145,27 @@ class WorkspaceStore:
                 ),
             )
 
+    def save_memory_entry(self, entry: MemoryEntry) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO memory_entries(entry_id, entry_json) VALUES (?, ?)",
+                (entry.entry_id, entry.model_dump_json()),
+            )
+
+    def memory_entries(self) -> list[MemoryEntry]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT entry_json FROM memory_entries ORDER BY entry_id"
+            ).fetchall()
+        return [MemoryEntry.model_validate_json(row[0]) for row in rows]
+
+    def save_retrieval_outcome(self, execution_id: str, outcome: RetrievalOutcome) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO retrieval_outcomes(execution_id, outcome_json) VALUES (?, ?)",
+                (execution_id, outcome.model_dump_json()),
+            )
+
     def save(self, manifest: ExperimentManifest, report: ExperimentReport) -> None:
         with self._connect() as connection:
             connection.execute(
@@ -209,5 +236,7 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS episode_evaluations (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, task_seed INTEGER NOT NULL, episode_json TEXT NOT NULL, artifact_hash TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, PRIMARY KEY (execution_id, attempt));
         CREATE TABLE IF NOT EXISTS repair_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, round INTEGER NOT NULL, parent_source TEXT NOT NULL, candidate_source TEXT NOT NULL, diagnosis_json TEXT NOT NULL, intent_json TEXT NOT NULL, normalized_ast_difference TEXT NOT NULL, UNIQUE(execution_id, round));
+        CREATE TABLE IF NOT EXISTS memory_entries (entry_id TEXT PRIMARY KEY, entry_json TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
         """)
         return connection

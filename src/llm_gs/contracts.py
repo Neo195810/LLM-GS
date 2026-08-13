@@ -19,7 +19,7 @@ class SeedSpecification(StrictContract):
 
 
 class FailureStrategySpecification(StrictContract):
-    name: Literal["regenerate", "reflect"] = "regenerate"
+    name: Literal["regenerate", "reflect", "memory_repair", "memory_reflect"] = "regenerate"
     max_repair_cycles: int = Field(default=0, ge=0, le=3)
 
 
@@ -97,6 +97,26 @@ class RepairAttempt(StrictContract):
     intent: RepairIntent
     normalized_ast_difference: str
     round: int = Field(ge=1)
+
+
+class MemoryEntry(StrictContract):
+    version: Literal[1] = 1
+    entry_id: str
+    task: Literal["CleanHouse"]
+    failure_type: str
+    failure_reason: str
+    normalized_ast_hash: str
+    state_features: dict[str, int]
+    evidence: dict[str, int | str]
+    source_attempt_id: str
+
+
+class RetrievalOutcome(StrictContract):
+    version: Literal[1] = 1
+    query_failure_type: str
+    query_failure_reason: str
+    selected_entry_ids: list[str]
+    reason_codes: dict[str, list[str]]
 
 
 class ExperimentReport(StrictContract):

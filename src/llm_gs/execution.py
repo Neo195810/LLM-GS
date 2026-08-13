@@ -11,6 +11,7 @@ from llm_gs.contracts import (
     RepairIntent,
 )
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, OFFLINE_PROMPT
+from llm_gs.memory import StructuredRetriever, curate_clean_house_attempt, serialize_memory_context
 from llm_gs.reflection import RepairCycle
 from llm_gs.storage import PendingWork, WorkspaceStore
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
@@ -31,7 +32,7 @@ class Repairer(Protocol):
 
 class FakeOpenAIClient:
     def propose(self, prompt: str) -> CandidateProgram:
-        if prompt.startswith("Repair CleanHouse"):
+        if prompt.startswith(("Repair CleanHouse", "Reflect then repair CleanHouse")):
             return CandidateProgram(source="DEF run m( move m)")
         if prompt == CLEAN_HOUSE_PROMPT:
             return CandidateProgram(source="DEF run m( turnLeft m)")
@@ -50,13 +51,14 @@ def reflect_once(
     cycle: RepairCycle,
     execution_id: str,
     store: WorkspaceStore,
+    prompt: str | None = None,
 ) -> CandidateProgram:
     diagnosis = cycle.diagnose(result, evidence_index=0)
     intent = RepairIntent(
         intended_change="replace the stalled action sequence",
         preserved_behavior="a complete valid Karel DSL program",
     )
-    candidate = repairer.repair(f"Repair CleanHouse using: {diagnosis.observation}")
+    candidate = repairer.repair(prompt or f"Repair CleanHouse using: {diagnosis.observation}")
     repair = cycle.repair(parent, diagnosis, intent, candidate.source, round=1)
     store.save_repair_attempt(execution_id, repair)
     return repair.candidate
@@ -154,7 +156,7 @@ def execute_resumable(
     evaluator: Evaluator,
     stop_after: int | None = None,
 ) -> tuple[ExperimentReport | None, str]:
-    if manifest.failure_strategy["name"] == "reflect":
+    if manifest.failure_strategy["name"] in {"reflect", "memory_repair", "memory_reflect"}:
         return _execute_reflect(manifest, experiment_id, store, model, evaluator)
     work = store.next_pending_work(experiment_id)
     if work is None and store.active_execution_id(experiment_id) is None:
@@ -213,6 +215,21 @@ def _execute_reflect(
     final_candidate = candidate
     final_result = initial_result
     if initial_result.outcome != "success":
+        strategy = str(manifest.failure_strategy["name"])
+        if strategy in {"memory_repair", "memory_reflect"}:
+            memory_entry = curate_clean_house_attempt(
+                f"{execution_id}:initial", candidate.source, initial_result
+            )
+            store.save_memory_entry(memory_entry)
+            retrieved, retrieval = StructuredRetriever(tuple(store.memory_entries())).retrieve(
+                initial_result
+            )
+            store.save_retrieval_outcome(execution_id, retrieval)
+            memory_context = serialize_memory_context(retrieved)
+            prefix = "Reflect then repair" if strategy == "memory_reflect" else "Repair"
+            repair_prompt = f"{prefix} CleanHouse using memory: {memory_context}"
+        else:
+            repair_prompt = None
         final_candidate = reflect_once(
             candidate,
             initial_result,
@@ -220,6 +237,7 @@ def _execute_reflect(
             RepairCycle(int(manifest.failure_strategy["max_repair_cycles"])),
             execution_id,
             store,
+            repair_prompt,
         )
         final_result = evaluator.evaluate(final_candidate, seed)
     report = _report_from_results(

@@ -268,6 +268,66 @@ failure_strategy:
     assert report["model_requests"] == 2
 
 
+def test_memory_repair_runs_with_persisted_memory_context(tmp_path: Path) -> None:
+    specification = tmp_path / "memory-repair.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-memory-repair
+task:
+  name: CleanHouse
+seeds:
+  task: [7]
+failure_strategy:
+  name: memory_repair
+  max_repair_cycles: 3
+""",
+        encoding="utf-8",
+    )
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+
+    run = run_cli("run", str(specification), "--workspace", str(workspace))
+    assert run.returncode == 0, run.stderr
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    )
+    assert report["candidate_programs"] == 2
+
+
+def test_memory_reflect_runs_with_the_frozen_retriever_manifest(tmp_path: Path) -> None:
+    specification = tmp_path / "memory-reflect.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-memory-reflect
+task:
+  name: CleanHouse
+seeds:
+  task: [7]
+failure_strategy:
+  name: memory_reflect
+  max_repair_cycles: 3
+""",
+        encoding="utf-8",
+    )
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert (
+        validation["manifest"]["memory_snapshot"]["retriever_version"]
+        == "structured-clean-house-v1"
+    )
+
+    run = run_cli("run", str(specification), "--workspace", str(workspace))
+    assert run.returncode == 0, run.stderr
+
+
 def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     tmp_path: Path,
 ) -> None:
@@ -295,4 +355,9 @@ def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
         "parser": "offline-dsl-v1",
         "prompt_sha256": "7f056e1279d0ff8b61e3e30dd2f5fa1faa118287044bca3082d99c8d3b478e29",
     }
-    assert first["manifest"]["memory_snapshot"] == {"id": "none", "read_only": True}
+    assert first["manifest"]["memory_snapshot"] == {
+        "id": "none",
+        "read_only": True,
+        "retriever_order": "task,failure_type,failure_reason,normalized_ast_hash,entry_id",
+        "retriever_version": "structured-clean-house-v1",
+    }
