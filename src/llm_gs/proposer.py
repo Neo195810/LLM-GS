@@ -8,6 +8,7 @@ from openai import OpenAI
 
 from llm_gs.contracts import CandidateProgram
 from prog_policies.karel.dsl import KarelDSL
+from prog_policies.minigrid.dsl import MinigridDSL
 
 MODEL_NAME = "gpt-5.6-luna"
 REASONING_EFFORT = "medium"
@@ -75,7 +76,7 @@ class OpenAIProposer:
             self._record_usage(response, attempt)
             try:
                 source = _proposal_source(response)
-                _validate_dsl(source)
+                _validate_dsl(source, _task_name_from_prompt(prompt))
                 return CandidateProgram(source=source, model_requests=attempt)
             except (AssertionError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
                 if attempt == 3:
@@ -121,8 +122,27 @@ def _proposal_source(response: object) -> str:
     return source
 
 
-def _validate_dsl(source: str) -> None:
-    KarelDSL().parse_str_to_node(source)  # type: ignore[no-untyped-call]
+def _validate_dsl(source: str, task_name: str | None = None) -> None:
+    if task_name == "DoorKey":
+        MinigridDSL().parse_str_to_node(source)  # type: ignore[no-untyped-call]
+        return
+    if task_name in {"CleanHouse", "FourCorners"}:
+        KarelDSL().parse_str_to_node(source)  # type: ignore[no-untyped-call]
+        return
+    try:
+        KarelDSL().parse_str_to_node(source)  # type: ignore[no-untyped-call]
+    except Exception:
+        MinigridDSL().parse_str_to_node(source)  # type: ignore[no-untyped-call]
+
+
+def _task_name_from_prompt(prompt: str) -> str | None:
+    if "DoorKey" in prompt:
+        return "DoorKey"
+    if "CleanHouse" in prompt:
+        return "CleanHouse"
+    if "FourCorners" in prompt:
+        return "FourCorners"
+    return None
 
 
 def _token_estimate(prompt: str) -> int:

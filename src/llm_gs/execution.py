@@ -15,6 +15,7 @@ from llm_gs.contracts import (
 )
 from llm_gs.manifest import (
     CLEAN_HOUSE_PROMPT,
+    DOOR_KEY_PROMPT,
     FINAL_CANDIDATE_SELECTION_RULE,
     FOUR_CORNERS_PROMPT,
     OFFLINE_PROMPT,
@@ -23,9 +24,12 @@ from llm_gs.manifest import (
 from llm_gs.memory import (
     StructuredRetriever,
     curate_clean_house_attempt,
+    curate_door_key_attempt,
     curate_four_corners_attempt,
     serialize_repair_context,
 )
+from llm_gs.minigrid_door_key import DoorKeyLimits, MiniGridDoorKeyAdapter
+from llm_gs.proposer import _validate_dsl
 from llm_gs.reflection import RepairCycle, RepeatedRepairError, _normalized_ast_hash
 from llm_gs.search import ScoredCandidate, resolve_search_strategy
 from llm_gs.storage import WorkspaceStore
@@ -55,9 +59,13 @@ class Repairer(Protocol):
 class FakeOpenAIClient:
     def propose(self, prompt: str) -> CandidateProgram:
         if prompt.startswith(("Repair ", "Reflect on evidence then repair ")):
+            if "DoorKey" in prompt:
+                return CandidateProgram(source="DEF run m( left m)")
             return CandidateProgram(source="DEF run m( move m)")
         if prompt in {CLEAN_HOUSE_PROMPT, FOUR_CORNERS_PROMPT}:
             return CandidateProgram(source="DEF run m( turnLeft m)")
+        if prompt == DOOR_KEY_PROMPT:
+            return CandidateProgram(source="DEF run m( left m)")
         if prompt != OFFLINE_PROMPT:
             raise ValueError("fake model received an unknown prompt")
         return CandidateProgram(source="SUCCESS")
@@ -85,14 +93,14 @@ def reflect_once(
         else Diagnosis(
             evidence_index=0,
             observation="Retrieved memory provides a prior repair pattern.",
-            hypothesis="Apply the retrieved repair pattern while preserving valid Karel DSL.",
+            hypothesis="Apply the retrieved repair pattern while preserving valid task DSL.",
         )
     )
     intent = RepairIntent(
         intended_change="replace the stalled action sequence",
-        preserved_behavior="a complete valid Karel DSL program",
+        preserved_behavior="a complete valid task DSL program",
     )
-    candidate = repairer.repair(prompt or f"Repair CleanHouse using: {diagnosis.observation}")
+    candidate = repairer.repair(prompt or f"Repair using: {diagnosis.observation}")
     repair = cycle.repair(parent, diagnosis, intent, candidate, repair_round, seen_ast_hashes)
     store.save_repair_attempt(execution_id, repair)
     return repair.candidate
@@ -138,6 +146,14 @@ class FourCornersEvaluator:
         )
 
 
+class DoorKeyEvaluator:
+    def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+        _validate_dsl(candidate.source, task_name="DoorKey")
+        return MiniGridDoorKeyAdapter().evaluate(
+            candidate, task_seed, DoorKeyLimits(max_calls=10)
+        )
+
+
 def execute(
     manifest: ExperimentManifest,
     experiment_id: str,
@@ -157,15 +173,19 @@ def execute(
         and results[0].outcome != "success"
         and isinstance(model, Repairer)
     ):
-        cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]))
+        cycle = RepairCycle(
+            int(manifest.failure_strategy["max_repair_cycles"]), str(manifest.task["name"])
+        )
         diagnosis = cycle.diagnose(results[0], evidence_index=0)
-        repair_source = model.repair(f"Repair CleanHouse using: {diagnosis.observation}")
+        repair_source = model.repair(
+            f"Repair {manifest.task['name']} using: {diagnosis.observation}"
+        )
         repair = cycle.repair(
             candidate,
             diagnosis,
             RepairIntent(
                 intended_change="replace the stalled action sequence",
-                preserved_behavior="a complete valid Karel DSL program",
+                preserved_behavior="a complete valid task DSL program",
             ),
             repair_source,
             repair_round=1,
@@ -208,7 +228,11 @@ def execute_resumable(
 ) -> tuple[ExperimentReport | None, str]:
     if isinstance(manifest.specification.get("seed_suite"), dict):
         return _execute_frozen_memory_protocol(manifest, experiment_id, store, model, evaluator)
-    if manifest.failure_strategy["name"] in {"reflect", "memory_repair", "memory_reflect"}:
+    if (
+        manifest.failure_strategy["name"]
+        in {"regenerate", "reflect", "memory_repair", "memory_reflect"}
+        and manifest.task["name"] in {"CleanHouse", "DoorKey", "FourCorners"}
+    ):
         return _execute_reflect(manifest, experiment_id, store, model, evaluator, stop_after)
     work = store.next_pending_work(experiment_id)
     if work is None and store.active_execution_id(experiment_id) is None:
@@ -304,8 +328,8 @@ def _execute_frozen_memory_protocol(
         raise AssertionError(
             "non-regenerate frozen memory protocols require a repair-capable model"
         )
-    cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]))
-    seen_ast_hashes = {_normalized_ast_hash(current_candidate.source)}
+    cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]), task_name)
+    seen_ast_hashes = {_normalized_ast_hash(current_candidate.source, task_name)}
     for repair_round in range(1, int(manifest.failure_strategy["max_repair_cycles"]) + 1):
         failed_results = [result for result in current_results if result.outcome != "success"]
         if not failed_results:
@@ -323,7 +347,7 @@ def _execute_frozen_memory_protocol(
                 store, execution_id, current_candidate, suite["development"], evaluator
             )
             candidates.append((current_candidate, current_results))
-            seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source))
+            seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source, task_name))
             continue
         if not isinstance(model, Repairer):
             raise AssertionError("non-regenerate strategy requires a repair-capable model")
@@ -375,7 +399,7 @@ def _execute_frozen_memory_protocol(
         if retrieval_id is not None:
             store.record_retrieval_impact(retrieval_id, failed_results, current_results)
         candidates.append((current_candidate, current_results))
-        seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source))
+        seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source, task_name))
 
     selected_candidate, selection = _select_final_candidate(candidates, manifest.search_strategy)
     held_out_results = _evaluate_candidate(
@@ -487,7 +511,7 @@ def _execute_reflect(
     evaluator: Evaluator,
     stop_after: int | None = None,
 ) -> tuple[ExperimentReport | None, str]:
-    if not isinstance(model, Repairer):
+    if manifest.failure_strategy["name"] != "regenerate" and not isinstance(model, Repairer):
         raise ValueError("reflect strategy requires a repair-capable model")
     execution_id = store.active_execution_id(experiment_id)
     if execution_id is None:
@@ -531,19 +555,42 @@ def _execute_reflect(
     final_candidate = candidate
     final_results = initial_results
     all_results = list(initial_results)
-    cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]))
+    cycle = RepairCycle(
+        int(manifest.failure_strategy["max_repair_cycles"]), str(manifest.task["name"])
+    )
     maximum_candidates = min(
         1 + int(manifest.failure_strategy["max_repair_cycles"]),
         int(manifest.budgets["episode_evaluations"]) // len(seeds),
     )
     model_request_budget = int(manifest.budgets["model_requests"])
     model_requests_used = candidate.model_requests
-    seen_ast_hashes = {_normalized_ast_hash(candidate.source)}
+    task_name = str(manifest.task["name"])
+    seen_ast_hashes = {_normalized_ast_hash(candidate.source, task_name)}
     for repair_round in range(1, maximum_candidates):
         failed_results = [result for result in final_results if result.outcome != "success"]
         if not failed_results:
             break
         initial_result = failed_results[0]
+        if strategy == "regenerate":
+            regenerated_candidate = model.propose(task_prompt(str(manifest.task["name"])))
+            if model_requests_used + regenerated_candidate.model_requests > model_request_budget:
+                break
+            model_requests_used += regenerated_candidate.model_requests
+            store.add_model_requests(execution_id, regenerated_candidate.model_requests)
+            regenerated_results = [
+                evaluator.evaluate(regenerated_candidate, seed) for seed in seeds
+            ]
+            for seed, result in zip(seeds, regenerated_results, strict=True):
+                store.record_evaluation(
+                    execution_id, seed, regenerated_candidate.source, result.model_dump_json()
+                )
+            final_candidate = regenerated_candidate
+            final_results = regenerated_results
+            all_results.extend(regenerated_results)
+            seen_ast_hashes.add(_normalized_ast_hash(regenerated_candidate.source, task_name))
+            continue
+        if not isinstance(model, Repairer):
+            raise AssertionError("non-regenerate strategy requires a repair-capable model")
         if is_online_memory:
             updates = [
                 _curate_attempt(str(manifest.task["name"]),
@@ -567,7 +614,7 @@ def _execute_reflect(
             prefix = "Reflect on evidence then repair" if strategy == "memory_reflect" else "Repair"
             repair_prompt = f"{prefix} {manifest.task['name']} using memory: {memory_context}"
         else:
-            repair_prompt = None
+            repair_prompt = f"Repair {manifest.task['name']}"
             memory_context = None
         try:
             repaired_candidate = reflect_once(
@@ -601,7 +648,7 @@ def _execute_reflect(
         if is_online_memory:
             store.record_retrieval_impact(retrieval_id, final_results, repaired_results)
         made_improvement = _has_repair_improvement(final_results, repaired_results)
-        seen_ast_hashes.add(_normalized_ast_hash(repaired_candidate.source))
+        seen_ast_hashes.add(_normalized_ast_hash(repaired_candidate.source, task_name))
         final_candidate = repaired_candidate
         final_results = repaired_results
         all_results.extend(repaired_results)
@@ -640,6 +687,8 @@ def _curate_attempt(
         return curate_clean_house_attempt(source_attempt_id, source, result)
     if task_name == "FourCorners":
         return curate_four_corners_attempt(source_attempt_id, source, result)
+    if task_name == "DoorKey":
+        return curate_door_key_attempt(source_attempt_id, source, result)
     raise ValueError(f"Task {task_name} does not support Experience Memory")
 
 

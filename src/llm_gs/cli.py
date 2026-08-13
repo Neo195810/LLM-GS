@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from llm_gs.contracts import ExperimentManifest, ExperimentReport
 from llm_gs.execution import (
     CleanHouseEvaluator,
+    DoorKeyEvaluator,
     FakeOpenAIClient,
     FourCornersEvaluator,
     OfflineEchoEvaluator,
@@ -59,6 +60,8 @@ def _execute_with_failure_recording(
             _model_client(args),
             CleanHouseEvaluator()
             if manifest.task["name"] == "CleanHouse"
+            else DoorKeyEvaluator()
+            if manifest.task["name"] == "DoorKey"
             else FourCornersEvaluator()
             if manifest.task["name"] == "FourCorners"
             else OfflineEchoEvaluator(),

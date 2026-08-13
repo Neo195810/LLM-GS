@@ -12,7 +12,7 @@ from llm_gs.contracts import (
     RetrievalOutcome,
 )
 
-RETRIEVER_VERSION = "structured-clean-house-v3"
+RETRIEVER_VERSION = "structured-task-v4"
 RETRIEVER_ORDER = (
     "task,failure_type,failure_reason,state_distance,evidence_quality,"
     "improvement,novelty,normalized_ast_hash,entry_id"
@@ -40,7 +40,6 @@ def curate_clean_house_attempt(
     if not isinstance(remaining, int) or not isinstance(initial, int):
         raise ValueError("memory requires allowlisted marker-count evidence")
     normalized_hash = normalized_ast_hash(source)
-    entry_id = hashlib.sha256(f"{source_attempt_id}:{normalized_hash}".encode()).hexdigest()
     entry_id = hashlib.sha256(f"{source_attempt_id}:{normalized_hash}".encode()).hexdigest()
     return MemoryEntry(
         entry_id=entry_id,
@@ -90,6 +89,38 @@ def curate_four_corners_attempt(
     )
 
 
+def curate_door_key_attempt(
+    source_attempt_id: str, source: str, result: EpisodeResult
+) -> MemoryEntry:
+    if result.failure_type is None or result.failure_reason is None:
+        raise ValueError("only failed attempts can become DoorKey memory")
+    evidence = result.evaluation_evidence or {}
+    key_position = _position_evidence(evidence, "initial_key_position")
+    door_position = _position_evidence(evidence, "initial_door_position")
+    goal_position = _position_evidence(evidence, "initial_goal_position")
+    if key_position is None or door_position is None or goal_position is None:
+        raise ValueError("memory requires allowlisted DoorKey state features")
+    normalized_hash = normalized_ast_hash(source)
+    entry_id = hashlib.sha256(f"{source_attempt_id}:{normalized_hash}".encode()).hexdigest()
+    state_features = _door_key_features(key_position, door_position, goal_position)
+    return MemoryEntry(
+        entry_id=entry_id,
+        task="DoorKey",
+        failure_type=result.failure_type,
+        failure_reason=result.failure_reason,
+        normalized_ast_hash=normalized_hash,
+        state_features=state_features,
+        evidence={
+            "failure_reason": result.failure_reason,
+            **state_features,
+            "key_collected": int(evidence.get("key_collected") is True),
+            "door_unlocked": int(evidence.get("door_unlocked") is True),
+            "goal_completed": int(evidence.get("goal_completed") is True),
+        },
+        source_attempt_id=source_attempt_id,
+    )
+
+
 @dataclass(frozen=True)
 class StructuredRetriever:
     entries: tuple[MemoryEntry, ...]
@@ -102,7 +133,7 @@ class StructuredRetriever:
         if result.failure_type is None or result.failure_reason is None:
             raise ValueError("retrieval requires a classified failure")
         query_evidence = result.evaluation_evidence or {}
-        query_progress = _query_progress(self.task, query_evidence)
+        query_features = _query_features(self.task, query_evidence)
         components: dict[str, RetrievalCandidateComponents] = {}
         ast_occurrences = {
             entry.normalized_ast_hash: sum(
@@ -111,12 +142,15 @@ class StructuredRetriever:
             for entry in self.entries
         }
         for entry in self.entries:
-            entry_progress, improvement = _entry_progress(entry)
+            entry_features, improvement = _entry_features(entry)
+            task_compatible = entry.task == self.task
             components[entry.entry_id] = RetrievalCandidateComponents(
-                task_compatible=entry.task == self.task,
+                task_compatible=task_compatible,
                 failure_type_match=entry.failure_type == result.failure_type,
                 failure_reason_match=entry.failure_reason == result.failure_reason,
-                state_distance=abs(entry_progress - query_progress),
+                state_distance=(
+                    _state_distance(query_features, entry_features) if task_compatible else 0
+                ),
                 ast_feature=entry.normalized_ast_hash,
                 evidence_quality=_evidence_quality(entry.evidence),
                 improvement=improvement,
@@ -165,26 +199,98 @@ class StructuredRetriever:
         )
 
 
-def _query_progress(task: str, evidence: dict[str, object]) -> int:
-    key = "remaining_marker_count" if task == "CleanHouse" else "correct_marker_count"
-    progress = evidence.get(key)
-    if not isinstance(progress, int):
-        raise ValueError("retrieval requires allowlisted Task evidence")
-    return progress
+def _query_features(task: str, evidence: dict[str, object]) -> tuple[int, ...]:
+    if task == "CleanHouse":
+        return (_integer_evidence(evidence, "remaining_marker_count"),)
+    if task == "FourCorners":
+        return (_integer_evidence(evidence, "correct_marker_count"),)
+    if task == "DoorKey":
+        positions = (
+            _position_evidence(evidence, "initial_key_position"),
+            _position_evidence(evidence, "initial_door_position"),
+            _position_evidence(evidence, "initial_goal_position"),
+        )
+        if any(position is None for position in positions):
+            raise ValueError("retrieval requires allowlisted DoorKey evidence")
+        key_position, door_position, goal_position = positions
+        assert key_position is not None
+        assert door_position is not None
+        assert goal_position is not None
+        return (*key_position, *door_position, *goal_position)
+    raise ValueError(f"Task {task} does not support Structured Retrieval")
 
 
-def _entry_progress(entry: MemoryEntry) -> tuple[int, int]:
+def _entry_features(entry: MemoryEntry) -> tuple[tuple[int, ...], int]:
     if entry.task == "CleanHouse":
         remaining = entry.state_features["remaining_marker_count"]
-        return remaining, entry.state_features["initial_marker_count"] - remaining
-    correct = entry.state_features["correct_marker_count"]
-    return correct, correct
+        return (remaining,), entry.state_features["initial_marker_count"] - remaining
+    if entry.task == "FourCorners":
+        correct = entry.state_features["correct_marker_count"]
+        return (correct,), correct
+    if entry.task == "DoorKey":
+        return (
+            tuple(entry.state_features[key] for key in _DOOR_KEY_FEATURE_KEYS),
+            sum(
+                _memory_int(entry.evidence, field)
+                for field in ("key_collected", "door_unlocked", "goal_completed")
+            ),
+        )
+    raise ValueError(f"Task {entry.task} does not support Structured Retrieval")
+
+
+def _state_distance(query: tuple[int, ...], entry: tuple[int, ...]) -> int:
+    if len(query) != len(entry):
+        raise ValueError("retrieval state feature dimensions must match")
+    return sum(abs(current - prior) for current, prior in zip(query, entry, strict=True))
+
+
+def _position_evidence(evidence: dict[str, object], field: str) -> tuple[int, int] | None:
+    value = evidence.get(field)
+    if (
+        not isinstance(value, list)
+        or len(value) != 2
+        or not all(isinstance(coordinate, int) for coordinate in value)
+    ):
+        return None
+    return int(value[0]), int(value[1])
+
+
+_DOOR_KEY_FEATURE_KEYS = (
+    "key_column",
+    "key_row",
+    "door_column",
+    "door_row",
+    "goal_column",
+    "goal_row",
+)
+
+
+def _door_key_features(
+    key_position: tuple[int, int], door_position: tuple[int, int], goal_position: tuple[int, int]
+) -> dict[str, int]:
+    values = (*key_position, *door_position, *goal_position)
+    return dict(zip(_DOOR_KEY_FEATURE_KEYS, values, strict=True))
+
+
+def _query_progress(task: str, evidence: dict[str, object]) -> int:
+    """Compatibility helper retained for callers that report scalar progress."""
+    features = _query_features(task, evidence)
+    if len(features) != 1:
+        raise ValueError("retrieval requires allowlisted Task evidence")
+    return features[0]
 
 
 def _integer_evidence(evidence: dict[str, object], field: str) -> int:
     value = evidence.get(field)
     if not isinstance(value, int):
         raise ValueError("memory requires allowlisted FourCorners evidence")
+    return value
+
+
+def _memory_int(evidence: dict[str, int | str], field: str) -> int:
+    value = evidence[field]
+    if not isinstance(value, int):
+        raise ValueError("memory requires integer evidence")
     return value
 
 
@@ -214,7 +320,7 @@ def serialize_repair_context(result: EpisodeResult, entries: list[MemoryEntry]) 
             "initial_marker_count": evidence.get("initial_marker_count"),
             "remaining_marker_count": evidence.get("remaining_marker_count"),
         }
-    else:
+    elif "goal_marker_count" in evidence:
         required = ("goal_marker_count", "correct_marker_count", "incorrect_marker_count")
         if any(not isinstance(evidence.get(field), int) for field in required):
             raise ValueError("repair context requires allowlisted Task evidence")
@@ -222,6 +328,29 @@ def serialize_repair_context(result: EpisodeResult, entries: list[MemoryEntry]) 
             "failure_type": result.failure_type,
             "failure_reason": result.failure_reason,
             **{field: evidence[field] for field in required},
+        }
+    else:
+        positions = {
+            field: _position_evidence(evidence, field)
+            for field in (
+                "initial_key_position",
+                "initial_door_position",
+                "initial_goal_position",
+            )
+        }
+        if any(position is None for position in positions.values()):
+            raise ValueError("repair context requires allowlisted DoorKey evidence")
+        key_position = positions["initial_key_position"]
+        door_position = positions["initial_door_position"]
+        goal_position = positions["initial_goal_position"]
+        assert key_position is not None and door_position is not None and goal_position is not None
+        current_failure = {
+            "failure_type": result.failure_type,
+            "failure_reason": result.failure_reason,
+            **_door_key_features(key_position, door_position, goal_position),
+            "key_collected": int(evidence.get("key_collected") is True),
+            "door_unlocked": int(evidence.get("door_unlocked") is True),
+            "goal_completed": int(evidence.get("goal_completed") is True),
         }
     retrieved = json.loads(serialize_memory_context(entries))
     context = json.dumps(
@@ -245,6 +374,8 @@ def _serialized_entry(entry: MemoryEntry) -> dict[str, int | str]:
         ("initial_marker_count", "remaining_marker_count")
         if entry.task == "CleanHouse"
         else ("goal_marker_count", "correct_marker_count", "incorrect_marker_count")
+        if entry.task == "FourCorners"
+        else (*_DOOR_KEY_FEATURE_KEYS, "key_collected", "door_unlocked", "goal_completed")
     )
     return {
         "entry_id": entry.entry_id,
@@ -255,10 +386,4 @@ def _serialized_entry(entry: MemoryEntry) -> dict[str, int | str]:
 
 
 def _evidence_quality(evidence: dict[str, int | str]) -> int:
-    return sum(
-        (
-            isinstance(evidence.get("initial_marker_count"), int),
-            isinstance(evidence.get("remaining_marker_count"), int),
-            isinstance(evidence.get("failure_reason"), str),
-        )
-    )
+    return sum(isinstance(value, (int, str)) for value in evidence.values())

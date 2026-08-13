@@ -7,6 +7,7 @@ from llm_gs.manifest import resolve_manifest
 from llm_gs.memory import (
     StructuredRetriever,
     curate_clean_house_attempt,
+    curate_door_key_attempt,
     curate_four_corners_attempt,
     serialize_memory_context,
     serialize_repair_context,
@@ -107,6 +108,31 @@ def test_four_corners_memory_retrieval_rejects_clean_house_entries() -> None:
     )
 
     assert entries == []
+
+
+def test_door_key_memory_retrieval_rejects_other_task_entries() -> None:
+    result = EpisodeResult(
+        outcome="partial_completion",
+        failure_type="task_failure",
+        failure_reason="key_not_collected",
+        evaluation_evidence={
+            "initial_key_position": [2, 3],
+            "initial_door_position": [4, 3],
+            "initial_goal_position": [6, 5],
+            "key_collected": False,
+            "door_unlocked": False,
+            "goal_completed": False,
+        },
+    )
+    door_key = curate_door_key_attempt("door-key", "DEF run m( left m)", result)
+    clean_house = curate_clean_house_attempt("clean-house", "DEF run m( move m)", _failure())
+
+    entries, outcome = StructuredRetriever((clean_house, door_key), task="DoorKey").retrieve(
+        result
+    )
+
+    assert entries == [door_key]
+    assert outcome.candidate_components[clean_house.entry_id].task_compatible is False
 
 
 def test_memory_snapshot_is_read_only_and_excludes_current_execution_entries(tmp_path) -> None:

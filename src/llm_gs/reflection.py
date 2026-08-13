@@ -12,10 +12,11 @@ class RepeatedRepairError(ValueError):
 
 
 class RepairCycle:
-    def __init__(self, maximum_repairs: int = 3) -> None:
+    def __init__(self, maximum_repairs: int = 3, task_name: str | None = None) -> None:
         if maximum_repairs < 0:
             raise ValueError("maximum repairs cannot be negative")
         self._maximum_repairs = maximum_repairs
+        self._task_name = task_name
 
     def diagnose(
         self, result: EpisodeResult, evidence_index: int, retrieved_data: str | None = None
@@ -50,9 +51,11 @@ class RepairCycle:
     ) -> RepairAttempt:
         if repair_round > self._maximum_repairs:
             raise ValueError("repair cycle limit exhausted")
-        _validate_dsl(candidate.source)
-        candidate_hash = normalized_ast_hash(candidate.source)
-        prior_hashes = seen_ast_hashes or {normalized_ast_hash(parent.source)}
+        _validate_dsl(candidate.source, self._task_name)
+        candidate_hash = normalized_ast_hash(candidate.source, self._task_name)
+        prior_hashes = seen_ast_hashes or {
+            normalized_ast_hash(parent.source, self._task_name)
+        }
         if candidate_hash in prior_hashes:
             raise RepeatedRepairError("repair repeated an attempted AST")
         return RepairAttempt(
@@ -60,14 +63,19 @@ class RepairCycle:
             candidate=candidate,
             diagnosis=diagnosis,
             intent=intent,
-            normalized_ast_difference=_ast_difference(parent.source, candidate.source),
+            normalized_ast_difference=_ast_difference(
+                parent.source, candidate.source, self._task_name
+            ),
             round=repair_round,
         )
 
 
-def _normalized_ast_hash(source: str) -> str:
-    return normalized_ast_hash(source)
+def _normalized_ast_hash(source: str, task_name: str | None = None) -> str:
+    return normalized_ast_hash(source, task_name)
 
 
-def _ast_difference(parent: str, child: str) -> str:
-    return f"{_normalized_ast_hash(parent)[:12]}->{_normalized_ast_hash(child)[:12]}"
+def _ast_difference(parent: str, child: str, task_name: str | None = None) -> str:
+    return (
+        f"{_normalized_ast_hash(parent, task_name)[:12]}"
+        f"->{_normalized_ast_hash(child, task_name)[:12]}"
+    )

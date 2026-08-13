@@ -270,7 +270,7 @@ seeds:
         ).stdout
     )
     assert report["status"] == "completed"
-    assert report["outcomes"] == {"partial_completion": 1}
+    assert report["outcomes"] == {"partial_completion": 4}
     assert report["evaluation_evidence"][0]["failure_reason"] == "no_markers_collected"
 
 
@@ -393,8 +393,8 @@ seeds:
             "report", "--workspace", str(workspace), "--experiment-id", validation["experiment_id"]
         ).stdout
     )
-    assert report["episode_evaluations"] == 2
-    assert report["outcomes"] == {"partial_completion": 2}
+    assert report["episode_evaluations"] == 8
+    assert report["outcomes"] == {"partial_completion": 8}
 
 
 def test_reflect_strategy_runs_a_repaired_candidate_after_failure(tmp_path: Path) -> None:
@@ -633,7 +633,7 @@ failure_strategy:
     validation = json.loads(run_cli("validate", str(specification)).stdout)
     assert (
         validation["manifest"]["memory_snapshot"]["retriever_version"]
-        == "structured-clean-house-v3"
+        == "structured-task-v4"
     )
 
     run = run_cli("run", str(specification), "--workspace", str(workspace))
