@@ -92,6 +92,7 @@ def test_valid_specification_runs_offline_through_a_deterministic_report(
     assert first_report.stdout == second_report.stdout
     assert json.loads(first_report.stdout) == {
         "candidate_programs": 1,
+        "evaluation_evidence": [],
         "episode_evaluations": 1,
         "execution_id": "exec_000001",
         "experiment_id": validation["experiment_id"],
@@ -183,6 +184,7 @@ seeds:
     )
     assert report["status"] == "completed"
     assert report["outcomes"] == {"partial_completion": 1}
+    assert report["evaluation_evidence"][0]["failure_reason"] == "no_markers_collected"
 
 
 def test_experiment_identity_ignores_aliases_but_captures_resolved_components(

@@ -123,6 +123,48 @@ class V1Adapter:
             terminal_state,
         )
 
+    def assert_equivalent(
+        self,
+        task_name: V1TaskName,
+        program_source: str,
+        seed: int,
+        limits: V1ExecutionLimits,
+    ) -> None:
+        """Reject adapter baseline use unless deterministic V1 facts still agree."""
+        adapter_result = self.evaluate(task_name, program_source, seed, limits)
+        baseline_result = _evaluate_v1_baseline(task_name, program_source, seed, limits)
+        if adapter_result != baseline_result:
+            raise ValueError("V1 adapter equivalence failed; baseline selection is blocked")
+
+
+def _evaluate_v1_baseline(
+    task_name: V1TaskName,
+    program_source: str,
+    seed: int,
+    limits: V1ExecutionLimits,
+) -> V1ExecutionResult:
+    execution_target, dsl = create_replay_environment(
+        task_name,
+        seed,
+        {
+            "crashable": limits.crashable,
+            "crash_penalty": limits.crash_penalty,
+            "max_calls": limits.max_calls,
+        },
+    )
+    reward = execution_target.evaluate_program(dsl.parse_str_to_node(program_source))
+    environment = (
+        execution_target.get_environment()
+        if isinstance(execution_target, BaseTask)
+        else execution_target
+    )
+    return V1ExecutionResult(
+        terminal_state=_terminal_state(task_name, environment),
+        reward=reward,
+        crashed=environment.is_crashed(),
+        program_call_count=environment.num_calls,
+    )
+
 
 def _terminal_state(task_name: V1TaskName, environment: Any) -> str:
     if task_name == "CleanHouse":

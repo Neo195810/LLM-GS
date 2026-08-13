@@ -58,6 +58,17 @@ class EpisodeResult(StrictContract):
     terminal_state: str | None = None
 
 
+class EvaluationEvidence(StrictContract):
+    outcome: Literal[
+        "success", "partial_completion", "policy_crash", "invalid_program", "evaluation_error"
+    ]
+    normalized_progress: float
+    failure_type: str | None = None
+    failure_reason: str | None = None
+    evidence: dict[str, object] | None = None
+    terminal_state: str | None = None
+
+
 class ExperimentReport(StrictContract):
     report_version: Literal[1] = 1
     experiment_id: str
@@ -67,3 +78,4 @@ class ExperimentReport(StrictContract):
     episode_evaluations: int
     model_requests: int
     outcomes: dict[str, int]
+    evaluation_evidence: list[EvaluationEvidence] = Field(default_factory=list)

@@ -98,3 +98,15 @@ def test_clean_house_adapter_emits_versioned_partial_completion_evidence() -> No
         "program_call_count": 1,
         "terminal_state": result.terminal_state,
     }
+
+
+def test_equivalence_failure_blocks_baseline_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = V1Adapter()
+    monkeypatch.setattr(
+        adapter,
+        "evaluate",
+        lambda *_: type("Mismatch", (), {"terminal_state": "wrong"})(),
+    )
+
+    with pytest.raises(ValueError, match="baseline selection is blocked"):
+        adapter.assert_equivalent("CleanHouse", "DEF run m( turnLeft m)", 7, V1ExecutionLimits(10))

@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from llm_gs.contracts import CandidateProgram, EpisodeResult, ExperimentManifest, ExperimentReport
+from llm_gs.contracts import (
+    CandidateProgram,
+    EpisodeResult,
+    EvaluationEvidence,
+    ExperimentManifest,
+    ExperimentReport,
+)
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, OFFLINE_PROMPT
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 
@@ -34,9 +40,10 @@ class OfflineEchoEvaluator:
 
 class CleanHouseEvaluator:
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
-        attempt = V1Adapter().evaluate_attempt(
-            "CleanHouse", candidate.source, task_seed, V1ExecutionLimits(max_calls=10)
-        )
+        adapter = V1Adapter()
+        limits = V1ExecutionLimits(max_calls=10)
+        adapter.assert_equivalent("CleanHouse", candidate.source, task_seed, limits)
+        attempt = adapter.evaluate_attempt("CleanHouse", candidate.source, task_seed, limits)
         return EpisodeResult(
             outcome=attempt.outcome,
             normalized_progress=attempt.normalized_progress,
@@ -60,12 +67,28 @@ def execute(
     task_seeds = manifest.specification["seeds"]
     if not isinstance(task_seeds, dict) or not isinstance(task_seeds.get("task"), list):
         raise ValueError("resolved manifest contains invalid task seeds")
-    result = evaluator.evaluate(candidate, int(task_seeds["task"][0]))
+    results = [evaluator.evaluate(candidate, int(seed)) for seed in task_seeds["task"]]
+    outcomes: dict[str, int] = {}
+    evidence: list[EvaluationEvidence] = []
+    for result in results:
+        outcomes[result.outcome] = outcomes.get(result.outcome, 0) + 1
+        if result.evaluation_evidence is not None:
+            evidence.append(
+                EvaluationEvidence(
+                    outcome=result.outcome,
+                    normalized_progress=result.normalized_progress,
+                    failure_type=result.failure_type,
+                    failure_reason=result.failure_reason,
+                    evidence=result.evaluation_evidence,
+                    terminal_state=result.terminal_state,
+                )
+            )
     return ExperimentReport(
         experiment_id=experiment_id,
         execution_id=execution_id,
         candidate_programs=1,
-        episode_evaluations=result.episode_evaluations,
+        episode_evaluations=sum(result.episode_evaluations for result in results),
         model_requests=candidate.model_requests,
-        outcomes={result.outcome: 1},
+        outcomes=outcomes,
+        evaluation_evidence=evidence,
     )
