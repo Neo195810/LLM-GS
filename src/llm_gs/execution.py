@@ -111,6 +111,9 @@ def execute_resumable(
         store.begin_execution_for_experiment(
             manifest, experiment_id, new_execution_id, candidate.source, candidate.model_requests
         )
+        records = getattr(model, "records", None)
+        if isinstance(records, list):
+            store.save_model_request_records(new_execution_id, records)
         work = store.next_pending_work(experiment_id)
     completed = 0
     while work is not None:

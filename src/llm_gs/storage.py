@@ -9,6 +9,7 @@ from pathlib import Path
 
 from llm_gs.contracts import ExperimentManifest, ExperimentReport
 from llm_gs.manifest import canonical_json
+from llm_gs.proposer import ModelRequestRecord
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,26 @@ class WorkspaceStore:
                 (work.execution_id,),
             )
 
+    def save_model_request_records(
+        self, execution_id: str, records: list[ModelRequestRecord]
+    ) -> None:
+        with self._connect() as connection:
+            for record in records:
+                connection.execute(
+                    """INSERT OR IGNORE INTO model_request_records(
+                    execution_id, attempt, input_tokens, output_tokens, cached_tokens, finish_reason,
+                    warning) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        execution_id,
+                        record.attempt,
+                        record.input_tokens,
+                        record.output_tokens,
+                        record.cached_tokens,
+                        record.finish_reason,
+                        record.warning,
+                    ),
+                )
+
     def save(self, manifest: ExperimentManifest, report: ExperimentReport) -> None:
         with self._connect() as connection:
             connection.execute(
@@ -160,5 +181,6 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS program_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, source TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS artifacts (artifact_hash TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS episode_evaluations (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, task_seed INTEGER NOT NULL, episode_json TEXT NOT NULL, artifact_hash TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, PRIMARY KEY (execution_id, attempt));
         """)
         return connection

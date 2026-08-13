@@ -16,6 +16,7 @@ from llm_gs.execution import (
     execute_resumable,
 )
 from llm_gs.manifest import experiment_id, load_specification, resolve_manifest
+from llm_gs.proposer import OpenAIProposer
 from llm_gs.storage import WorkspaceStore
 
 
@@ -32,7 +33,7 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         manifest,
         resolved_experiment_id,
         store,
-        FakeOpenAIClient(),
+        _model_client(args),
         CleanHouseEvaluator() if manifest.task["name"] == "CleanHouse" else OfflineEchoEvaluator(),
         args.stop_after,
     )
@@ -52,7 +53,7 @@ def _resume(args: argparse.Namespace) -> dict[str, object]:
         manifest,
         args.experiment_id,
         store,
-        FakeOpenAIClient(),
+        _model_client(args),
         CleanHouseEvaluator() if manifest.task["name"] == "CleanHouse" else OfflineEchoEvaluator(),
     )
     return {
@@ -78,11 +79,15 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("specification", type=Path)
     run.add_argument("--workspace", type=Path, required=True)
     run.add_argument("--stop-after", type=int)
+    run.add_argument("--enable-live-openai", action="store_true")
+    run.add_argument("--max-cost-usd", type=float)
     run.set_defaults(handler=_run)
 
     resume = commands.add_parser("resume")
     resume.add_argument("--workspace", type=Path, required=True)
     resume.add_argument("--experiment-id", required=True)
+    resume.add_argument("--enable-live-openai", action="store_true")
+    resume.add_argument("--max-cost-usd", type=float)
     resume.set_defaults(handler=_resume)
 
     report = commands.add_parser("report")
@@ -90,6 +95,14 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--experiment-id", required=True)
     report.set_defaults(handler=_report)
     return parser
+
+
+def _model_client(args: argparse.Namespace) -> FakeOpenAIClient | OpenAIProposer:
+    if not args.enable_live_openai:
+        return FakeOpenAIClient()
+    if args.max_cost_usd is None or args.max_cost_usd <= 0:
+        raise ValueError("live OpenAI requires a positive --max-cost-usd")
+    return OpenAIProposer()
 
 
 def _fail(message: str) -> NoReturn:
