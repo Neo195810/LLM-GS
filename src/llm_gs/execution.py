@@ -8,8 +8,10 @@ from llm_gs.contracts import (
     EvaluationEvidence,
     ExperimentManifest,
     ExperimentReport,
+    RepairIntent,
 )
 from llm_gs.manifest import CLEAN_HOUSE_PROMPT, OFFLINE_PROMPT
+from llm_gs.reflection import RepairCycle
 from llm_gs.storage import WorkspaceStore
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 
@@ -22,13 +24,41 @@ class Evaluator(Protocol):
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult: ...
 
 
+class Repairer(Protocol):
+    def repair(self, prompt: str) -> CandidateProgram: ...
+
+
 class FakeOpenAIClient:
     def propose(self, prompt: str) -> CandidateProgram:
+        if prompt.startswith("Repair CleanHouse"):
+            return CandidateProgram(source="DEF run m( move m)")
         if prompt == CLEAN_HOUSE_PROMPT:
             return CandidateProgram(source="DEF run m( turnLeft m)")
         if prompt != OFFLINE_PROMPT:
             raise ValueError("fake model received an unknown prompt")
         return CandidateProgram(source="SUCCESS")
+
+    def repair(self, prompt: str) -> CandidateProgram:
+        return self.propose(prompt)
+
+
+def reflect_once(
+    parent: CandidateProgram,
+    result: EpisodeResult,
+    repairer: Repairer,
+    cycle: RepairCycle,
+    execution_id: str,
+    store: WorkspaceStore,
+) -> CandidateProgram:
+    diagnosis = cycle.diagnose(result, evidence_index=0)
+    intent = RepairIntent(
+        intended_change="replace the stalled action sequence",
+        preserved_behavior="a complete valid Karel DSL program",
+    )
+    candidate = repairer.repair(f"Repair CleanHouse using: {diagnosis.observation}")
+    repair = cycle.repair(parent, diagnosis, intent, candidate.source, round=1)
+    store.save_repair_attempt(execution_id, repair)
+    return repair.candidate
 
 
 class OfflineEchoEvaluator:

@@ -69,6 +69,28 @@ class EvaluationEvidence(StrictContract):
     terminal_state: str | None = None
 
 
+class Diagnosis(StrictContract):
+    version: Literal[1] = 1
+    evidence_index: int = Field(ge=0)
+    observation: str = Field(min_length=1)
+    hypothesis: str = Field(min_length=1)
+
+
+class RepairIntent(StrictContract):
+    version: Literal[1] = 1
+    intended_change: str = Field(min_length=1)
+    preserved_behavior: str = Field(min_length=1)
+
+
+class RepairAttempt(StrictContract):
+    parent_source: str
+    candidate: CandidateProgram
+    diagnosis: Diagnosis
+    intent: RepairIntent
+    normalized_ast_difference: str
+    round: int = Field(ge=1)
+
+
 class ExperimentReport(StrictContract):
     report_version: Literal[1] = 1
     experiment_id: str

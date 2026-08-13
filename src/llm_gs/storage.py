@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from llm_gs.contracts import ExperimentManifest, ExperimentReport
+from llm_gs.contracts import ExperimentManifest, ExperimentReport, RepairAttempt
 from llm_gs.manifest import canonical_json
 from llm_gs.proposer import ModelRequestRecord
 
@@ -122,6 +122,23 @@ class WorkspaceStore:
                     ),
                 )
 
+    def save_repair_attempt(self, execution_id: str, repair: RepairAttempt) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """INSERT INTO repair_attempts(
+                execution_id, round, parent_source, candidate_source, diagnosis_json, intent_json,
+                normalized_ast_difference) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    execution_id,
+                    repair.round,
+                    repair.parent_source,
+                    repair.candidate.source,
+                    repair.diagnosis.model_dump_json(),
+                    repair.intent.model_dump_json(),
+                    repair.normalized_ast_difference,
+                ),
+            )
+
     def save(self, manifest: ExperimentManifest, report: ExperimentReport) -> None:
         with self._connect() as connection:
             connection.execute(
@@ -191,5 +208,6 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS artifacts (artifact_hash TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS episode_evaluations (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, task_seed INTEGER NOT NULL, episode_json TEXT NOT NULL, artifact_hash TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, PRIMARY KEY (execution_id, attempt));
+        CREATE TABLE IF NOT EXISTS repair_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, round INTEGER NOT NULL, parent_source TEXT NOT NULL, candidate_source TEXT NOT NULL, diagnosis_json TEXT NOT NULL, intent_json TEXT NOT NULL, normalized_ast_difference TEXT NOT NULL, UNIQUE(execution_id, round));
         """)
         return connection
