@@ -13,6 +13,7 @@ from llm_gs.contracts import (
 from llm_gs.reflection import _normalized_ast_hash
 
 SEARCH_STRATEGY_VERSION = "v1"
+CEBS_SEARCH_STRATEGY_VERSION = "v1"
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,28 @@ def _candidate_provenance(candidate: ScoredCandidate) -> dict[str, object]:
     }
 
 
+def _select_elites(
+    candidates: tuple[ScoredCandidate, ...],
+    *,
+    strategy: str,
+    version: str,
+    population_size: int,
+    elite_count: int,
+) -> tuple[int, dict[str, object]]:
+    ranked = sorted(range(len(candidates)), key=lambda index: _selection_key(candidates[index]))
+    elite_indices = ranked[: min(elite_count, len(ranked))]
+    selected_index = elite_indices[0]
+    return selected_index, {
+        "strategy": strategy,
+        "version": version,
+        "configured_population_size": population_size,
+        "configured_elite_count": elite_count,
+        "observed_population_size": len(candidates),
+        "elite_candidates": [_candidate_provenance(candidates[index]) for index in elite_indices],
+        "selection": _candidate_provenance(candidates[selected_index]),
+    }
+
+
 @dataclass(frozen=True)
 class SingleCandidateSearchStrategy:
     name: str = "single_candidate"
@@ -87,20 +110,32 @@ class CEMSearchStrategy:
     version: str = SEARCH_STRATEGY_VERSION
 
     def select(self, candidates: tuple[ScoredCandidate, ...]) -> tuple[int, dict[str, object]]:
-        ranked = sorted(range(len(candidates)), key=lambda index: _selection_key(candidates[index]))
-        elite_indices = ranked[: min(self.elite_count, len(ranked))]
-        selected_index = elite_indices[0]
-        return selected_index, {
-            "strategy": self.name,
-            "version": self.version,
-            "configured_population_size": self.population_size,
-            "configured_elite_count": self.elite_count,
-            "observed_population_size": len(candidates),
-            "elite_candidates": [
-                _candidate_provenance(candidates[index]) for index in elite_indices
-            ],
-            "selection": _candidate_provenance(candidates[selected_index]),
-        }
+        return _select_elites(
+            candidates,
+            strategy=self.name,
+            version=self.version,
+            population_size=self.population_size,
+            elite_count=self.elite_count,
+        )
+
+
+@dataclass(frozen=True)
+class CEBSSearchStrategy:
+    """Deterministically retain the highest-scoring CEBS elite candidate programs."""
+
+    population_size: int
+    elite_count: int
+    name: str = "cebs"
+    version: str = CEBS_SEARCH_STRATEGY_VERSION
+
+    def select(self, candidates: tuple[ScoredCandidate, ...]) -> tuple[int, dict[str, object]]:
+        return _select_elites(
+            candidates,
+            strategy=self.name,
+            version=self.version,
+            population_size=self.population_size,
+            elite_count=self.elite_count,
+        )
 
 
 def resolve_search_strategy(configuration: ResolvedSearchStrategyConfiguration) -> SearchStrategy:
@@ -109,6 +144,11 @@ def resolve_search_strategy(configuration: ResolvedSearchStrategyConfiguration) 
         return SingleCandidateSearchStrategy()
     if name == "cem":
         return CEMSearchStrategy(
+            population_size=configuration.population_size,
+            elite_count=configuration.elite_count,
+        )
+    if name == "cebs":
+        return CEBSSearchStrategy(
             population_size=configuration.population_size,
             elite_count=configuration.elite_count,
         )

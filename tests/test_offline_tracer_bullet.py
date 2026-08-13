@@ -752,6 +752,134 @@ failure_strategy:
     assert len(selection["elite_candidates"]) == 1
 
 
+def test_frozen_memory_cebs_records_candidate_selection_provenance(tmp_path: Path) -> None:
+    specification = tmp_path / "cebs.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: clean-house-cebs
+task:
+  name: CleanHouse
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+search_strategy:
+  name: cebs
+  population_size: 2
+  elite_count: 1
+failure_strategy:
+  name: memory_reflect
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert validation["manifest"]["search_strategy"] == {
+        "elite_count": 1,
+        "name": "cebs",
+        "population_size": 2,
+        "replicate": 0,
+        "seed": 0,
+        "version": "v1",
+    }
+
+    assert run_cli("run", str(specification), "--workspace", str(workspace)).returncode == 0
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    )
+
+    selection = report["audit"]["frozen_memory_protocol"]["selection"]
+    assert selection["strategy"] == "cebs"
+    assert selection["version"] == "v1"
+    assert selection["configured_population_size"] == 2
+    assert selection["configured_elite_count"] == 1
+    assert selection["observed_population_size"] == 2
+    assert len(selection["elite_candidates"]) == 1
+
+
+@pytest.mark.parametrize("task_name", ["CleanHouse", "FourCorners", "DoorKey", "RedBlueDoor"])
+def test_cebs_runs_through_the_shared_frozen_memory_protocol_for_each_task(
+    tmp_path: Path, task_name: str
+) -> None:
+    specification = tmp_path / f"cebs-{task_name}.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        f"""\
+spec_version: 1
+display_name: cebs-{task_name}
+task:
+  name: {task_name}
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+search_strategy:
+  name: cebs
+  population_size: 2
+  elite_count: 1
+failure_strategy:
+  name: reflect
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    validation = json.loads(run_cli("validate", str(specification)).stdout)
+    assert run_cli("run", str(specification), "--workspace", str(workspace)).returncode == 0
+    report = json.loads(
+        run_cli(
+            "report",
+            "--workspace",
+            str(workspace),
+            "--experiment-id",
+            validation["experiment_id"],
+        ).stdout
+    )
+
+    assert report["audit"]["frozen_memory_protocol"]["selection"]["strategy"] == "cebs"
+
+
+def test_cebs_failure_strategies_share_fixed_seeds_and_budgets(tmp_path: Path) -> None:
+    manifests = []
+    for strategy in ("regenerate", "reflect", "memory_repair", "memory_reflect"):
+        specification = tmp_path / f"cebs-budget-{strategy}.yaml"
+        specification.write_text(
+            f"""\
+spec_version: 1
+display_name: cebs-budget-{strategy}
+task:
+  name: CleanHouse
+seeds:
+  task: [7]
+  search: 19
+  replicate: 2
+search_strategy:
+  name: cebs
+  population_size: 2
+  elite_count: 1
+failure_strategy:
+  name: {strategy}
+  max_repair_cycles: 1
+""",
+            encoding="utf-8",
+        )
+        manifests.append(json.loads(run_cli("validate", str(specification)).stdout)["manifest"])
+
+    assert len({frozenset(manifest["budgets"].items()) for manifest in manifests}) == 1
+    assert len({frozenset(manifest["search_strategy"].items()) for manifest in manifests}) == 1
+
+
 def test_seed_suite_rejects_overlapping_partitions(tmp_path: Path) -> None:
     specification = tmp_path / "overlapping.yaml"
     specification.write_text(

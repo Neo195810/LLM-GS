@@ -41,7 +41,7 @@ class FailureStrategySpecification(StrictContract):
 
 
 class SearchStrategySpecification(StrictContract):
-    name: Literal["single_candidate", "cem"] = "single_candidate"
+    name: Literal["single_candidate", "cem", "cebs"] = "single_candidate"
     population_size: int = Field(default=1, ge=1)
     elite_count: int = Field(default=1, ge=1)
 
