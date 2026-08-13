@@ -10,7 +10,7 @@ from prog_policies.minigrid.dsl import MinigridDSL
 def normalized_ast_hash(source: str, task_name: str | None = None) -> str:
     """Hash the parser's canonical AST serialization, not source formatting."""
     source = _normalize_dsl_whitespace(source)
-    if task_name == "DoorKey":
+    if task_name in {"DoorKey", "RedBlueDoor"}:
         minigrid_dsl = MinigridDSL()  # type: ignore[no-untyped-call]
         canonical_source = minigrid_dsl.parse_node_to_str(
             minigrid_dsl.parse_str_to_node(source)

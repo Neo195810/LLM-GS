@@ -123,7 +123,7 @@ def _proposal_source(response: object) -> str:
 
 
 def _validate_dsl(source: str, task_name: str | None = None) -> None:
-    if task_name == "DoorKey":
+    if task_name in {"DoorKey", "RedBlueDoor"}:
         MinigridDSL().parse_str_to_node(source)  # type: ignore[no-untyped-call]
         return
     if task_name in {"CleanHouse", "FourCorners"}:
@@ -138,6 +138,8 @@ def _validate_dsl(source: str, task_name: str | None = None) -> None:
 def _task_name_from_prompt(prompt: str) -> str | None:
     if "DoorKey" in prompt:
         return "DoorKey"
+    if "RedBlueDoor" in prompt:
+        return "RedBlueDoor"
     if "CleanHouse" in prompt:
         return "CleanHouse"
     if "FourCorners" in prompt:

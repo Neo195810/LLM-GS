@@ -19,6 +19,7 @@ from llm_gs.manifest import (
     FINAL_CANDIDATE_SELECTION_RULE,
     FOUR_CORNERS_PROMPT,
     OFFLINE_PROMPT,
+    RED_BLUE_DOOR_PROMPT,
     task_prompt,
 )
 from llm_gs.memory import (
@@ -26,9 +27,11 @@ from llm_gs.memory import (
     curate_clean_house_attempt,
     curate_door_key_attempt,
     curate_four_corners_attempt,
+    curate_red_blue_door_attempt,
     serialize_repair_context,
 )
 from llm_gs.minigrid_door_key import DoorKeyLimits, MiniGridDoorKeyAdapter
+from llm_gs.minigrid_red_blue_door import RedBlueDoorAdapter, RedBlueDoorLimits
 from llm_gs.proposer import _validate_dsl
 from llm_gs.reflection import RepairCycle, RepeatedRepairError, _normalized_ast_hash
 from llm_gs.search import ScoredCandidate, resolve_search_strategy
@@ -59,12 +62,14 @@ class Repairer(Protocol):
 class FakeOpenAIClient:
     def propose(self, prompt: str) -> CandidateProgram:
         if prompt.startswith(("Repair ", "Reflect on evidence then repair ")):
-            if "DoorKey" in prompt:
+            if "DoorKey" in prompt or "RedBlueDoor" in prompt:
                 return CandidateProgram(source="DEF run m( left m)")
             return CandidateProgram(source="DEF run m( move m)")
         if prompt in {CLEAN_HOUSE_PROMPT, FOUR_CORNERS_PROMPT}:
             return CandidateProgram(source="DEF run m( turnLeft m)")
         if prompt == DOOR_KEY_PROMPT:
+            return CandidateProgram(source="DEF run m( left m)")
+        if prompt == RED_BLUE_DOOR_PROMPT:
             return CandidateProgram(source="DEF run m( left m)")
         if prompt != OFFLINE_PROMPT:
             raise ValueError("fake model received an unknown prompt")
@@ -154,6 +159,14 @@ class DoorKeyEvaluator:
         )
 
 
+class RedBlueDoorEvaluator:
+    def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+        _validate_dsl(candidate.source, task_name="RedBlueDoor")
+        return RedBlueDoorAdapter().evaluate(
+            candidate, task_seed, RedBlueDoorLimits(max_calls=10)
+        )
+
+
 def execute(
     manifest: ExperimentManifest,
     experiment_id: str,
@@ -231,7 +244,7 @@ def execute_resumable(
     if (
         manifest.failure_strategy["name"]
         in {"regenerate", "reflect", "memory_repair", "memory_reflect"}
-        and manifest.task["name"] in {"CleanHouse", "DoorKey", "FourCorners"}
+        and manifest.task["name"] in {"CleanHouse", "DoorKey", "FourCorners", "RedBlueDoor"}
     ):
         return _execute_reflect(manifest, experiment_id, store, model, evaluator, stop_after)
     work = store.next_pending_work(experiment_id)
@@ -401,7 +414,9 @@ def _execute_frozen_memory_protocol(
         candidates.append((current_candidate, current_results))
         seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source, task_name))
 
-    selected_candidate, selection = _select_final_candidate(candidates, manifest.search_strategy)
+    selected_candidate, selection = _select_final_candidate(
+        candidates, manifest.search_strategy, task_name
+    )
     held_out_results = _evaluate_candidate(
         store, execution_id, selected_candidate, suite["held_out"], evaluator
     )
@@ -477,11 +492,12 @@ def _seed_suite(manifest: ExperimentManifest) -> ResolvedSeedSuite:
 def _select_final_candidate(
     candidates: list[tuple[CandidateProgram, list[EpisodeResult]]],
     search_strategy_configuration: dict[str, str | int],
+    task_name: str | None = None,
 ) -> tuple[CandidateProgram, dict[str, object]]:
     if not candidates:
         raise ValueError("cannot select a final candidate without development results")
     scored_candidates = tuple(
-        ScoredCandidate(candidate, tuple(results)) for candidate, results in candidates
+        ScoredCandidate(candidate, tuple(results), task_name) for candidate, results in candidates
     )
     configuration = ResolvedSearchStrategyConfiguration.model_validate(
         search_strategy_configuration
@@ -689,6 +705,8 @@ def _curate_attempt(
         return curate_four_corners_attempt(source_attempt_id, source, result)
     if task_name == "DoorKey":
         return curate_door_key_attempt(source_attempt_id, source, result)
+    if task_name == "RedBlueDoor":
+        return curate_red_blue_door_attempt(source_attempt_id, source, result)
     raise ValueError(f"Task {task_name} does not support Experience Memory")
 
 

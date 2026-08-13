@@ -121,6 +121,37 @@ def curate_door_key_attempt(
     )
 
 
+def curate_red_blue_door_attempt(
+    source_attempt_id: str, source: str, result: EpisodeResult
+) -> MemoryEntry:
+    if result.failure_type is None or result.failure_reason is None:
+        raise ValueError("only failed attempts can become RedBlueDoor memory")
+    evidence = result.evaluation_evidence or {}
+    red_position = _position_evidence(evidence, "initial_red_door_position")
+    blue_position = _position_evidence(evidence, "initial_blue_door_position")
+    if red_position is None or blue_position is None:
+        raise ValueError("memory requires allowlisted RedBlueDoor state features")
+    normalized_hash = normalized_ast_hash(source, "RedBlueDoor")
+    entry_id = hashlib.sha256(f"{source_attempt_id}:{normalized_hash}".encode()).hexdigest()
+    state_features = _red_blue_door_features(red_position, blue_position)
+    return MemoryEntry(
+        entry_id=entry_id,
+        task="RedBlueDoor",
+        failure_type=result.failure_type,
+        failure_reason=result.failure_reason,
+        normalized_ast_hash=normalized_hash,
+        state_features=state_features,
+        evidence={
+            "failure_reason": result.failure_reason,
+            **state_features,
+            "red_door_opened": _boolean_evidence(evidence, "red_door_opened"),
+            "blue_door_opened": _boolean_evidence(evidence, "blue_door_opened"),
+            "red_opened_before_blue": _boolean_evidence(evidence, "red_opened_before_blue"),
+        },
+        source_attempt_id=source_attempt_id,
+    )
+
+
 @dataclass(frozen=True)
 class StructuredRetriever:
     entries: tuple[MemoryEntry, ...]
@@ -217,6 +248,12 @@ def _query_features(task: str, evidence: dict[str, object]) -> tuple[int, ...]:
         assert door_position is not None
         assert goal_position is not None
         return (*key_position, *door_position, *goal_position)
+    if task == "RedBlueDoor":
+        red_position = _position_evidence(evidence, "initial_red_door_position")
+        blue_position = _position_evidence(evidence, "initial_blue_door_position")
+        if red_position is None or blue_position is None:
+            raise ValueError("retrieval requires allowlisted RedBlueDoor evidence")
+        return (*red_position, *blue_position)
     raise ValueError(f"Task {task} does not support Structured Retrieval")
 
 
@@ -233,6 +270,18 @@ def _entry_features(entry: MemoryEntry) -> tuple[tuple[int, ...], int]:
             sum(
                 _memory_int(entry.evidence, field)
                 for field in ("key_collected", "door_unlocked", "goal_completed")
+            ),
+        )
+    if entry.task == "RedBlueDoor":
+        return (
+            tuple(entry.state_features[key] for key in _RED_BLUE_DOOR_FEATURE_KEYS),
+            sum(
+                _memory_int(entry.evidence, field)
+                for field in (
+                    "red_door_opened",
+                    "blue_door_opened",
+                    "red_opened_before_blue",
+                )
             ),
         )
     raise ValueError(f"Task {entry.task} does not support Structured Retrieval")
@@ -272,6 +321,20 @@ def _door_key_features(
     return dict(zip(_DOOR_KEY_FEATURE_KEYS, values, strict=True))
 
 
+_RED_BLUE_DOOR_FEATURE_KEYS = (
+    "red_door_column",
+    "red_door_row",
+    "blue_door_column",
+    "blue_door_row",
+)
+
+
+def _red_blue_door_features(
+    red_position: tuple[int, int], blue_position: tuple[int, int]
+) -> dict[str, int]:
+    return dict(zip(_RED_BLUE_DOOR_FEATURE_KEYS, (*red_position, *blue_position), strict=True))
+
+
 def _query_progress(task: str, evidence: dict[str, object]) -> int:
     """Compatibility helper retained for callers that report scalar progress."""
     features = _query_features(task, evidence)
@@ -285,6 +348,13 @@ def _integer_evidence(evidence: dict[str, object], field: str) -> int:
     if not isinstance(value, int):
         raise ValueError("memory requires allowlisted FourCorners evidence")
     return value
+
+
+def _boolean_evidence(evidence: dict[str, object], field: str) -> int:
+    value = evidence.get(field)
+    if not isinstance(value, bool):
+        raise ValueError(f"memory requires boolean {field} evidence")
+    return int(value)
 
 
 def _memory_int(evidence: dict[str, int | str], field: str) -> int:
@@ -329,7 +399,7 @@ def serialize_repair_context(result: EpisodeResult, entries: list[MemoryEntry]) 
             "failure_reason": result.failure_reason,
             **{field: evidence[field] for field in required},
         }
-    else:
+    elif "initial_key_position" in evidence:
         positions = {
             field: _position_evidence(evidence, field)
             for field in (
@@ -351,6 +421,19 @@ def serialize_repair_context(result: EpisodeResult, entries: list[MemoryEntry]) 
             "key_collected": int(evidence.get("key_collected") is True),
             "door_unlocked": int(evidence.get("door_unlocked") is True),
             "goal_completed": int(evidence.get("goal_completed") is True),
+        }
+    else:
+        red_position = _position_evidence(evidence, "initial_red_door_position")
+        blue_position = _position_evidence(evidence, "initial_blue_door_position")
+        if red_position is None or blue_position is None:
+            raise ValueError("repair context requires allowlisted RedBlueDoor evidence")
+        current_failure = {
+            "failure_type": result.failure_type,
+            "failure_reason": result.failure_reason,
+            **_red_blue_door_features(red_position, blue_position),
+            "red_door_opened": _boolean_evidence(evidence, "red_door_opened"),
+            "blue_door_opened": _boolean_evidence(evidence, "blue_door_opened"),
+            "red_opened_before_blue": _boolean_evidence(evidence, "red_opened_before_blue"),
         }
     retrieved = json.loads(serialize_memory_context(entries))
     context = json.dumps(
@@ -376,6 +459,13 @@ def _serialized_entry(entry: MemoryEntry) -> dict[str, int | str]:
         else ("goal_marker_count", "correct_marker_count", "incorrect_marker_count")
         if entry.task == "FourCorners"
         else (*_DOOR_KEY_FEATURE_KEYS, "key_collected", "door_unlocked", "goal_completed")
+        if entry.task == "DoorKey"
+        else (
+            *_RED_BLUE_DOOR_FEATURE_KEYS,
+            "red_door_opened",
+            "blue_door_opened",
+            "red_opened_before_blue",
+        )
     )
     return {
         "entry_id": entry.entry_id,

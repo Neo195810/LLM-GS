@@ -17,6 +17,7 @@ from llm_gs.execution import (
     FakeOpenAIClient,
     FourCornersEvaluator,
     OfflineEchoEvaluator,
+    RedBlueDoorEvaluator,
     execute_resumable,
 )
 from llm_gs.manifest import experiment_id, load_specification, resolve_manifest
@@ -62,6 +63,8 @@ def _execute_with_failure_recording(
             if manifest.task["name"] == "CleanHouse"
             else DoorKeyEvaluator()
             if manifest.task["name"] == "DoorKey"
+            else RedBlueDoorEvaluator()
+            if manifest.task["name"] == "RedBlueDoor"
             else FourCornersEvaluator()
             if manifest.task["name"] == "FourCorners"
             else OfflineEchoEvaluator(),

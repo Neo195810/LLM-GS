@@ -19,6 +19,7 @@ SEARCH_STRATEGY_VERSION = "v1"
 class ScoredCandidate:
     candidate: CandidateProgram
     results: tuple[EpisodeResult, ...]
+    task_name: str | None = None
 
 
 class SearchStrategy(Protocol):
@@ -42,7 +43,7 @@ def _selection_key(candidate: ScoredCandidate) -> tuple[float | int | str, ...]:
         -(sum(progress) / len(progress)),
         -min(progress),
         sum(result.episode_evaluations for result in candidate.results),
-        _normalized_ast_hash(candidate.candidate.source),
+        _normalized_ast_hash(candidate.candidate.source, candidate.task_name),
     )
 
 
@@ -50,7 +51,9 @@ def _candidate_provenance(candidate: ScoredCandidate) -> dict[str, object]:
     results = candidate.results
     progress = [result.normalized_progress for result in results]
     return {
-        "candidate_source_sha256": _normalized_ast_hash(candidate.candidate.source),
+        "candidate_source_sha256": _normalized_ast_hash(
+            candidate.candidate.source, candidate.task_name
+        ),
         "development_success_rate": sum(result.outcome == "success" for result in results)
         / len(results),
         "development_mean_normalized_progress": sum(progress) / len(progress),

@@ -16,6 +16,7 @@ OFFLINE_PROMPT = "Produce one deterministic offline candidate."
 CLEAN_HOUSE_PROMPT = "Produce one deterministic CleanHouse DSL candidate."
 FOUR_CORNERS_PROMPT = "Produce one deterministic FourCorners DSL candidate."
 DOOR_KEY_PROMPT = "Produce one deterministic MiniGrid DoorKey DSL candidate."
+RED_BLUE_DOOR_PROMPT = "Produce one deterministic MiniGrid RedBlueDoor DSL candidate."
 FINAL_CANDIDATE_SELECTION_RULE = (
     "attempt_outcome,success_proportion,mean_normalized_progress,"
     "worst_normalized_progress,lower_episode_cost,stable_identity"
@@ -67,12 +68,12 @@ def load_specification(path: Path) -> ExperimentSpecification:
 
 def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManifest:
     is_karel_task = specification.task.name in {"CleanHouse", "FourCorners"}
-    is_door_key = specification.task.name == "DoorKey"
+    is_minigrid_task = specification.task.name in {"DoorKey", "RedBlueDoor"}
     task_name = specification.task.name
     repair_rounds = (
         specification.failure_strategy.max_repair_cycles
         if (
-            is_karel_task or is_door_key
+            is_karel_task or is_minigrid_task
             or specification.failure_strategy.name != "regenerate"
             or specification.seed_suite is not None
         )
@@ -94,7 +95,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
     # OpenAIProposer permits up to three schema/DSL correction requests for
     # every candidate, so the request budget must include that bounded retry.
     model_request_budget = (
-        candidate_budget * 3 if is_karel_task or is_door_key else candidate_budget
+        candidate_budget * 3 if is_karel_task or is_minigrid_task else candidate_budget
     )
     memory_protocol = (
         "frozen-v1"
@@ -108,7 +109,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         dependencies={"uv_lock_sha256": _dependency_identity()},
         components={
             "evaluator": (
-                f"minigrid-{task_name.lower()}-adapter-v1" if is_door_key
+                f"minigrid-{task_name.lower()}-adapter-v1" if is_minigrid_task
                 else f"v1-{task_name.lower()}-adapter-v1" if is_karel_task else "offline-echo-v1"
             ),
             "proposer": "fake-openai-v1",
@@ -118,7 +119,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         contracts={
             "parser": (
                 "minigrid-dsl-v1"
-                if is_door_key
+                if is_minigrid_task
                 else "karel-dsl-v1"
                 if is_karel_task
                 else "offline-dsl-v1"
@@ -128,7 +129,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             ).removeprefix("sha256:"),
             **(
                 {"outcome_classifier": f"{task_name.lower()}-v1"}
-                if is_karel_task or is_door_key
+                if is_karel_task or is_minigrid_task
                 else {}
             ),
         },
@@ -146,7 +147,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         task={
             "adapter_version": 1,
             "name": specification.task.name,
-            **({"outcome_classifier_version": 1} if is_karel_task or is_door_key else {}),
+            **({"outcome_classifier_version": 1} if is_karel_task or is_minigrid_task else {}),
         },
         search_strategy={
             **specification.search_strategy.model_dump(mode="json"),
@@ -198,6 +199,8 @@ def task_prompt(task_name: str) -> str:
         return FOUR_CORNERS_PROMPT
     if task_name == "DoorKey":
         return DOOR_KEY_PROMPT
+    if task_name == "RedBlueDoor":
+        return RED_BLUE_DOOR_PROMPT
     return OFFLINE_PROMPT
 
 
