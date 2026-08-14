@@ -15,3 +15,24 @@ before distributing under closed or otherwise incompatible terms.
 
 TextWorld and its transitive runtime dependencies require a separate recorded
 license review before TextWorldPilot can be promoted to a formal benchmark.
+
+TextWorld runtime license review (recorded 2026-08-14, .venv Python 3.11.15,
+textworld==1.7.0 runtime install):
+
+  - textworld 1.7.0            MIT
+  - jericho 3.3.1               GPL-2.0-or-later (compatible with this
+                                 repository's GPL-3.0 license)
+  - tatsu 5.8.3                 BSD-3-Clause-Attribution
+  - numpy                       BSD-3-Clause
+  - tqdm                        MPL-2.0 AND MIT
+  - networkx                    BSD-3-Clause
+  - more-itertools               MIT
+  - hashids                     BSD/MIT (public domain style permissive)
+  - mementos                    Apache-2.0
+  - termcolor                   MIT
+  - prompt_toolkit              BSD-3-Clause
+
+No copyleft term stronger than this repository's existing GPL-3.0 license was
+found among TextWorld's non-extra runtime dependencies (the `vis`, `pddl`,
+`full`, and `dev` extras were not installed and are out of scope for the
+pilot runtime).

@@ -29,3 +29,15 @@ the following:
 The release-gate code deliberately does not infer any of these results from a
 unit test or from a package declaration. Until recorded measurements and review
 evidence are supplied, the pilot cannot be represented as a formal benchmark.
+
+## Promotion status
+
+`llm-gs textworld promote --evidence docs/release-gates/textworld-release-evidence.json`
+passed on 2026-08-14 under a clean `.venv` (Python 3.11.15). The evidence
+artifact was produced by `scripts/generate_textworld_release_evidence.py`,
+which replays 100 seeds across two independent `.venv` Python processes,
+exercises real success/invalid-action/unsatisfied-precondition episodes,
+records timeout and runtime-error as not-applicable with code citations, and
+measures single- and batch-episode p95 latency, peak RSS, and p95 trace
+bytes in a fresh process. The transitive-license review is recorded in
+`NOTICE`.

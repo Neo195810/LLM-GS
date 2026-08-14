@@ -1,0 +1,1637 @@
+{
+  "batch_episode_p95_ms": 292.64944966416806,
+  "evidence_records": [
+    {
+      "detail": "seed 0, source='WHEN not_has_key DO take_key; WHEN has_key DO unlock_chest; WHEN chest_unlocked DO open_chest' won with terminal_state sha256=sha256:78b236ace1de88b63ab8a4330c58ba650c9980e54c8480b0c52b304a23c35548",
+      "name": "success",
+      "status": "observed"
+    },
+    {
+      "detail": "seed 0, source='WHEN not_has_key DO open_chest' attempted 'open chest' while locked; adapter set failure_reason=invalid_action (terminal_state sha256=sha256:ddcad5af2e08bcc7f10a35802f9d554dc94e6b4e6a46643c2c5c39b9caa45c70)",
+      "name": "invalid_action",
+      "status": "observed"
+    },
+    {
+      "detail": "seed 0, source='WHEN chest_open DO take_key' rule predicate never held so no action ran; adapter set failure_reason=quest_incomplete (sha256=sha256:e0fb72c24a4cd5264e870632b051d6ef4e4ac20e764216e3f75231d5bc7d2d92)",
+      "name": "unsatisfied_precondition",
+      "status": "observed"
+    },
+    {
+      "detail": "TextWorldPilotAdapter.evaluate bounds every episode to limits.max_actions (<=3) with no wall-clock deadline in the adapter or textworld.start(); there is no timeout code path to observe (src/llm_gs/textworld_pilot.py:66-129).",
+      "name": "timeout",
+      "status": "not_applicable"
+    },
+    {
+      "detail": "parse_program() rejects any source outside the fixed DSL grammar before TextWorldPilotAdapter.evaluate() runs (src/llm_gs/textworld_pilot.py:43-56), and the proposer's _validate_dsl() rejects malformed candidates even earlier, so no engine-side runtime error is reachable during evaluate().",
+      "name": "runtime_error",
+      "status": "not_applicable"
+    }
+  ],
+  "license_reviewed": true,
+  "peak_memory_mb": 76.640625,
+  "python311_installation": true,
+  "replay_artifacts": [
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:78b236ace1de88b63ab8a4330c58ba650c9980e54c8480b0c52b304a23c35548",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 0,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":0,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:78b236ace1de88b63ab8a4330c58ba650c9980e54c8480b0c52b304a23c35548",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 0,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":0,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:412f380c93cd9fe974764fe5ad678fc987a22b90d07366038dd09363a58c4431",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 1,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":1,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:412f380c93cd9fe974764fe5ad678fc987a22b90d07366038dd09363a58c4431",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 1,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":1,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:aad62b22c68a030ff4412b6150f3d7cb73c88e98b8c66723a1f5b693fa22d6bc",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 2,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":2,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:aad62b22c68a030ff4412b6150f3d7cb73c88e98b8c66723a1f5b693fa22d6bc",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 2,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":2,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:7ccc6cc0cb9ac3b9599f6b80b088b216eb2bd216933b73ba7b4af89ff245dfb1",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 3,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":3,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:7ccc6cc0cb9ac3b9599f6b80b088b216eb2bd216933b73ba7b4af89ff245dfb1",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 3,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":3,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:9e73f16f8480892e66ef942a1cf928d23e604afe7d392b6333ea7e1117d0dace",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 4,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":4,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:9e73f16f8480892e66ef942a1cf928d23e604afe7d392b6333ea7e1117d0dace",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 4,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":4,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:2751f4f128669fc2c2f946ca69570b88f04aa56f90f5ab8509c0662f2eaf540b",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 5,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":5,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:2751f4f128669fc2c2f946ca69570b88f04aa56f90f5ab8509c0662f2eaf540b",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 5,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":5,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4fbca8b1bfe8de196696a7c167ab2df985d955252870e935be69925dd4bdaba6",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 6,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":6,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4fbca8b1bfe8de196696a7c167ab2df985d955252870e935be69925dd4bdaba6",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 6,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":6,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:28fbcac47bb068356450ed6a9a96a1e3f4175efdcd88ec81fdec6f00b6ac4880",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 7,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":7,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:28fbcac47bb068356450ed6a9a96a1e3f4175efdcd88ec81fdec6f00b6ac4880",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 7,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":7,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4a42fbb608e730bf6d68d9df33b3eebd008ff78aee9e5c466caf7f524a2a2015",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 8,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":8,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4a42fbb608e730bf6d68d9df33b3eebd008ff78aee9e5c466caf7f524a2a2015",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 8,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":8,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:da880a8f049719c16d611924d0ce75183eef114877593c097de4894c74016532",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 9,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":9,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:da880a8f049719c16d611924d0ce75183eef114877593c097de4894c74016532",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 9,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":9,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:1c7aaeb3f535bc2aca66fbeb3b8fe242e5bcc02cf8579ac3baf1c2ab35c9cf40",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 10,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":10,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:1c7aaeb3f535bc2aca66fbeb3b8fe242e5bcc02cf8579ac3baf1c2ab35c9cf40",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 10,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":10,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:fce8153a2abb861d242821a00f64c1642fd7a35cb3b23767214babc35ddaeaad",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 11,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":11,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:fce8153a2abb861d242821a00f64c1642fd7a35cb3b23767214babc35ddaeaad",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 11,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":11,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:a6f9b57c84073763fdfdb76b648f49f4723e6206080bdfab3a59d9dd048bf3a3",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 12,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":12,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:a6f9b57c84073763fdfdb76b648f49f4723e6206080bdfab3a59d9dd048bf3a3",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 12,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":12,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:8273f35e4ab5853d82c03828ffdf96f0d1a80d89f46991b8033704c611c7e4e6",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 13,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":13,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:8273f35e4ab5853d82c03828ffdf96f0d1a80d89f46991b8033704c611c7e4e6",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 13,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":13,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4473620538f0ebea89fb7868897e78a5858c8d45de9e960f94b63c5c2e695f60",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 14,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":14,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4473620538f0ebea89fb7868897e78a5858c8d45de9e960f94b63c5c2e695f60",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 14,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":14,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:46c908883da9ba1f41754ecf5debb170d21b248f8f3cd0c430d13770916861f6",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 15,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":15,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:46c908883da9ba1f41754ecf5debb170d21b248f8f3cd0c430d13770916861f6",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 15,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":15,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:a6fe1d8f79afb4d32d75dbf1d818b90afe563858d9cffd9badc0392127a9392f",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 16,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":16,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:a6fe1d8f79afb4d32d75dbf1d818b90afe563858d9cffd9badc0392127a9392f",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 16,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":16,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:53def4a9cd91608b50594081fb4cb6b1f410f5c7e4758ca81dd3547117824960",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 17,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":17,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:53def4a9cd91608b50594081fb4cb6b1f410f5c7e4758ca81dd3547117824960",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 17,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":17,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:671c0b6f2f7cb1a84ca4469e62b0d5abd052ade7f83e5f84bc91cdabf94b3cd8",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 18,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":18,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:671c0b6f2f7cb1a84ca4469e62b0d5abd052ade7f83e5f84bc91cdabf94b3cd8",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 18,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":18,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:773d81fbb92f7e6efe6a92b2d496253f99e9c17cbe8172d7daeb704563b7ec3f",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 19,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":19,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:773d81fbb92f7e6efe6a92b2d496253f99e9c17cbe8172d7daeb704563b7ec3f",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 19,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":19,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:0a468b59fa8482c7ee73c5e150c8fadbafaf1503d9cb9620360712220ce1e588",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 20,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":20,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:0a468b59fa8482c7ee73c5e150c8fadbafaf1503d9cb9620360712220ce1e588",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 20,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":20,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:f54ad295eef5ce074f2ed06ad04b32e2dcc7c5563b2a121016cb030292235292",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 21,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":21,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:f54ad295eef5ce074f2ed06ad04b32e2dcc7c5563b2a121016cb030292235292",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 21,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":21,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:6c92556b7d47b8d5afbf49e19d9e3ae2a31b98a302f3abc660250f58939b7fb3",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 22,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":22,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:6c92556b7d47b8d5afbf49e19d9e3ae2a31b98a302f3abc660250f58939b7fb3",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 22,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":22,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c4d9eb21d8606e17fdce47c452cbd4161ed3cb556e25b5959cb91527313f2232",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 23,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":23,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c4d9eb21d8606e17fdce47c452cbd4161ed3cb556e25b5959cb91527313f2232",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 23,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":23,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:1a282f98e6fb4d64c2c653aa4611b6616846a43918cc48ae7134d323d2a52be5",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 24,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":24,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:1a282f98e6fb4d64c2c653aa4611b6616846a43918cc48ae7134d323d2a52be5",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 24,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":24,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:f3411fef75580c8f77b25d045eaa3f48c2fce13022a4e23dd62abad3ea7a5f31",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 25,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":25,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:f3411fef75580c8f77b25d045eaa3f48c2fce13022a4e23dd62abad3ea7a5f31",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 25,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":25,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5eeaf85e878694e68b79f781deec2eacb613abd04da701d45ac01f204ba7aba6",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 26,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":26,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5eeaf85e878694e68b79f781deec2eacb613abd04da701d45ac01f204ba7aba6",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 26,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":26,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:e4bc0a3ef49563a86ab91ec069ed5a40a91bdaa6290140381b1728865e322c93",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 27,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":27,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:e4bc0a3ef49563a86ab91ec069ed5a40a91bdaa6290140381b1728865e322c93",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 27,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":27,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:31373cbd057781f92b10411a2fcbc0a61111fe0ec1ce9ec0586116cb4a4fd143",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 28,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":28,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:31373cbd057781f92b10411a2fcbc0a61111fe0ec1ce9ec0586116cb4a4fd143",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 28,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":28,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:00b2520db2176acb0f0cf6bc14774f95519c853fe25b1758a1e02f55d681adc4",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 29,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":29,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:00b2520db2176acb0f0cf6bc14774f95519c853fe25b1758a1e02f55d681adc4",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 29,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":29,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:e8e0f2665be92143b65e3807945f17f18726912e2bfcca8c2874954903acb3c9",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 30,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":30,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:e8e0f2665be92143b65e3807945f17f18726912e2bfcca8c2874954903acb3c9",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 30,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":30,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:66600f8cfbf2a2d3887729788e15359ee9e9610ecdfa76d4e0498334467a541f",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 31,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":31,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:66600f8cfbf2a2d3887729788e15359ee9e9610ecdfa76d4e0498334467a541f",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 31,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":31,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:90f89958aac7bde9e2455ee5dd2e56f3888aab994a900ba7efe2615121aa96d1",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 32,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":32,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:90f89958aac7bde9e2455ee5dd2e56f3888aab994a900ba7efe2615121aa96d1",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 32,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":32,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4fb23e01c67ecc6b8d5e306a25ed34d720f3160f2942dbb5eb527e19dc29a1f2",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 33,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":33,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4fb23e01c67ecc6b8d5e306a25ed34d720f3160f2942dbb5eb527e19dc29a1f2",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 33,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":33,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:53ff2519a58dbe5efd4b89dc22a49a77ee722184c355d2961ecb5dfaf6ca0ae9",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 34,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":34,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:53ff2519a58dbe5efd4b89dc22a49a77ee722184c355d2961ecb5dfaf6ca0ae9",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 34,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":34,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:3926a1dfb102f2e4f1ef573dcbc5cb1e30ba4f1851237dd0edbe846ba0ced46b",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 35,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":35,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:3926a1dfb102f2e4f1ef573dcbc5cb1e30ba4f1851237dd0edbe846ba0ced46b",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 35,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":35,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:54dd35b6d8f92a3b249a10ed29a72cc8665df49fb24e1f96357d45f8758794fb",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 36,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":36,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:54dd35b6d8f92a3b249a10ed29a72cc8665df49fb24e1f96357d45f8758794fb",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 36,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":36,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:54e85e8282841d212af21392121b1f718fcfbf36cb8be124e51fc8ceb91e1fca",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 37,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":37,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:54e85e8282841d212af21392121b1f718fcfbf36cb8be124e51fc8ceb91e1fca",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 37,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":37,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:887e33778afc2f519a577f6a63c0256770929786715f61fd11034ec663da5763",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 38,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":38,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:887e33778afc2f519a577f6a63c0256770929786715f61fd11034ec663da5763",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 38,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":38,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:ad68d43d0911c3d65667fa0179a5f8854990d89d902e119e69ec0a1309972260",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 39,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":39,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:ad68d43d0911c3d65667fa0179a5f8854990d89d902e119e69ec0a1309972260",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 39,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":39,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:19de0f7d7616dfcf3aff3070d33a08fac6c9debb93b2c451fa53d81531197bb5",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 40,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":40,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:19de0f7d7616dfcf3aff3070d33a08fac6c9debb93b2c451fa53d81531197bb5",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 40,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":40,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:590906cd0ad476e2ba8b0a99a3a8b804b1280efcde16d0f8dc48569a8fda6fc2",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 41,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":41,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:590906cd0ad476e2ba8b0a99a3a8b804b1280efcde16d0f8dc48569a8fda6fc2",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 41,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":41,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c1bba555eeda015c30db2cb028f6f29116284f379996339b671876c5cd02f6ff",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 42,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":42,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c1bba555eeda015c30db2cb028f6f29116284f379996339b671876c5cd02f6ff",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 42,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":42,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:fdf7c40d146847c262b3bd08cf859dd02911277a15707c25ff6f0add1e292620",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 43,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":43,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:fdf7c40d146847c262b3bd08cf859dd02911277a15707c25ff6f0add1e292620",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 43,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":43,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:7b67f9b0f6ba5e8206883a8e51ca9518ec0d993574f86a0e0341ee7623d19c21",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 44,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":44,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:7b67f9b0f6ba5e8206883a8e51ca9518ec0d993574f86a0e0341ee7623d19c21",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 44,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":44,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:2b579d3b4b9ccfc9579a5783c1058d5193ad89abcae31b21ff38ca585b664c9d",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 45,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":45,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:2b579d3b4b9ccfc9579a5783c1058d5193ad89abcae31b21ff38ca585b664c9d",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 45,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":45,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:e1fd1e5c71b813edd4f4d8fd4d8370100d24aad3601162b344d629c638c1b31e",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 46,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":46,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:e1fd1e5c71b813edd4f4d8fd4d8370100d24aad3601162b344d629c638c1b31e",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 46,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":46,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c146c1723a25aea6c3042849e8e8299324e66316314252033612bd59dc9d26e6",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 47,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":47,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c146c1723a25aea6c3042849e8e8299324e66316314252033612bd59dc9d26e6",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 47,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":47,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:608e5caae32658656f884b063941c7f9807eda89938c5d148d89929b218dcdee",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 48,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":48,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:608e5caae32658656f884b063941c7f9807eda89938c5d148d89929b218dcdee",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 48,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":48,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:417a2a9db53f94de667e9b317ec3b3f0c1399ef17b8c6e8802749790a7227b39",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 49,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":49,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:417a2a9db53f94de667e9b317ec3b3f0c1399ef17b8c6e8802749790a7227b39",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 49,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":49,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:17cb753d2cfdf36cdd1d6f0efc61d81aada074e38ce836a2ae9fb9b2bff98cf2",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 50,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":50,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:17cb753d2cfdf36cdd1d6f0efc61d81aada074e38ce836a2ae9fb9b2bff98cf2",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 50,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":50,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c4a11aa713ebd87b0b4fe9fbb3760779303b00abb3997a772b001c46f0f023c0",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 51,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":51,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c4a11aa713ebd87b0b4fe9fbb3760779303b00abb3997a772b001c46f0f023c0",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 51,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":51,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:349c12963a84ff107aa36afbfca0e36b8d4c673f5e7c5a52a4366559335588e7",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 52,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":52,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:349c12963a84ff107aa36afbfca0e36b8d4c673f5e7c5a52a4366559335588e7",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 52,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":52,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:122a4eae5d644efd192c9bde9863899a9acd85366c8b5fd6c9b7c15824d44d99",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 53,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":53,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:122a4eae5d644efd192c9bde9863899a9acd85366c8b5fd6c9b7c15824d44d99",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 53,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":53,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:1c8ccbf8e32533bc05a32419c57b22a0361aec374bdb32de86819934502983bb",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 54,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":54,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:1c8ccbf8e32533bc05a32419c57b22a0361aec374bdb32de86819934502983bb",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 54,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":54,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:dbfc192860ac3a8219a64cd7e11625bc889ff9862e98d2a89133e8644ded7989",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 55,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":55,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:dbfc192860ac3a8219a64cd7e11625bc889ff9862e98d2a89133e8644ded7989",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 55,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":55,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:ed73afeb264b58badad86454cbe5d16c444e82307c3d0982167677b388055026",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 56,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":56,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:ed73afeb264b58badad86454cbe5d16c444e82307c3d0982167677b388055026",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 56,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":56,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:2d7b83b0a6c4f0517a40118d965c6f85b9efcb3b0768f01fef412ce5d7fd8896",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 57,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":57,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:2d7b83b0a6c4f0517a40118d965c6f85b9efcb3b0768f01fef412ce5d7fd8896",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 57,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":57,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:e5e04a158caeeaed75716c652d2cddce879edd7d85d3e58302653e88ba024a6d",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 58,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":58,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:e5e04a158caeeaed75716c652d2cddce879edd7d85d3e58302653e88ba024a6d",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 58,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":58,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:be21dfbe4033ac7c86ec67fb33538ab60c9f8981f586c3147afe74270559c450",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 59,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":59,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:be21dfbe4033ac7c86ec67fb33538ab60c9f8981f586c3147afe74270559c450",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 59,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":59,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:97417d354793c9a6caa41123e0f71e75782bc1d76098bc28cb01081562b11c4b",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 60,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":60,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:97417d354793c9a6caa41123e0f71e75782bc1d76098bc28cb01081562b11c4b",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 60,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":60,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:dc3aaa99478b29b3e30da036f988cd3d17461ab88df789b8a1e641ca2c452f87",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 61,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":61,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:dc3aaa99478b29b3e30da036f988cd3d17461ab88df789b8a1e641ca2c452f87",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 61,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":61,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:11b314fe2e188d1a4495293d1fcbb34f52dc5212e1487a1e2b7e7d8c4651792c",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 62,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":62,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:11b314fe2e188d1a4495293d1fcbb34f52dc5212e1487a1e2b7e7d8c4651792c",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 62,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":62,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5b7d97583a06c82dd648a70f3f85f1bf29293cf067bad128f369fe931cb185bd",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 63,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":63,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5b7d97583a06c82dd648a70f3f85f1bf29293cf067bad128f369fe931cb185bd",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 63,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":63,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:05887453d1cab60df097dedbf950e708728ed0cade6201eb829874d863aa62d9",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 64,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":64,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:05887453d1cab60df097dedbf950e708728ed0cade6201eb829874d863aa62d9",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 64,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":64,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:8adb45f42779192e86056fb58f3c4f8d2ccb35a7add2c86f4b4d6b4bfd941b9e",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 65,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":65,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:8adb45f42779192e86056fb58f3c4f8d2ccb35a7add2c86f4b4d6b4bfd941b9e",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 65,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":65,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:78e956aa0124b03e53e925be7dd0c65f9f792ed7ffc5eb70228d5383b207ce48",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 66,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":66,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:78e956aa0124b03e53e925be7dd0c65f9f792ed7ffc5eb70228d5383b207ce48",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 66,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":66,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:41681e3fadd098cf85ef11dac39d444b5865efcd6cc940e67f95297c7c0f632d",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 67,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":67,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:41681e3fadd098cf85ef11dac39d444b5865efcd6cc940e67f95297c7c0f632d",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 67,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":67,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:594558660d4a244a5249c6ada903eb64dbaf206ea41098756b4029be9522de62",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 68,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":68,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:594558660d4a244a5249c6ada903eb64dbaf206ea41098756b4029be9522de62",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 68,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":68,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5ac464607641ef02301d27da93a9c10c35fe54ee2b3c69882847dd6adc2b090a",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 69,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":69,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5ac464607641ef02301d27da93a9c10c35fe54ee2b3c69882847dd6adc2b090a",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 69,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":69,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:937f35b0c8c033d543467536fe3c00bf2669426297a91e588a3bdbeb0a7fe2c6",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 70,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":70,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:937f35b0c8c033d543467536fe3c00bf2669426297a91e588a3bdbeb0a7fe2c6",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 70,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":70,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:9824595295aa889571cacfd36167279d7f9e555bcfeb6f2b5dc7ab976fe167ff",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 71,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":71,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:9824595295aa889571cacfd36167279d7f9e555bcfeb6f2b5dc7ab976fe167ff",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 71,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":71,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:f6e3a2f3f4a4351600fd7418646052362e0a4450625dadd79f93533116996873",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 72,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":72,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:f6e3a2f3f4a4351600fd7418646052362e0a4450625dadd79f93533116996873",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 72,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":72,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:d66e60fca8f05e8a229cd7c65f57be2d0a895d3a104c18ab34286e164b6114ec",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 73,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":73,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:d66e60fca8f05e8a229cd7c65f57be2d0a895d3a104c18ab34286e164b6114ec",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 73,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":73,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:bad68859eafbf5f2ce9bda2639d9d61d5b742c19f85e86da2d174656131fd670",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 74,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":74,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:bad68859eafbf5f2ce9bda2639d9d61d5b742c19f85e86da2d174656131fd670",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 74,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":74,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:590a1ee804bb6bb1b6667f3aba6b0a9f1fe5f286f2d0a035067993ee7ab449da",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 75,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":75,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:590a1ee804bb6bb1b6667f3aba6b0a9f1fe5f286f2d0a035067993ee7ab449da",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 75,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":75,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:87e63423f4330aabfbbc63aaabce777a9dc49ec14633e29651e8999fe3701e73",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 76,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":76,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:87e63423f4330aabfbbc63aaabce777a9dc49ec14633e29651e8999fe3701e73",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 76,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":76,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5ca5cda3e7d5d7b210613ce45ab3976c5c6e87f780340268e5cc0e89d4c92e2b",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 77,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":77,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5ca5cda3e7d5d7b210613ce45ab3976c5c6e87f780340268e5cc0e89d4c92e2b",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 77,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":77,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:507060325595bae54c2a415a87aff8c64c08f8d9f24ad718d4efa4cfb1c7c2e9",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 78,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":78,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:507060325595bae54c2a415a87aff8c64c08f8d9f24ad718d4efa4cfb1c7c2e9",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 78,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":78,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:0ac43a7c266475c3be379086e6039cdc69d0c6e4a537c4c5a0b38c18bcb60ed9",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 79,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":79,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:0ac43a7c266475c3be379086e6039cdc69d0c6e4a537c4c5a0b38c18bcb60ed9",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 79,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":79,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:78ab80429a3c0f01a35f3c2ff4b00f611e2bfa92a8033b1ad70cfc2cc642f075",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 80,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":80,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:78ab80429a3c0f01a35f3c2ff4b00f611e2bfa92a8033b1ad70cfc2cc642f075",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 80,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":80,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:9c75322af26a470a71230aca4de099e266654916312b625e2b37609e0129fe6f",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 81,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":81,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:9c75322af26a470a71230aca4de099e266654916312b625e2b37609e0129fe6f",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 81,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":81,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:1567fc83c17080eab76ba9dd91ca587cda989ded08bad4f3320504effca2097d",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 82,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":82,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:1567fc83c17080eab76ba9dd91ca587cda989ded08bad4f3320504effca2097d",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 82,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":82,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:238ea0248aa8a32a47dd03760bb04abbb9059b1c306acd22b7c279faa2cc151c",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 83,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":83,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:238ea0248aa8a32a47dd03760bb04abbb9059b1c306acd22b7c279faa2cc151c",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 83,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":83,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:71d268af5e40c1788d02da1d865dd911afc7425faad5b4ea1ec860ef89b7c82b",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 84,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":84,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:71d268af5e40c1788d02da1d865dd911afc7425faad5b4ea1ec860ef89b7c82b",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 84,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":84,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:3c1cf81fab8feec649deb6e2e14b347c1bc87048dc353495470b48b4fcb811f9",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 85,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":85,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:3c1cf81fab8feec649deb6e2e14b347c1bc87048dc353495470b48b4fcb811f9",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 85,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":85,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:3dfb94d5625aa973c2df4eb29e02617042fea4f8b1a2aebb86fb290fc245556d",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 86,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":86,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:3dfb94d5625aa973c2df4eb29e02617042fea4f8b1a2aebb86fb290fc245556d",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 86,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":86,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5f32576aaee02ff43af01625cd6d54c536d240ffaa9f26e0a0cbee8e42180167",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 87,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":87,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:5f32576aaee02ff43af01625cd6d54c536d240ffaa9f26e0a0cbee8e42180167",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 87,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":87,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:13e4efc2b4e46e8e6ea9d9f12c0a5db9d2e24b972548448f318fcd1dcea9000c",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 88,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":88,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:13e4efc2b4e46e8e6ea9d9f12c0a5db9d2e24b972548448f318fcd1dcea9000c",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 88,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":88,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:da19fb1cd4ce08454aeaa563885fb67f5987f220d60bb5ffaba2efdfe8085c91",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 89,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":89,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:da19fb1cd4ce08454aeaa563885fb67f5987f220d60bb5ffaba2efdfe8085c91",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 89,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":89,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:9af35be318816da9439322fc570182116ff8dbb5eec766b4548e91c5bb032179",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 90,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":90,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:9af35be318816da9439322fc570182116ff8dbb5eec766b4548e91c5bb032179",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 90,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":90,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:8ab486ea7e0fa36d78e04d75bf47248f86a83c98db0d6a74bb8fee2b0bad7804",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 91,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":91,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:8ab486ea7e0fa36d78e04d75bf47248f86a83c98db0d6a74bb8fee2b0bad7804",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 91,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":91,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:ed72e215d389f7bc04762c110781d56619b647f7af618ddad88542d0bb05f5be",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 92,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":92,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:ed72e215d389f7bc04762c110781d56619b647f7af618ddad88542d0bb05f5be",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 92,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":92,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:ca4f53e386212ac7f547c52f3692cac9d4d2ab27605ae533a808652c811bc380",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 93,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":93,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:ca4f53e386212ac7f547c52f3692cac9d4d2ab27605ae533a808652c811bc380",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 93,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":93,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4514e249d3645b812605fdf97752a254a48b21423817d1cddeee09ba9a07f645",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 94,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":94,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:4514e249d3645b812605fdf97752a254a48b21423817d1cddeee09ba9a07f645",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 94,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":94,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:d83e07d9c4a0939d39d5233a93b4e4b61e906f66da63dcd7fdd310a44430b1e6",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 95,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":95,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:d83e07d9c4a0939d39d5233a93b4e4b61e906f66da63dcd7fdd310a44430b1e6",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 95,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":95,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:8222a836ed9c0019d6f7c8b6f8cbf6b39c5cd2a7ebf553ba834fac7b0b8bd6f3",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 96,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":96,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:8222a836ed9c0019d6f7c8b6f8cbf6b39c5cd2a7ebf553ba834fac7b0b8bd6f3",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 96,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":96,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:a0f6c5dba5da10dc90a9480e0833568a15f0e3f0af4dfb830282bc62d2bf4e4e",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 97,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":97,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:a0f6c5dba5da10dc90a9480e0833568a15f0e3f0af4dfb830282bc62d2bf4e4e",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 97,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":97,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:b2cb6bbc1b4d0a95d24d2070c90173d270ad4681bce9561217729f596b0652b4",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 98,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":98,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:b2cb6bbc1b4d0a95d24d2070c90173d270ad4681bce9561217729f596b0652b4",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 98,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":98,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c941b7cf6010b8b66afa87a13b07ed3e651e648ddf28d5dbaccfd8bb4111a75a",
+      "process_id": "process-a",
+      "score": 1.0,
+      "seed": 99,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":99,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    },
+    {
+      "action_count": 3,
+      "evidence_sha256": "sha256:c941b7cf6010b8b66afa87a13b07ed3e651e648ddf28d5dbaccfd8bb4111a75a",
+      "process_id": "process-b",
+      "score": 1.0,
+      "seed": 99,
+      "terminal_state": "{\"actions\":[\"open_chest\",\"take_key\",\"unlock_chest\"],\"commands\":[\"take key\",\"unlock chest with key\",\"open chest\"],\"facts\":[\"at(P, vault)\",\"at(chest, vault)\",\"in(key, I)\",\"match(key, chest)\",\"open(chest)\"],\"fail_facts\":[\"in(key, chest)\"],\"lost\":false,\"predicates\":[\"not_has_key\",\"has_key\",\"chest_unlocked\",\"chest_open\"],\"quest_id\":\"fixed-key-chest-v1\",\"score\":1,\"seed\":99,\"textworld_version\":\"1.7.0\",\"version\":1,\"vocabulary\":[\"key\",\"chest\"],\"win_facts\":[\"open(chest)\"],\"won\":true}"
+    }
+  ],
+  "single_episode_p95_ms": 2459.8771702032536,
+  "trace_bytes_p95": 478
+}
