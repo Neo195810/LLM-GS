@@ -81,6 +81,7 @@ def test_openai_proposer_corrects_invalid_output_at_most_twice() -> None:
     assert len(responses.calls) == 3
     correction = str(responses.calls[1]["input"])
     assert "Validation error" in correction
+    assert "Validation error (schema):" in correction
     assert "Candidate program" in correction
     assert "DEF run m(" in correction
     assert "Allowed actions:" in correction

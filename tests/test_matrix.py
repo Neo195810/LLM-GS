@@ -187,8 +187,14 @@ max_repair_cycles: 1
             "blocked-by-budget",
             "budget",
         ),
+        (
+            ModelOutputFailure("model request exceeds the configured cost cap"),
+            "blocked-by-budget",
+            "budget",
+        ),
         (TimeoutError("network unavailable"), "infrastructure-failed", "infrastructure"),
         (RuntimeError("evaluator crashed"), "infrastructure-failed", "infrastructure"),
+        (Exception("unexpected runner failure"), "infrastructure-failed", "infrastructure"),
     ],
 )
 def test_matrix_cli_persists_terminal_failure_state_for_every_arm(

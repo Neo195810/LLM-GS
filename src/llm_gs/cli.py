@@ -79,7 +79,7 @@ def _execute_with_failure_recording(
             stop_after,
         )
     except ModelOutputFailure as error:
-        failure_kind = "budget" if "total cost cap" in str(error) else "model_output"
+        failure_kind = "budget" if "cost cap" in str(error) else "model_output"
         store.record_execution_failure(
             experiment_id,
             store.active_execution_id(experiment_id),
@@ -157,7 +157,7 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
                     )
                 store.set_matrix_arm_state(resolved_experiment_id, "completed")
                 break
-            except (RuntimeError, ValueError) as error:
+            except Exception as error:
                 state, error_class = _matrix_arm_failure(error)
                 failed_execution = store.active_execution_id(resolved_experiment_id)
                 if error_class == "execution":
@@ -207,7 +207,7 @@ def _matrix_report(args: argparse.Namespace) -> dict[str, object]:
 
 
 def _matrix_arm_failure(error: Exception) -> tuple[str, str]:
-    if "total cost cap" in str(error):
+    if "cost cap" in str(error):
         return "blocked-by-budget", "budget"
     if isinstance(error.__cause__, ModelOutputFailure) or str(error).startswith(
         "model output failure:"

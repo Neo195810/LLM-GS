@@ -337,7 +337,7 @@ def _estimated_cost_usd(input_tokens: int, output_tokens: int) -> float:
 
 
 def _correction_prompt(
-    original_prompt: str, candidate: str, validation_error: Exception
+    original_prompt: str, candidate: str, validation_error: ProposalValidationError
 ) -> str:
     task_name = _task_name_from_prompt(original_prompt)
     contract = (
@@ -345,7 +345,7 @@ def _correction_prompt(
         if task_name is not None
         else GENERIC_DSL_CONTRACT
     )
-    error_class = type(validation_error).__name__
+    error_class = validation_error.stage
     feedback = (
         "You are receiving an independent correction request. Do not rely on "
         "earlier API messages. Return only JSON matching the proposal schema.\n"
