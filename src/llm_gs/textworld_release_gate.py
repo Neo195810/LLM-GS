@@ -10,6 +10,15 @@ REQUIRED_EVIDENCE_CLASSES = frozenset(
     {"success", "invalid_action", "unsatisfied_precondition", "timeout", "runtime_error"}
 )
 
+# Preregistered formal-benchmark acceptance thresholds (recorded 2026-08-15).
+# Set at roughly 2x the measured baseline in docs/release-gates/textworld-release-evidence.json
+# (single_episode_p95_ms=2460, batch_episode_p95_ms=293, peak_memory_mb=77, trace_bytes_p95=478),
+# to catch regressions without flagging normal run-to-run noise.
+SINGLE_EPISODE_P95_MS_THRESHOLD = 5000.0
+BATCH_EPISODE_P95_MS_THRESHOLD = 1000.0
+PEAK_MEMORY_MB_THRESHOLD = 200.0
+TRACE_BYTES_P95_THRESHOLD = 2000
+
 
 @dataclass(frozen=True)
 class ReplayArtifact:
@@ -137,6 +146,8 @@ def evaluate_release_gate(evidence: TextWorldReleaseEvidence) -> TextWorldReleas
         unmet.append("structured_evidence")
     if not _has_measurements(evidence):
         unmet.append("measured_performance")
+    elif not _within_performance_thresholds(evidence):
+        unmet.append("performance_threshold")
     return TextWorldReleaseGate(not unmet, tuple(unmet))
 
 
@@ -170,6 +181,19 @@ def _has_structured_evidence(records: tuple[EvidenceClassRecord, ...]) -> bool:
         and by_name[name].status in {"observed", "not_applicable"}
         and bool(by_name[name].detail)
         for name in REQUIRED_EVIDENCE_CLASSES
+    )
+
+
+def _within_performance_thresholds(evidence: TextWorldReleaseEvidence) -> bool:
+    assert evidence.single_episode_p95_ms is not None
+    assert evidence.batch_episode_p95_ms is not None
+    assert evidence.peak_memory_mb is not None
+    assert evidence.trace_bytes_p95 is not None
+    return (
+        evidence.single_episode_p95_ms <= SINGLE_EPISODE_P95_MS_THRESHOLD
+        and evidence.batch_episode_p95_ms <= BATCH_EPISODE_P95_MS_THRESHOLD
+        and evidence.peak_memory_mb <= PEAK_MEMORY_MB_THRESHOLD
+        and evidence.trace_bytes_p95 <= TRACE_BYTES_P95_THRESHOLD
     )
 
 

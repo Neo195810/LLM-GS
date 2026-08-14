@@ -136,6 +136,55 @@ def test_textworld_release_gate_rejects_non_finite_measurements() -> None:
     assert gate.unmet_requirements == ("measured_performance",)
 
 
+def test_textworld_release_gate_rejects_measurements_above_preregistered_threshold() -> None:
+    gate = evaluate_release_gate(
+        TextWorldReleaseEvidence(
+            python311_installation=True,
+            license_reviewed=True,
+            replay_artifacts=tuple(
+                ReplayArtifact(seed, process, "terminal", "sha256:evidence", 1.0, 3)
+                for seed in range(100)
+                for process in ("process-a", "process-b")
+            ),
+            evidence_records=tuple(
+                EvidenceClassRecord(name, "observed", "recorded by adapter")
+                for name in REQUIRED_EVIDENCE_CLASSES
+            ),
+            single_episode_p95_ms=5000.01,
+            batch_episode_p95_ms=4.0,
+            peak_memory_mb=128.0,
+            trace_bytes_p95=1024,
+        )
+    )
+
+    assert not gate.passed
+    assert gate.unmet_requirements == ("performance_threshold",)
+
+
+def test_textworld_release_gate_accepts_measurements_at_the_threshold_boundary() -> None:
+    gate = evaluate_release_gate(
+        TextWorldReleaseEvidence(
+            python311_installation=True,
+            license_reviewed=True,
+            replay_artifacts=tuple(
+                ReplayArtifact(seed, process, "terminal", "sha256:evidence", 1.0, 3)
+                for seed in range(100)
+                for process in ("process-a", "process-b")
+            ),
+            evidence_records=tuple(
+                EvidenceClassRecord(name, "observed", "recorded by adapter")
+                for name in REQUIRED_EVIDENCE_CLASSES
+            ),
+            single_episode_p95_ms=5000.0,
+            batch_episode_p95_ms=1000.0,
+            peak_memory_mb=200.0,
+            trace_bytes_p95=2000,
+        )
+    )
+
+    assert gate.passed
+
+
 def test_textworld_formal_promotion_cli_requires_persisted_gate_evidence(tmp_path: Path) -> None:
     evidence = tmp_path / "textworld-release-evidence.json"
     evidence.write_text(

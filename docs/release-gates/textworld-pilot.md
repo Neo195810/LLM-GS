@@ -24,11 +24,19 @@ the following:
 4. Structured evidence for success, invalid action, unsatisfied precondition,
    timeout, and runtime error (or an explicit not-applicable record).
 5. Measured single/batch p95 wall time, peak memory, and p95 trace bytes on the
-   V2 target machine.
+   V2 target machine, each within its preregistered acceptance threshold
+   (recorded 2026-08-15 in `llm_gs.textworld_release_gate`, set at roughly 2x
+   the measured baseline in `docs/release-gates/textworld-release-evidence.json`
+   to catch regressions without flagging normal run-to-run noise):
+   - single-episode p95 wall time <= 5000 ms
+   - batch-episode p95 wall time <= 1000 ms
+   - peak memory <= 200 MB
+   - p95 trace bytes <= 2000 bytes
 
 The release-gate code deliberately does not infer any of these results from a
 unit test or from a package declaration. Until recorded measurements and review
-evidence are supplied, the pilot cannot be represented as a formal benchmark.
+evidence are supplied, and each measurement is within its preregistered
+threshold, the pilot cannot be represented as a formal benchmark.
 
 ## Promotion status
 
