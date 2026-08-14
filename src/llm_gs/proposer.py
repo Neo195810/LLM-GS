@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol, cast
 
@@ -26,6 +28,7 @@ PROPOSAL_SCHEMA = {
 }
 CORRECTION_ATTEMPTS = 2
 FEEDBACK_LIMIT = 8000
+INVALID_OUTPUT_CONTENT_LIMIT = 64 * 1024
 GENERIC_DSL_CONTRACT = (
     "Task name is unspecified. Return JSON with only source. Use exact DSL syntax "
     "DEF run m( <statements> m), and use only actions valid for the identified "
@@ -37,6 +40,8 @@ _SECRET_PATTERNS = (
     re.compile(r"(?i)\b(sk-)[A-Za-z0-9_-]+"),
     re.compile(r"(?i)\b(bearer\s+)[A-Za-z0-9._~-]+"),
     re.compile(r"(?i)(api[_ -]?key\s*[:=]\s*)[^\s,;]+"),
+    re.compile(r"(?i)(token\s*[:=]\s*)[^\s,;]+"),
+    re.compile(r"(?i)(password\s*[:=]\s*)[^\s,;]+"),
 )
 
 
@@ -50,6 +55,10 @@ class ModelOutputFailure(ValueError):
 
 class ProposalValidationError(ValueError):
     """A candidate failed schema extraction or task DSL validation."""
+
+    def __init__(self, stage: str, detail: str) -> None:
+        self.stage = stage
+        super().__init__(detail)
 
 
 class CostBudget:
@@ -79,6 +88,24 @@ class ModelRequestRecord:
     warning: str | None
 
 
+@dataclass(frozen=True)
+class InvalidOutputArtifact:
+    phase: str
+    attempt: int
+    validation_stage: str
+    validation_error: str
+    finish_reason: str | None
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+    response: str
+    response_original_length: int
+    response_truncated: bool
+    correction_prompt: str | None
+    correction_prompt_original_length: int | None
+    correction_prompt_truncated: bool | None
+
+
 class OpenAIProposer:
     """Bounded, schema-constrained Responses API adapter with no secret persistence."""
 
@@ -98,6 +125,12 @@ class OpenAIProposer:
         self._max_cost_usd = max_cost_usd
         self._total_cost_budget = total_cost_budget
         self.records: list[ModelRequestRecord] = []
+        self._invalid_output_observer: Callable[[InvalidOutputArtifact], None] | None = None
+
+    def set_invalid_output_observer(
+        self, observer: Callable[[InvalidOutputArtifact], None] | None
+    ) -> None:
+        self._invalid_output_observer = observer
 
     def propose(self, prompt: str) -> CandidateProgram:
         request_prompt = _bounded_feedback(prompt)
@@ -115,21 +148,27 @@ class OpenAIProposer:
             self._record_usage(response, attempt, reservation)
             try:
                 source = _proposal_source(response)
+            except (AssertionError, KeyError, TypeError, ValueError) as error:
+                validation_error = ProposalValidationError("schema", str(error))
+            else:
                 try:
                     _validate_dsl(source, _task_name_from_prompt(prompt))
                 except Exception as error:
-                    raise ProposalValidationError(str(error)) from error
-                return CandidateProgram(source=source, model_requests=attempt)
-            except (AssertionError, KeyError, TypeError, ValueError) as error:
-                if attempt > CORRECTION_ATTEMPTS:
-                    raise ModelOutputFailure(
-                        "model output failed schema or DSL validation"
-                    ) from error
-                request_prompt = _correction_prompt(
-                    prompt,
-                    _response_candidate(response),
-                    error,
-                )
+                    validation_error = ProposalValidationError("dsl", str(error))
+                else:
+                    return CandidateProgram(source=source, model_requests=attempt)
+            correction_prompt = (
+                None
+                if attempt > CORRECTION_ATTEMPTS
+                else _correction_prompt(prompt, _response_candidate(response), validation_error)
+            )
+            self._observe_invalid_output(response, attempt, validation_error, correction_prompt)
+            if attempt > CORRECTION_ATTEMPTS:
+                raise ModelOutputFailure(
+                    "model output failed schema or DSL validation"
+                ) from validation_error
+            assert correction_prompt is not None
+            request_prompt = correction_prompt
         raise AssertionError("unreachable")
 
     def repair(self, prompt: str) -> CandidateProgram:
@@ -176,6 +215,41 @@ class OpenAIProposer:
                 cached_tokens=cached_tokens,
                 finish_reason=getattr(response, "status", None),
                 warning=warning,
+            )
+        )
+
+    def _observe_invalid_output(
+        self,
+        response: object,
+        attempt: int,
+        validation_error: ProposalValidationError,
+        correction_prompt: str | None,
+    ) -> None:
+        if self._invalid_output_observer is None:
+            return
+        response_text = str(getattr(response, "output_text", ""))
+        bounded_response, response_truncated = _redact_and_bound(response_text)
+        bounded_prompt: str | None = None
+        prompt_truncated: bool | None = None
+        if correction_prompt is not None:
+            bounded_prompt, prompt_truncated = _redact_and_bound(correction_prompt)
+        record = self.records[-1]
+        self._invalid_output_observer(
+            InvalidOutputArtifact(
+                phase="initial", attempt=attempt, validation_stage=validation_error.stage,
+                validation_error=_bounded_feedback(str(validation_error), limit=1000),
+                finish_reason=record.finish_reason,
+                input_tokens=record.input_tokens, output_tokens=record.output_tokens,
+                cached_tokens=record.cached_tokens, response=bounded_response,
+                response_original_length=len(response_text.encode("utf-8")),
+                response_truncated=response_truncated,
+                correction_prompt=bounded_prompt,
+                correction_prompt_original_length=(
+                    len(correction_prompt.encode("utf-8"))
+                    if correction_prompt is not None
+                    else None
+                ),
+                correction_prompt_truncated=prompt_truncated,
             )
         )
 
@@ -279,6 +353,16 @@ def _correction_prompt(
 
 
 def _bounded_feedback(value: str, limit: int = FEEDBACK_LIMIT) -> str:
+    redacted = _redact_secrets(value)
+    if len(redacted) <= limit:
+        return redacted
+    marker = "\n...[TRIMMED]...\n"
+    remaining = max(0, limit - len(marker))
+    head = remaining // 2
+    return redacted[:head] + marker + redacted[-(remaining - head):]
+
+
+def _redact_secrets(value: str) -> str:
     redacted = value
     for pattern in _SECRET_PATTERNS:
         redacted = pattern.sub(
@@ -287,9 +371,18 @@ def _bounded_feedback(value: str, limit: int = FEEDBACK_LIMIT) -> str:
             ),
             redacted,
         )
-    if len(redacted) <= limit:
-        return redacted
-    marker = "\n...[TRIMMED]...\n"
-    remaining = max(0, limit - len(marker))
-    head = remaining // 2
-    return redacted[:head] + marker + redacted[-(remaining - head):]
+    for name, secret in os.environ.items():
+        if secret and any(
+            part in name.upper()
+            for part in ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+        ):
+            redacted = redacted.replace(secret, "[REDACTED]")
+    return redacted
+
+
+def _redact_and_bound(value: str) -> tuple[str, bool]:
+    redacted = _redact_secrets(value)
+    encoded = redacted.encode("utf-8")
+    if len(encoded) <= INVALID_OUTPUT_CONTENT_LIMIT:
+        return redacted, False
+    return encoded[:INVALID_OUTPUT_CONTENT_LIMIT].decode("utf-8", errors="ignore"), True

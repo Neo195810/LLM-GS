@@ -111,6 +111,19 @@ def reflect_once(
     return repair.candidate
 
 
+def _propose_with_invalid_output_observation(
+    model: ModelClient, prompt: str, store: WorkspaceStore, execution_id: str
+) -> CandidateProgram:
+    observer = getattr(model, "set_invalid_output_observer", None)
+    if not callable(observer):
+        return model.propose(prompt)
+    observer(lambda artifact: store.save_invalid_output_artifact(execution_id, artifact))
+    try:
+        return model.propose(prompt)
+    finally:
+        observer(None)
+
+
 class OfflineEchoEvaluator:
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
         if candidate.source != "SUCCESS":
@@ -251,9 +264,14 @@ def execute_resumable(
     if work is None and store.active_execution_id(experiment_id) is None:
         new_execution_id = store.next_execution_id(experiment_id)
         prompt = task_prompt(str(manifest.task["name"]))
-        candidate = model.propose(prompt)
         store.begin_execution_for_experiment(
-            manifest, experiment_id, new_execution_id, candidate.source, candidate.model_requests
+            manifest, experiment_id, new_execution_id, "<pending-candidate>", 0
+        )
+        candidate = _propose_with_invalid_output_observation(
+            model, prompt, store, new_execution_id
+        )
+        store.update_execution_candidate(
+            new_execution_id, candidate.source, candidate.model_requests
         )
         records = getattr(model, "records", None)
         if isinstance(records, list):
@@ -310,7 +328,9 @@ def _execute_frozen_memory_protocol(
     store.begin_execution_for_experiment(
         manifest, experiment_id, execution_id, "<pending-candidate>", 0
     )
-    initial_candidate = model.propose(task_prompt(task_name))
+    initial_candidate = _propose_with_invalid_output_observation(
+        model, task_prompt(task_name), store, execution_id
+    )
     store.update_execution_candidate(
         execution_id, initial_candidate.source, initial_candidate.model_requests
     )
@@ -348,7 +368,9 @@ def _execute_frozen_memory_protocol(
             break
         failed_result = failed_results[0]
         if strategy == "regenerate":
-            replacement = model.propose(task_prompt(task_name))
+            replacement = _propose_with_invalid_output_observation(
+                model, task_prompt(task_name), store, execution_id
+            )
             if store.model_requests(execution_id) + replacement.model_requests > int(
                 manifest.budgets["model_requests"]
             ):
@@ -531,10 +553,13 @@ def _execute_reflect(
     execution_id = store.active_execution_id(experiment_id)
     if execution_id is None:
         execution_id = store.next_execution_id(experiment_id)
-        candidate = model.propose(task_prompt(str(manifest.task["name"])))
         store.begin_execution_for_experiment(
-            manifest, experiment_id, execution_id, candidate.source, candidate.model_requests
+            manifest, experiment_id, execution_id, "<pending-candidate>", 0
         )
+        candidate = _propose_with_invalid_output_observation(
+            model, task_prompt(str(manifest.task["name"])), store, execution_id
+        )
+        store.update_execution_candidate(execution_id, candidate.source, candidate.model_requests)
     else:
         candidate = CandidateProgram(source=store.execution_candidate_source(execution_id))
     seeds = _task_seeds(manifest)
@@ -587,7 +612,9 @@ def _execute_reflect(
             break
         initial_result = failed_results[0]
         if strategy == "regenerate":
-            regenerated_candidate = model.propose(task_prompt(str(manifest.task["name"])))
+            regenerated_candidate = _propose_with_invalid_output_observation(
+                model, task_prompt(str(manifest.task["name"])), store, execution_id
+            )
             if model_requests_used + regenerated_candidate.model_requests > model_request_budget:
                 break
             model_requests_used += regenerated_candidate.model_requests

@@ -19,7 +19,7 @@ from llm_gs.contracts import (
 )
 from llm_gs.manifest import canonical_json, experiment_id
 from llm_gs.memory import RETRIEVER_VERSION
-from llm_gs.proposer import ModelRequestRecord
+from llm_gs.proposer import InvalidOutputArtifact, ModelRequestRecord
 
 
 @dataclass(frozen=True)
@@ -272,6 +272,36 @@ class WorkspaceStore:
                         record.warning,
                     ),
                 )
+
+    def save_invalid_output_artifact(
+        self, execution_id: str, artifact: InvalidOutputArtifact
+    ) -> None:
+        response_hash = self._put_artifact(artifact.response.encode("utf-8"))
+        prompt_hash = (
+            self._put_artifact(artifact.correction_prompt.encode("utf-8"))
+            if artifact.correction_prompt is not None
+            else None
+        )
+        with self._connect() as connection:
+            for artifact_hash in (response_hash, prompt_hash):
+                if artifact_hash is not None:
+                    connection.execute(
+                        "INSERT OR IGNORE INTO artifacts(artifact_hash) VALUES (?)", (artifact_hash,)
+                    )
+            connection.execute(
+                """INSERT INTO invalid_output_artifacts(
+                execution_id, phase, attempt, validation_stage, validation_error, finish_reason,
+                input_tokens, output_tokens, cached_tokens, response_hash, response_original_length,
+                response_truncated, correction_prompt_hash, correction_prompt_original_length,
+                correction_prompt_truncated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    execution_id, artifact.phase, artifact.attempt, artifact.validation_stage,
+                    artifact.validation_error, artifact.finish_reason, artifact.input_tokens,
+                    artifact.output_tokens, artifact.cached_tokens, response_hash,
+                    artifact.response_original_length, artifact.response_truncated, prompt_hash,
+                    artifact.correction_prompt_original_length, artifact.correction_prompt_truncated,
+                ),
+            )
 
     def save_repair_attempt(self, execution_id: str, repair: RepairAttempt) -> None:
         with self._connect() as connection:
@@ -563,13 +593,22 @@ class WorkspaceStore:
                 FROM repair_attempts WHERE execution_id = ? ORDER BY round""",
                 (execution_id,),
             ).fetchall()
+            invalid_output_rows = _query_records(
+                connection,
+                "SELECT phase, attempt, validation_stage, validation_error, finish_reason, "
+                "input_tokens, output_tokens, cached_tokens, response_hash, response_original_length, "
+                "response_truncated, correction_prompt_hash, correction_prompt_original_length, "
+                "correction_prompt_truncated FROM invalid_output_artifacts "
+                "WHERE execution_id = ? ORDER BY id",
+                (execution_id,),
+            )
         if usage is None:
             raise ValueError(f"execution not found: {execution_id}")
         try:
             snapshot_id: str | None = self.memory_snapshot_id(execution_id)
         except ValueError:
             snapshot_id = None
-        return {
+        audit: dict[str, object] = {
             "memory_snapshot_id": snapshot_id,
             "retrievals": [json.loads(str(row[0])) for row in retrieval_rows],
             "repairs": [
@@ -586,6 +625,9 @@ class WorkspaceStore:
                 "episode_evaluations": int(usage[1]),
             },
         }
+        if invalid_output_rows:
+            audit["invalid_output_artifacts"] = invalid_output_rows
+        return audit
 
     def save(self, manifest: ExperimentManifest, report: ExperimentReport) -> None:
         with self._connect() as connection:
@@ -934,6 +976,7 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS artifacts (artifact_hash TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS episode_evaluations (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, task_seed INTEGER NOT NULL, episode_json TEXT NOT NULL, artifact_hash TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, PRIMARY KEY (execution_id, attempt));
+        CREATE TABLE IF NOT EXISTS invalid_output_artifacts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, phase TEXT NOT NULL, attempt INTEGER NOT NULL, validation_stage TEXT NOT NULL, validation_error TEXT NOT NULL, finish_reason TEXT, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, response_hash TEXT NOT NULL, response_original_length INTEGER NOT NULL, response_truncated INTEGER NOT NULL, correction_prompt_hash TEXT, correction_prompt_original_length INTEGER, correction_prompt_truncated INTEGER);
         CREATE TABLE IF NOT EXISTS repair_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, round INTEGER NOT NULL, parent_source TEXT NOT NULL, candidate_source TEXT NOT NULL, diagnosis_json TEXT NOT NULL, intent_json TEXT NOT NULL, normalized_ast_difference TEXT NOT NULL, UNIQUE(execution_id, round));
         CREATE TABLE IF NOT EXISTS memory_entries (entry_id TEXT PRIMARY KEY, entry_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS memory_snapshots (snapshot_id TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL);
@@ -963,6 +1006,28 @@ class WorkspaceStore:
                 "SELECT experiment_id, execution_id, execution_id FROM execution_replacements_v1"
             )
             connection.execute("DROP TABLE execution_replacements_v1")
+        invalid_output_indexes = connection.execute(
+            "PRAGMA index_list(invalid_output_artifacts)"
+        ).fetchall()
+        if any(str(index[3]) == "u" for index in invalid_output_indexes):
+            connection.execute(
+                "ALTER TABLE invalid_output_artifacts RENAME TO invalid_output_artifacts_v1"
+            )
+            connection.execute(
+                """CREATE TABLE invalid_output_artifacts (
+                id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, phase TEXT NOT NULL,
+                attempt INTEGER NOT NULL, validation_stage TEXT NOT NULL,
+                validation_error TEXT NOT NULL, finish_reason TEXT, input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL,
+                response_hash TEXT NOT NULL, response_original_length INTEGER NOT NULL,
+                response_truncated INTEGER NOT NULL, correction_prompt_hash TEXT,
+                correction_prompt_original_length INTEGER, correction_prompt_truncated INTEGER)"""
+            )
+            connection.execute(
+                """INSERT INTO invalid_output_artifacts
+                SELECT * FROM invalid_output_artifacts_v1"""
+            )
+            connection.execute("DROP TABLE invalid_output_artifacts_v1")
         return connection
 
 
