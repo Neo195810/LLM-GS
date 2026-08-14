@@ -5,8 +5,12 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
+from llm_gs import cli
 from llm_gs.contracts import AblationMatrixSpecification
 from llm_gs.matrix import build_matrix_manifests, matrix_report
+from llm_gs.proposer import ModelOutputFailure
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -65,7 +69,12 @@ def test_complete_frozen_ablation_matrix_is_paired_and_reports_all_arms() -> Non
                 "protocol": "Frozen",
                 "fixed_budget_success_rate": 1.0 if index % 2 else 0.0,
                 "missingness": {"incomplete_executions": 0},
-                "failure_classes": {"infrastructure": 0, "model_output": 0, "replacements": 0},
+                "failure_classes": {
+                    "budget": 0,
+                    "infrastructure": 0,
+                    "model_output": 0,
+                    "replacements": 0,
+                },
             }
             for index in range(48)
         ]
@@ -76,6 +85,7 @@ def test_complete_frozen_ablation_matrix_is_paired_and_reports_all_arms() -> Non
     assert report["protocols"]["Online"]["arms"] == 0
     assert report["missingness"] == {"incomplete_executions": 0, "unreported_arms": 0}
     assert report["failure_classes"] == {
+        "budget": 0,
         "infrastructure": 0,
         "model_output": 0,
         "replacements": 0,
@@ -112,7 +122,15 @@ max_repair_cycles: 1
     assert matrix["arms"] == 48
     assert len(matrix["arm_reports"]) == 48
     assert matrix["exclusions"] == {"count": 0, "arms": []}
-    assert matrix["missingness"] == {"incomplete_executions": 0, "unreported_arms": 48}
+    assert matrix["missingness"] == {"incomplete_executions": 0, "unreported_arms": 0}
+    assert matrix["arm_states"] == {
+        "pending": 48,
+        "running": 0,
+        "completed": 0,
+        "model-output-failed": 0,
+        "infrastructure-failed": 0,
+        "blocked-by-budget": 0,
+    }
     assert matrix["protocols"]["Frozen"]["arms"] == 0
     assert matrix["protocols"]["Frozen"]["fixed_budget_success_rate"] is None
     assert matrix["protocols"]["Online"]["arms"] == 0
@@ -146,3 +164,88 @@ max_repair_cycles: 1
     assert matrix["protocols"]["Frozen"]["arms"] == 48
     assert matrix["protocols"]["Online"]["arms"] == 0
     assert matrix["missingness"] == {"incomplete_executions": 0, "unreported_arms": 0}
+    assert matrix["arm_states"] == {
+        "pending": 0,
+        "running": 0,
+        "completed": 48,
+        "model-output-failed": 0,
+        "infrastructure-failed": 0,
+        "blocked-by-budget": 0,
+    }
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_state", "expected_error_class"),
+    [
+        (
+            ModelOutputFailure("model output failed schema or DSL validation"),
+            "model-output-failed",
+            "model_output",
+        ),
+        (
+            ModelOutputFailure("model request exceeds the configured total cost cap"),
+            "blocked-by-budget",
+            "budget",
+        ),
+        (TimeoutError("network unavailable"), "infrastructure-failed", "infrastructure"),
+        (RuntimeError("evaluator crashed"), "infrastructure-failed", "execution"),
+    ],
+)
+def test_matrix_cli_persists_terminal_failure_state_for_every_arm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    expected_state: str,
+    expected_error_class: str,
+) -> None:
+    specification = tmp_path / "matrix.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+matrix_version: 1
+display_name: model-output-failure
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    class FailingModel:
+        def propose(self, prompt: str) -> object:
+            raise failure
+
+        def repair(self, prompt: str) -> object:
+            raise failure
+
+    monkeypatch.setattr(cli, "_model_client", lambda *args, **kwargs: FailingModel())
+    args = cli._parser().parse_args(
+        ["matrix", "run", str(specification), "--workspace", str(workspace)]
+    )
+
+    matrix = args.handler(args)
+
+    assert matrix["arms"] == 48
+    assert matrix["missingness"] == {"incomplete_executions": 0, "unreported_arms": 0}
+    assert matrix["arm_states"] == {
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "model-output-failed": 48 if expected_state == "model-output-failed" else 0,
+        "infrastructure-failed": 48 if expected_state == "infrastructure-failed" else 0,
+        "blocked-by-budget": 48 if expected_state == "blocked-by-budget" else 0,
+    }
+    aggregate_class = (
+        "infrastructure" if expected_error_class == "execution" else expected_error_class
+    )
+    assert matrix["failure_classes"][aggregate_class] == 48
+    assert all(
+        arm["arm_error"]["class"] == expected_error_class for arm in matrix["arm_reports"]
+    )
+    assert all(
+        str(failure) in arm["arm_error"]["detail"]
+        for arm in matrix["arm_reports"]
+    )

@@ -103,6 +103,45 @@ class WorkspaceStore:
                 (pairing, seed_suite_json, budgets_json),
             )
 
+    def register_matrix_arm(self, manifest: ExperimentManifest, experiment_id: str) -> None:
+        """Reserve an observable lifecycle for one preregistered matrix arm."""
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO experiments(experiment_id, manifest_json) VALUES (?, ?)",
+                (experiment_id, canonical_json(manifest.model_dump(mode="json"))),
+            )
+            connection.execute(
+                """INSERT OR IGNORE INTO matrix_arms(experiment_id, state)
+                VALUES (?, CASE
+                    WHEN EXISTS(SELECT 1 FROM executions WHERE experiment_id = ? AND status = 'completed')
+                    THEN 'completed'
+                    WHEN EXISTS(SELECT 1 FROM executions WHERE experiment_id = ? AND status = 'running')
+                    THEN 'running'
+                    ELSE 'pending'
+                END)""",
+                (experiment_id, experiment_id, experiment_id),
+            )
+
+    def set_matrix_arm_state(
+        self,
+        experiment_id: str,
+        state: str,
+        error_class: str | None = None,
+        error_detail: str | None = None,
+    ) -> None:
+        if state not in _MATRIX_ARM_STATES:
+            raise ValueError("unknown matrix arm state")
+        if (error_class is None) != (error_detail is None):
+            raise ValueError("matrix arm errors require both class and detail")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE matrix_arms SET state = ?, error_class = ?, error_detail = ? "
+                "WHERE experiment_id = ?",
+                (state, error_class, error_detail[:1000] if error_detail else None, experiment_id),
+            )
+        if cursor.rowcount != 1:
+            raise ValueError(f"matrix arm not found: {experiment_id}")
+
     def begin_execution_for_experiment(
         self,
         manifest: ExperimentManifest,
@@ -577,7 +616,12 @@ class WorkspaceStore:
                 "SELECT COUNT(*) FROM execution_replacements WHERE experiment_id = ?",
                 (experiment_id,),
             ).fetchone()
+            matrix_arm = connection.execute(
+                "SELECT state, error_class, error_detail FROM matrix_arms WHERE experiment_id = ?",
+                (experiment_id,),
+            ).fetchone()
         protocol = str(report["audit"].get("memory_protocol", "none"))
+        matrix_arm_state = str(matrix_arm[0]) if matrix_arm is not None else "unregistered"
         executions = [
             {
                 "execution_id": str(row[0]),
@@ -595,20 +639,28 @@ class WorkspaceStore:
             "executions": executions,
             "missingness": {"incomplete_executions": sum(item["status"] != "completed" for item in executions)},
             "failure_classes": {
+                "budget": next((int(count) for kind, count in failures if kind == "budget"), 0),
                 "infrastructure": next((int(count) for kind, count in failures if kind == "infrastructure"), 0),
                 "model_output": next((int(count) for kind, count in failures if kind == "model_output"), 0),
                 "replacements": int(replacements[0]) if replacements else 0,
             },
             "failure_rates": {
+                "budget": _rate(failures, "budget", len(executions)),
                 "infrastructure": _rate(failures, "infrastructure", len(executions)),
                 "model_output": _rate(failures, "model_output", len(executions)),
             },
+            "arm_state": matrix_arm_state,
+            "arm_error": (
+                {"class": str(matrix_arm[1]), "detail": str(matrix_arm[2])}
+                if matrix_arm is not None and matrix_arm[1] is not None and matrix_arm[2] is not None
+                else None
+            ),
         }
 
     def record_execution_failure(
         self, experiment_id: str, execution_id: str | None, kind: str, detail: str
     ) -> None:
-        if kind not in {"infrastructure", "model_output"}:
+        if kind not in {"budget", "infrastructure", "model_output"}:
             raise ValueError("unknown execution failure kind")
         with self._connect() as connection:
             connection.execute(
@@ -663,6 +715,11 @@ class WorkspaceStore:
                     "SELECT * FROM execution_replacements WHERE experiment_id = ? ORDER BY id",
                     (experiment_id,),
                 ),
+                "matrix_arms": _query_records(
+                    connection,
+                    "SELECT * FROM matrix_arms WHERE experiment_id = ?",
+                    (experiment_id,),
+                ),
             }
             snapshot_ids = [str(row["snapshot_id"]) for row in records["execution_memory_snapshots"]]
             records["memory_snapshots"] = _records_by_values(
@@ -677,7 +734,7 @@ class WorkspaceStore:
                 raise ValueError(f"referenced artifact is missing: {artifact_hash}")
             artifacts[artifact_hash] = b64encode(path.read_bytes()).decode("ascii")
         payload: dict[str, object] = {
-            "bundle_version": 1,
+            "bundle_version": 2,
             "experiment_id": experiment_id,
             "manifest": json.loads(str(manifest_row[0])),
             "records": records,
@@ -688,7 +745,8 @@ class WorkspaceStore:
     def import_bundle(self, bundle: dict[str, object]) -> str:
         checksum = bundle.get("checksum")
         payload = {key: value for key, value in bundle.items() if key != "checksum"}
-        if bundle.get("bundle_version") != 1 or not isinstance(checksum, str):
+        bundle_version = bundle.get("bundle_version")
+        if bundle_version not in {1, 2} or not isinstance(checksum, str):
             raise ValueError("unsupported or unsigned export bundle")
         if checksum != _bundle_checksum(payload):
             raise ValueError("export bundle checksum does not match")
@@ -700,6 +758,8 @@ class WorkspaceStore:
         artifacts = bundle.get("artifacts")
         if not isinstance(records, dict) or not isinstance(artifacts, dict):
             raise ValueError("export bundle has invalid records or artifacts")
+        if bundle_version == 1 and "matrix_arms" not in records:
+            records = {**records, "matrix_arms": []}
         if set(records) != _EXPORT_TABLES:
             raise ValueError("export bundle record tables do not match the bundle schema")
         executions = records.get("executions")
@@ -714,7 +774,7 @@ class WorkspaceStore:
         if len(execution_ids) != len(executions):
             raise ValueError("export bundle has duplicate execution identifiers")
         _validate_bundle_references(records, {str(item) for item in execution_ids}, artifacts)
-        for table in ("execution_failures", "execution_replacements"):
+        for table in ("execution_failures", "execution_replacements", "matrix_arms"):
             rows = records[table]
             if not isinstance(rows, list) or any(
                 not isinstance(row, dict) or row.get("experiment_id") != imported_id for row in rows
@@ -850,6 +910,7 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS retrieval_outcomes (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, outcome_json TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS execution_failures (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, execution_id TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS execution_replacements (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, failed_execution_id TEXT NOT NULL, replacement_execution_id TEXT NOT NULL, UNIQUE(experiment_id, failed_execution_id, replacement_execution_id));
+        CREATE TABLE IF NOT EXISTS matrix_arms (experiment_id TEXT PRIMARY KEY, state TEXT NOT NULL, error_class TEXT, error_detail TEXT);
         """)
         replacement_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(execution_replacements)")
@@ -882,6 +943,18 @@ _EXPORT_TABLES = frozenset(
         "memory_snapshots",
         "execution_failures",
         "execution_replacements",
+        "matrix_arms",
+    }
+)
+
+_MATRIX_ARM_STATES = frozenset(
+    {
+        "pending",
+        "running",
+        "completed",
+        "model-output-failed",
+        "infrastructure-failed",
+        "blocked-by-budget",
     }
 )
 
@@ -949,6 +1022,7 @@ def _validate_bundle_references(
         "memory_snapshots",
         "execution_failures",
         "execution_replacements",
+        "matrix_arms",
     }
     for table in execution_tables:
         rows = records[table]

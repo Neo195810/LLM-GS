@@ -8,6 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NoReturn
 
+from openai import APIError
 from pydantic import BaseModel
 
 from llm_gs.contracts import ExperimentManifest, ExperimentReport
@@ -77,14 +78,15 @@ def _execute_with_failure_recording(
             stop_after,
         )
     except ModelOutputFailure as error:
+        failure_kind = "budget" if "total cost cap" in str(error) else "model_output"
         store.record_execution_failure(
             experiment_id,
             store.active_execution_id(experiment_id),
-            "model_output",
+            failure_kind,
             str(error),
         )
         raise ValueError(f"model output failure: {error}") from error
-    except (OSError, sqlite3.Error) as error:
+    except (APIError, OSError, sqlite3.Error, TimeoutError) as error:
         store.record_execution_failure(
             experiment_id,
             store.active_execution_id(experiment_id),
@@ -125,16 +127,27 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
     store = WorkspaceStore(args.workspace)
     reports = []
     for manifest in manifests:
+        store.register_matrix_arm(manifest, experiment_id(manifest))
+    for manifest in manifests:
         resolved_experiment_id = experiment_id(manifest)
+        store.set_matrix_arm_state(resolved_experiment_id, "running")
         try:
             report, _ = _execute_with_failure_recording(
                 manifest, resolved_experiment_id, store, args
             )
             if report is None:
                 raise ValueError("matrix arm did not produce a completed report")
-        except ValueError:
-            # Failure records are durable evidence. Continue so every preregistered arm is visible.
-            pass
+            store.set_matrix_arm_state(resolved_experiment_id, "completed")
+        except (RuntimeError, ValueError) as error:
+            state, error_class = _matrix_arm_failure(error)
+            if error_class == "execution":
+                store.record_execution_failure(
+                    resolved_experiment_id,
+                    store.active_execution_id(resolved_experiment_id),
+                    "infrastructure",
+                    str(error),
+                )
+            store.set_matrix_arm_state(resolved_experiment_id, state, error_class, str(error))
         reports.append(store.reporting_view(resolved_experiment_id))
     return matrix_report(reports)
 
@@ -142,7 +155,25 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
 def _matrix_report(args: argparse.Namespace) -> dict[str, object]:
     manifests = build_matrix_manifests(load_ablation_matrix_specification(args.specification))
     store = WorkspaceStore(args.workspace)
-    return matrix_report([store.reporting_view(experiment_id(manifest)) for manifest in manifests])
+    for manifest in manifests:
+        store.register_matrix_arm(manifest, experiment_id(manifest))
+    reports = []
+    for manifest in manifests:
+        resolved_experiment_id = experiment_id(manifest)
+        reports.append(store.reporting_view(resolved_experiment_id))
+    return matrix_report(reports)
+
+
+def _matrix_arm_failure(error: Exception) -> tuple[str, str]:
+    if "total cost cap" in str(error):
+        return "blocked-by-budget", "budget"
+    if isinstance(error.__cause__, ModelOutputFailure) or str(error).startswith(
+        "model output failure:"
+    ):
+        return "model-output-failed", "model_output"
+    if str(error).startswith("infrastructure failure:"):
+        return "infrastructure-failed", "infrastructure"
+    return "infrastructure-failed", "execution"
 
 
 def _memory_build(args: argparse.Namespace) -> dict[str, object]:

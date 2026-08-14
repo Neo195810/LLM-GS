@@ -68,7 +68,11 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
     records = tuple(reports)
     protocols: dict[str, dict[str, object]] = {}
     for protocol in ("Frozen", "Online"):
-        arms = [record for record in records if record.get("protocol") == protocol]
+        arms = [
+            record
+            for record in records
+            if record.get("protocol") == protocol and _arm_state(record) == "completed"
+        ]
         success_rates = [_success_rate(record) for record in arms]
         protocols[protocol] = {
             "arms": len(arms),
@@ -77,9 +81,17 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
             else None,
             "confidence_interval": _confidence_interval(success_rates),
         }
-    failure_classes = {"infrastructure": 0, "model_output": 0, "replacements": 0}
+    failure_classes = {"budget": 0, "infrastructure": 0, "model_output": 0, "replacements": 0}
     incomplete = 0
     unreported = 0
+    arm_states = {
+        "pending": 0,
+        "running": 0,
+        "completed": 0,
+        "model-output-failed": 0,
+        "infrastructure-failed": 0,
+        "blocked-by-budget": 0,
+    }
     for record in records:
         missingness = record.get("missingness", {})
         failures = record.get("failure_classes", {})
@@ -88,13 +100,17 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
         if isinstance(failures, dict):
             for key in failure_classes:
                 failure_classes[key] += int(failures.get(key, 0))
-        if record.get("protocol") not in {"Frozen", "Online"}:
+        state = _arm_state(record)
+        if state in arm_states:
+            arm_states[state] += 1
+        else:
             unreported += 1
     return {
         "arms": len(records),
         "arm_reports": records,
         "protocols": protocols,
         "missingness": {"incomplete_executions": incomplete, "unreported_arms": unreported},
+        "arm_states": arm_states,
         "exclusions": {"count": 0, "arms": []},
         "failure_classes": failure_classes,
     }
@@ -124,3 +140,10 @@ def _success_rate(record: dict[str, object]) -> float:
     if not isinstance(value, (float, int)):
         raise ValueError("matrix report contains a non-numeric success rate")
     return float(value)
+
+
+def _arm_state(record: dict[str, object]) -> str:
+    state = record.get("arm_state")
+    if isinstance(state, str):
+        return state
+    return "completed" if record.get("protocol") in {"Frozen", "Online"} else "unregistered"

@@ -184,6 +184,7 @@ def test_report_derives_failure_and_replacement_visibility_from_persisted_record
         run_cli("report", "--workspace", str(workspace), "--experiment-id", experiment_id).stdout
     )
     assert report["failure_classes"] == {
+        "budget": 0,
         "infrastructure": 1,
         "model_output": 1,
         "replacements": 1,
