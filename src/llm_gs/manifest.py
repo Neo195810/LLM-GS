@@ -17,10 +17,24 @@ from llm_gs.contracts import (
 from llm_gs.memory import RETRIEVER_ORDER, RETRIEVER_VERSION, RETRIEVER_WEIGHTS
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
-CLEAN_HOUSE_PROMPT = "Produce one deterministic CleanHouse DSL candidate."
-FOUR_CORNERS_PROMPT = "Produce one deterministic FourCorners DSL candidate."
-DOOR_KEY_PROMPT = "Produce one deterministic MiniGrid DoorKey DSL candidate."
-RED_BLUE_DOOR_PROMPT = "Produce one deterministic MiniGrid RedBlueDoor DSL candidate."
+KAREL_DSL_PROMPT = (
+    "Return JSON with only source. Produce one deterministic {task} Karel program. "
+    "Source must use exact Karel DSL syntax: DEF run m( <statements> m). "
+    "Allowed actions: move, turnLeft, turnRight, pickMarker, putMarker. "
+    "Example valid source: DEF run m( move turnLeft m). "
+    "Never output task name, pseudocode, Markdown, or Python."
+)
+MINIGRID_DSL_PROMPT = (
+    "Return JSON with only source. Produce one deterministic {task} MiniGrid program. "
+    "Source must use exact MiniGrid DSL syntax: DEF run m( <statements> m). "
+    "Allowed actions: left, right, forward, pickup, drop, toggle. "
+    "Example valid source: DEF run m( forward left m). "
+    "Never output task name, pseudocode, Markdown, or Python."
+)
+CLEAN_HOUSE_PROMPT = KAREL_DSL_PROMPT.format(task="CleanHouse")
+FOUR_CORNERS_PROMPT = KAREL_DSL_PROMPT.format(task="FourCorners")
+DOOR_KEY_PROMPT = MINIGRID_DSL_PROMPT.format(task="DoorKey")
+RED_BLUE_DOOR_PROMPT = MINIGRID_DSL_PROMPT.format(task="RedBlueDoor")
 FINAL_CANDIDATE_SELECTION_RULE = (
     "attempt_outcome,success_proportion,mean_normalized_progress,"
     "worst_normalized_progress,lower_episode_cost,stable_identity"

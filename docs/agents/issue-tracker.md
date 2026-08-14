@@ -1,6 +1,23 @@
-# Issue tracker: GitHub
+# Issue tracker: local files
 
-Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
+Issues, specs, and ticket breakdowns for this repo are local-only. Do not
+publish them to GitHub Issues or any other external tracker.
+
+Store each feature's planning material under `.scratch/<feature-slug>/`:
+
+- `spec.md` holds the approved specification.
+- `issues/<NN>-<slug>.md` holds one ticket per file, numbered in dependency
+  order. Each ticket declares its blockers and `ready-for-agent` status.
+
+When a skill says to publish to the issue tracker, write or update those local
+files instead. Work the frontier: a ticket can start once every listed blocker
+is complete.
+
+## Historical GitHub conventions
+
+The remainder of this document records the former GitHub workflow. It is not
+the active tracker policy and must not be used unless this policy is explicitly
+changed again.
 
 ## Conventions
 
@@ -24,14 +41,6 @@ When set to `yes`, PRs run through the same labels and states as issues, using t
 - **Comment / label / close**: `gh pr comment`, `gh pr edit --add-label`/`--remove-label`, `gh pr close`.
 
 GitHub shares one number space across issues and PRs, so a bare `#42` may be either — resolve with `gh pr view 42` and fall back to `gh issue view 42`.
-
-## When a skill says "publish to the issue tracker"
-
-Create a GitHub issue.
-
-## When a skill says "fetch the relevant ticket"
-
-Run `gh issue view <number> --comments`.
 
 ## Wayfinding operations
 

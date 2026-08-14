@@ -174,6 +174,22 @@ _Avoid_: Invalid Program, Infrastructure Failure
 An idempotently identified, persistently tracked piece of experiment work that moves through pending, running, and terminal states.
 _Avoid_: Job, iteration
 
+**Matrix Arm**:
+One preregistered Task, Search Strategy, Failure Handling Strategy, protocol, and replicate combination in an Ablation Matrix. A Matrix Arm owns its lifecycle and may have multiple Executions when recovery is permitted.
+_Avoid_: Experiment, Work Unit
+
+**Matrix Arm State**:
+The durable state of a Matrix Arm: pending, running, completed, model-output-failed, infrastructure-failed, or blocked-by-budget. Completed means its Execution reached an experiment result; it does not imply policy success.
+_Avoid_: Missing, pass/fail
+
+**Correction Feedback**:
+The bounded, structured description supplied to a self-contained model correction or repair request: relevant prior output, validation or evaluation evidence, and the protected Task and DSL contract. It does not rely on implicit API conversation state.
+_Avoid_: Conversation history, raw error log
+
+**Invalid-output Artifact**:
+A private, bounded, redacted record of an invalid model output, its correction prompt, and validation evidence, retained for diagnosis without changing failure classification.
+_Avoid_: Execution Artifact, Failure Reason
+
 ## Platform Roles
 
 **Proposer**:

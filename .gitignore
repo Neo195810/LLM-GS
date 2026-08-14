@@ -9,3 +9,5 @@ wandb
 *.gif
 *.pdf
 output
+artifacts/
+*.DS_Store
