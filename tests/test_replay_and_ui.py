@@ -1,8 +1,7 @@
-import json
 import io
+import json
 import sys
 import tempfile
-import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
