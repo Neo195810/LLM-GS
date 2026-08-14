@@ -6,6 +6,7 @@ import hashlib
 import json
 import sqlite3
 from base64 import b64decode, b64encode
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -658,6 +659,7 @@ class WorkspaceStore:
                 "episode_evaluations": 0,
                 "audit": {},
             }
+        report = _public_report(report)
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT execution_id, status, model_requests, episode_evaluations FROM executions "
@@ -676,7 +678,20 @@ class WorkspaceStore:
                 "SELECT state, error_class, error_detail FROM matrix_arms WHERE experiment_id = ?",
                 (experiment_id,),
             ).fetchone()
-        protocol = str(report["audit"].get("memory_protocol", "none"))
+            invalid_output_artifacts = _public_invalid_output_artifacts(
+                _query_records(
+                    connection,
+                    "SELECT phase, attempt, validation_stage, validation_error, finish_reason, "
+                    "input_tokens, output_tokens, cached_tokens, response_hash, response_original_length, "
+                    "response_truncated, correction_prompt_hash, correction_prompt_original_length, "
+                    "correction_prompt_truncated FROM invalid_output_artifacts "
+                    "WHERE execution_id IN (SELECT execution_id FROM executions WHERE experiment_id = ?) "
+                    "ORDER BY id",
+                    (experiment_id,),
+                )
+            )
+        audit = report.get("audit")
+        protocol = str(audit.get("memory_protocol", "none")) if isinstance(audit, dict) else "none"
         matrix_arm_state = str(matrix_arm[0]) if matrix_arm is not None else "unregistered"
         executions = [
             {
@@ -706,6 +721,12 @@ class WorkspaceStore:
                 "budget": _rate(failures, "budget", len(executions)),
                 "infrastructure": _rate(failures, "infrastructure", len(executions)),
                 "model_output": _rate(failures, "model_output", len(executions)),
+            },
+            "invalid_output": {
+                "count": len(invalid_output_artifacts),
+                "validation_stages": _value_counts(invalid_output_artifacts, "validation_stage"),
+                "validation_errors": _value_counts(invalid_output_artifacts, "validation_error"),
+                "artifacts": invalid_output_artifacts,
             },
             "arm_state": matrix_arm_state,
             "arm_error": (
@@ -768,6 +789,9 @@ class WorkspaceStore:
                 "program_attempts": _records_for_executions(connection, "program_attempts", execution_ids),
                 "episode_evaluations": _records_for_executions(connection, "episode_evaluations", execution_ids),
                 "model_request_records": _records_for_executions(connection, "model_request_records", execution_ids),
+                "invalid_output_artifacts": _public_invalid_output_artifacts(
+                    _records_for_executions(connection, "invalid_output_artifacts", execution_ids)
+                ),
                 "repair_attempts": _records_for_executions(connection, "repair_attempts", execution_ids),
                 "retrieval_outcomes": _records_for_executions(connection, "retrieval_outcomes", execution_ids),
                 "execution_memory_snapshots": _records_for_executions(
@@ -802,7 +826,7 @@ class WorkspaceStore:
                 raise ValueError(f"referenced artifact is missing: {artifact_hash}")
             artifacts[artifact_hash] = b64encode(path.read_bytes()).decode("ascii")
         payload: dict[str, object] = {
-            "bundle_version": 2,
+            "bundle_version": 3,
             "experiment_id": experiment_id,
             "manifest": json.loads(str(manifest_row[0])),
             "records": records,
@@ -814,7 +838,7 @@ class WorkspaceStore:
         checksum = bundle.get("checksum")
         payload = {key: value for key, value in bundle.items() if key != "checksum"}
         bundle_version = bundle.get("bundle_version")
-        if bundle_version not in {1, 2} or not isinstance(checksum, str):
+        if bundle_version not in {1, 2, 3} or not isinstance(checksum, str):
             raise ValueError("unsupported or unsigned export bundle")
         if checksum != _bundle_checksum(payload):
             raise ValueError("export bundle checksum does not match")
@@ -826,8 +850,12 @@ class WorkspaceStore:
         artifacts = bundle.get("artifacts")
         if not isinstance(records, dict) or not isinstance(artifacts, dict):
             raise ValueError("export bundle has invalid records or artifacts")
-        if bundle_version == 1 and "matrix_arms" not in records:
-            records = {**records, "matrix_arms": []}
+        if bundle_version in {1, 2}:
+            records = {
+                **records,
+                "matrix_arms": records.get("matrix_arms", []),
+                "invalid_output_artifacts": records.get("invalid_output_artifacts", []),
+            }
         if set(records) != _EXPORT_TABLES:
             raise ValueError("export bundle record tables do not match the bundle schema")
         executions = records.get("executions")
@@ -1038,6 +1066,7 @@ _EXPORT_TABLES = frozenset(
         "program_attempts",
         "episode_evaluations",
         "model_request_records",
+        "invalid_output_artifacts",
         "repair_attempts",
         "retrieval_outcomes",
         "execution_memory_snapshots",
@@ -1074,6 +1103,47 @@ def _success_rate_from_outcomes(outcomes: object) -> float:
 def _rate(failures: list[tuple[object, object]], kind: str, denominator: int) -> float:
     count = next((int(value) for name, value in failures if name == kind and isinstance(value, int)), 0)
     return count / denominator if denominator else 0.0
+
+
+def _value_counts(rows: list[dict[str, object]], field: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = row.get(field)
+        if isinstance(value, str):
+            counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _public_report(report: dict[str, object]) -> dict[str, object]:
+    audit = report.get("audit")
+    if not isinstance(audit, dict):
+        return report
+    artifacts = audit.get("invalid_output_artifacts")
+    if not isinstance(artifacts, list):
+        return report
+    return {
+        **report,
+        "audit": {
+            **audit,
+            "invalid_output_artifacts": _public_invalid_output_artifacts(artifacts),
+        },
+    }
+
+
+def _public_invalid_output_artifacts(rows: Sequence[object]) -> list[dict[str, object]]:
+    public_rows: list[dict[str, object]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        public_row = dict(row)
+        validation_stage = public_row.get("validation_stage")
+        public_row["validation_error"] = (
+            f"{validation_stage}_validation_failure"
+            if isinstance(validation_stage, str)
+            else "validation_failure"
+        )
+        public_rows.append(public_row)
+    return public_rows
 
 
 def _query_records(

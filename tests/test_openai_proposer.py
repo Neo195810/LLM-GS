@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,7 +25,7 @@ from llm_gs.proposer import (
     OpenAIProposer,
 )
 from llm_gs.reflection import RepairCycle
-from llm_gs.storage import WorkspaceStore
+from llm_gs.storage import WorkspaceStore, _bundle_checksum
 
 
 class FakeResponses:
@@ -219,6 +220,87 @@ def test_resumable_execution_persists_initial_invalid_output_before_successful_c
             "correction_prompt_truncated": 0,
         }
     ]
+
+
+def test_reports_and_exports_expose_only_safe_invalid_output_metadata(tmp_path: Path) -> None:
+    manifest = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "private-invalid-output-observability",
+                "task": {"name": "offline.echo"},
+                "seeds": {"task": [1]},
+            }
+        )
+    )
+    store = WorkspaceStore(tmp_path)
+
+    class SuccessfulEvaluator:
+        def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+            _ = candidate, task_seed
+            return EpisodeResult(outcome="success")
+
+    report, status = execute_resumable(
+        manifest,
+        experiment_id(manifest),
+        store,
+        OpenAIProposer(
+            FakeResponses(
+                [
+                    '{"source":"DEF run m( raw-invalid-response-marker sk-report-secret)"}',
+                    '{"source":"DEF run m( turnLeft m)"}',
+                ]
+            )
+        ),
+        SuccessfulEvaluator(),
+    )
+
+    assert report is not None
+    assert status == "completed"
+    audit = cast(list[dict[str, object]], store.inspect_execution(report.execution_id)["invalid_output_artifacts"])
+    response_hash = str(audit[0]["response_hash"])
+    prompt_hash = str(audit[0]["correction_prompt_hash"])
+    private_response = (tmp_path / "artifacts" / response_hash.removeprefix("sha256:")).read_text()
+    private_correction_prompt = (tmp_path / "artifacts" / prompt_hash.removeprefix("sha256:")).read_text()
+    assert "raw-invalid-response-marker" in private_response
+    assert "sk-report-secret" not in private_response
+    assert "independent correction request" in private_correction_prompt
+
+    reporting = store.reporting_view(experiment_id(manifest))
+    bundle = store.export_bundle(experiment_id(manifest))
+    for public_output in (reporting, bundle):
+        serialized = json.dumps(public_output, sort_keys=True)
+        assert "raw-invalid-response-marker" not in serialized
+        assert "independent correction request" not in serialized
+        assert "sk-report-secret" not in serialized
+    assert reporting["invalid_output"] == {
+        "count": 1,
+        "validation_stages": {"dsl": 1},
+        "validation_errors": {"dsl_validation_failure": 1},
+        "artifacts": [
+            {**audit[0], "validation_error": "dsl_validation_failure"}
+        ],
+    }
+    records = cast(dict[str, list[dict[str, object]]], bundle["records"])
+    assert records["invalid_output_artifacts"] == [
+        {
+            "id": 1,
+            "execution_id": report.execution_id,
+            **audit[0],
+            "validation_error": "dsl_validation_failure",
+        }
+    ]
+    assert response_hash not in cast(dict[str, str], bundle["artifacts"])
+    assert prompt_hash not in cast(dict[str, str], bundle["artifacts"])
+    for version in (1, 2):
+        legacy_bundle = json.loads(json.dumps(bundle))
+        legacy_bundle["bundle_version"] = version
+        legacy_records = cast(dict[str, object], legacy_bundle["records"])
+        legacy_records.pop("invalid_output_artifacts")
+        if version == 1:
+            legacy_records.pop("matrix_arms")
+        legacy_payload = {key: value for key, value in legacy_bundle.items() if key != "checksum"}
+        legacy_bundle["checksum"] = _bundle_checksum(legacy_payload)
+        assert WorkspaceStore(tmp_path / f"legacy-v{version}").import_bundle(legacy_bundle) == experiment_id(manifest)
 
 
 def test_resumable_execution_persists_terminal_initial_invalid_outputs(tmp_path: Path) -> None:
