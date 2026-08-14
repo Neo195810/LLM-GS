@@ -88,12 +88,14 @@ def _tags_for_subgoal(subgoal: str) -> list[str]:
     tags: list[str] = []
     if "navigate" in subgoal or "locate" in subgoal or "cross" in subgoal:
         tags.extend(["navigation", "move", "explore"])
-    if "pickup" in subgoal or "key" in subgoal:
-        tags.extend(["pickup", "object", "key"])
+    if "pickup" in subgoal:
+        tags.extend(["pickup", "object", "key", "marker_present"])
+    elif "key" in subgoal:
+        tags.extend(["key"])
     if "door" in subgoal or "open" in subgoal:
         tags.extend(["door", "toggle", "open"])
     if "drop" in subgoal or "put" in subgoal:
-        tags.extend(["drop", "putnear", "object"])
+        tags.extend(["drop", "putnear", "object", "goal_cell"])
     if "lava" in subgoal:
         tags.extend(["lava", "avoid"])
     return tags

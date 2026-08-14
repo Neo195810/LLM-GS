@@ -10,6 +10,9 @@ that can be wired into experiments later.
 - `planner.py`: task-to-subgoal templates and retrieval-driven plan assembly.
 - `critic.py`: evaluator-output to structured repair signal conversion.
 - `ast_utils.py`: DSL source to JSON-friendly AST serialization helpers.
+- `doorkey_state.py`: Karel DoorKey state extraction for key, goal, agent, and door.
+- `doorkey_policy.py`: fixed BFS/rule-based policy for the DoorKey MVP loop.
+- `evaluator.py`: DoorKey MVP runner and multi-seed summary.
 - `schemas.py`: shared dataclasses for skill records, queries, plans, and critiques.
 
 ## First smoke command
@@ -20,6 +23,18 @@ python scripts/skill_gs/smoke_skill_gs.py --task PutNear
 
 Expected behavior: the script seeds a few MiniGrid skills, retrieves skills for
 task subgoals, and prints a structured plan plus a critic repair signal.
+
+## DoorKey MVP loop
+
+```bash
+python scripts/skill_gs/run_doorkey_mvp.py --seed 0
+python scripts/skill_gs/run_doorkey_mvp.py --seeds 0 1 2 3 4 5 6 7
+```
+
+Expected behavior: the script uses the existing Karel DoorKey environment,
+wires Skill Manager and Planner into a fixed BFS/rule-based policy, and prints
+success, reward, steps, the retrieved skill plan, and action traces. This is a
+smoke baseline for the Skill-GS pipeline, not the final Skill-GS search method.
 
 ## Intended next wiring
 

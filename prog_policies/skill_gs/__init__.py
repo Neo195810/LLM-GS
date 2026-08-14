@@ -8,17 +8,31 @@ into structured repair signals.
 from .critic import CriticRepairAgent
 from .planner import HierarchicalPlanner
 from .schemas import Critique, SkillPlan, SkillPlanStep, SkillQuery, SkillRecord
-from .skill_manager import JsonSkillStore, SkillManager, make_default_minigrid_skills
+from .doorkey_policy import DoorKeyFixedPolicy
+from .doorkey_state import DoorKeyState, extract_doorkey_state
+from .evaluator import run_doorkey_mvp, run_many_doorkey_mvp
+from .skill_manager import (
+    JsonSkillStore,
+    SkillManager,
+    make_default_karel_doorkey_skills,
+    make_default_minigrid_skills,
+)
 
 __all__ = [
     "CriticRepairAgent",
     "HierarchicalPlanner",
     "JsonSkillStore",
     "SkillManager",
+    "DoorKeyFixedPolicy",
+    "DoorKeyState",
     "Critique",
     "SkillPlan",
     "SkillPlanStep",
     "SkillQuery",
     "SkillRecord",
+    "extract_doorkey_state",
+    "run_doorkey_mvp",
+    "run_many_doorkey_mvp",
+    "make_default_karel_doorkey_skills",
     "make_default_minigrid_skills",
 ]

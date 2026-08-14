@@ -153,6 +153,95 @@ def make_default_minigrid_skills(dsl) -> list[SkillRecord]:
     return records
 
 
+def make_default_karel_doorkey_skills(dsl) -> list[SkillRecord]:
+    """Seed Karel DoorKey skills for the MVP execution loop."""
+
+    specs = [
+        {
+            "skill_id": "karel.doorkey.navigate_forward_until_blocked.v1",
+            "name": "navigate_forward_until_blocked",
+            "description": "Move through a clear corridor until the front cell is blocked.",
+            "task_family": "Karel",
+            "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+            "semantic_tags": ["navigation", "move", "explore", "corridor"],
+            "postconditions": ["position_changed"],
+            "success_rate": 0.75,
+            "mean_reward": 0.25,
+        },
+        {
+            "skill_id": "karel.doorkey.turn_left.v1",
+            "name": "turn_left",
+            "description": "Rotate left to change heading.",
+            "task_family": "Karel",
+            "dsl_source": "turnLeft",
+            "semantic_tags": ["navigation", "turn", "left"],
+            "postconditions": ["changed_heading"],
+            "success_rate": 0.95,
+            "mean_reward": 0.0,
+        },
+        {
+            "skill_id": "karel.doorkey.turn_right.v1",
+            "name": "turn_right",
+            "description": "Rotate right to change heading.",
+            "task_family": "Karel",
+            "dsl_source": "turnRight",
+            "semantic_tags": ["navigation", "turn", "right"],
+            "postconditions": ["changed_heading"],
+            "success_rate": 0.95,
+            "mean_reward": 0.0,
+        },
+        {
+            "skill_id": "karel.doorkey.pick_marker.v1",
+            "name": "pick_marker",
+            "description": "Pick up the marker used as the DoorKey key.",
+            "task_family": "Karel",
+            "dsl_source": "pickMarker",
+            "semantic_tags": ["pickup", "marker", "key"],
+            "preconditions": ["marker_present"],
+            "postconditions": ["door_open", "no_marker_at_agent"],
+            "success_rate": 0.9,
+            "mean_reward": 0.5,
+        },
+        {
+            "skill_id": "karel.doorkey.unlock_door_with_key.v1",
+            "name": "unlock_door_with_key",
+            "description": "Pick up the DoorKey key marker, which unlocks the divider door.",
+            "task_family": "Karel",
+            "dsl_source": "pickMarker",
+            "semantic_tags": ["door", "open", "unlock", "key", "marker"],
+            "postconditions": ["door_open"],
+            "success_rate": 0.9,
+            "mean_reward": 0.5,
+        },
+        {
+            "skill_id": "karel.doorkey.put_marker.v1",
+            "name": "put_marker",
+            "description": "Place a marker on the DoorKey goal marker.",
+            "task_family": "Karel",
+            "dsl_source": "putMarker",
+            "semantic_tags": ["put", "drop", "marker", "goal"],
+            "preconditions": ["goal_cell"],
+            "postconditions": ["goal_topped_off"],
+            "success_rate": 0.9,
+            "mean_reward": 0.5,
+        },
+    ]
+
+    records: list[SkillRecord] = []
+    for spec in specs:
+        dsl_source = spec["dsl_source"]
+        records.append(
+            SkillRecord(
+                ast_json=dsl_source_to_ast_dict(dsl_source, dsl),
+                root_nonterminal=root_nonterminal_for(dsl_source, dsl),
+                num_evaluations=1,
+                failure_signatures=[],
+                **spec,
+            )
+        )
+    return records
+
+
 def _score_skill(
     skill: SkillRecord, query_terms: set[str], query: SkillQuery
 ) -> tuple[float, list[str]]:
