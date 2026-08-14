@@ -11,6 +11,7 @@ from typing import cast
 
 import pytest
 
+from llm_gs import proposer as proposer_module
 from llm_gs.cli import _execute_with_failure_recording
 from llm_gs.contracts import CandidateProgram, EpisodeResult, ExperimentSpecification
 from llm_gs.execution import execute_resumable, reflect_once
@@ -111,6 +112,27 @@ def test_openai_proposer_observes_redacted_invalid_outputs_before_correction() -
     assert "sk-response-secret" not in artifact.validation_error
     assert artifact.correction_prompt is not None
     assert "sk-prompt-secret" not in artifact.correction_prompt
+
+
+def test_invalid_output_keeps_full_redacted_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    detail = "parser failure sk-private-error " + "x" * 1_500
+
+    def validate(source: str, task_name: str | None = None) -> None:
+        _ = task_name
+        if source == "invalid":
+            raise ValueError(detail)
+
+    monkeypatch.setattr(proposer_module, "_validate_dsl", validate)
+    observed: list[InvalidOutputArtifact] = []
+    proposer = OpenAIProposer(
+        FakeResponses(['{"source":"invalid"}', '{"source":"valid"}'])
+    )
+    proposer.set_invalid_output_observer(observed.append)
+
+    assert proposer.propose("Solve CleanHouse").source == "valid"
+    assert observed[0].validation_error == "parser failure sk-[REDACTED] " + "x" * 1_500
 
 
 def test_openai_proposer_observes_every_terminal_invalid_output_with_empty_response() -> None:

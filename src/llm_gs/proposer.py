@@ -243,7 +243,7 @@ class OpenAIProposer:
         self._invalid_output_observer(
             InvalidOutputArtifact(
                 phase=phase, attempt=attempt, validation_stage=validation_error.stage,
-                validation_error=_bounded_feedback(str(validation_error), limit=1000),
+                validation_error=_redact_secrets(str(validation_error)),
                 finish_reason=record.finish_reason,
                 input_tokens=record.input_tokens, output_tokens=record.output_tokens,
                 cached_tokens=record.cached_tokens, response=bounded_response,
