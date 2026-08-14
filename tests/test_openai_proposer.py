@@ -6,21 +6,24 @@ import argparse
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
 from llm_gs.cli import _execute_with_failure_recording
 from llm_gs.contracts import CandidateProgram, EpisodeResult, ExperimentSpecification
-from llm_gs.execution import execute_resumable
+from llm_gs.execution import execute_resumable, reflect_once
 from llm_gs.manifest import experiment_id, resolve_manifest, task_prompt
 from llm_gs.proposer import (
     INVALID_OUTPUT_CONTENT_LIMIT,
     MODEL_NAME,
     REASONING_EFFORT,
     CostBudget,
+    InvalidOutputArtifact,
     ModelOutputFailure,
     OpenAIProposer,
 )
+from llm_gs.reflection import RepairCycle
 from llm_gs.storage import WorkspaceStore
 
 
@@ -194,7 +197,10 @@ def test_resumable_execution_persists_initial_invalid_output_before_successful_c
 
     assert report is not None
     assert status == "completed"
-    artifacts = store.inspect_execution(report.execution_id)["invalid_output_artifacts"]
+    artifacts = cast(
+        list[dict[str, object]],
+        store.inspect_execution(report.execution_id)["invalid_output_artifacts"],
+    )
     assert artifacts == [
         {
             "phase": "initial",
@@ -246,6 +252,136 @@ def test_resumable_execution_persists_terminal_initial_invalid_outputs(tmp_path:
     artifacts = store.inspect_execution(execution_id)["invalid_output_artifacts"]
     assert [artifact["attempt"] for artifact in artifacts] == [1, 2, 3]
     assert artifacts[-1]["correction_prompt_hash"] is None
+
+
+def test_resumable_execution_persists_invalid_repair_output_before_success(
+    tmp_path: Path,
+) -> None:
+    manifest = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "repair-invalid-output-observation",
+                "task": {"name": "CleanHouse"},
+                "seeds": {"task": [1]},
+                "failure_strategy": {"name": "reflect", "max_repair_cycles": 1},
+            }
+        )
+    )
+    store = WorkspaceStore(tmp_path)
+
+    class RepairingEvaluator:
+        def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+            _ = task_seed
+            if candidate.source == "DEF run m( move m)":
+                return EpisodeResult(outcome="success")
+            return EpisodeResult(
+                outcome="partial_completion",
+                failure_type="stalled",
+                failure_reason="initial candidate stalled",
+                evaluation_evidence={"reason": "initial candidate stalled"},
+            )
+
+    report, status = execute_resumable(
+        manifest,
+        experiment_id(manifest),
+        store,
+        OpenAIProposer(
+            FakeResponses(
+                [
+                    '{"source":"DEF run m( turnLeft m)"}',
+                    '{"source":"not dsl"}',
+                    '{"source":"DEF run m( move m)"}',
+                ]
+            )
+        ),
+        RepairingEvaluator(),
+    )
+
+    assert report is not None
+    assert status == "completed"
+    artifacts = cast(
+        list[dict[str, object]],
+        store.inspect_execution(report.execution_id)["invalid_output_artifacts"],
+    )
+    assert [(artifact["phase"], artifact["attempt"]) for artifact in artifacts] == [
+        ("repair", 1)
+    ]
+
+
+def test_resumable_execution_persists_terminal_invalid_repair_outputs(
+    tmp_path: Path,
+) -> None:
+    manifest = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "terminal-repair-invalid-output-observation",
+                "task": {"name": "CleanHouse"},
+                "seeds": {"task": [1]},
+                "failure_strategy": {"name": "reflect", "max_repair_cycles": 1},
+            }
+        )
+    )
+    store = WorkspaceStore(tmp_path)
+
+    class FailingEvaluator:
+        def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+            _ = candidate, task_seed
+            return EpisodeResult(
+                outcome="partial_completion",
+                failure_type="stalled",
+                failure_reason="candidate stalled",
+                evaluation_evidence={"reason": "candidate stalled"},
+            )
+
+    with pytest.raises(ModelOutputFailure, match="schema or DSL"):
+        execute_resumable(
+            manifest,
+            experiment_id(manifest),
+            store,
+            OpenAIProposer(
+                FakeResponses(['{"source":"DEF run m( turnLeft m)"}', "", "", ""])
+            ),
+            FailingEvaluator(),
+        )
+
+    execution_id = store.active_execution_id(experiment_id(manifest))
+    assert execution_id is not None
+    artifacts = cast(
+        list[dict[str, object]],
+        store.inspect_execution(execution_id)["invalid_output_artifacts"],
+    )
+    assert [(artifact["phase"], artifact["attempt"]) for artifact in artifacts] == [
+        ("repair", 1),
+        ("repair", 2),
+        ("repair", 3),
+    ]
+
+
+def test_invalid_repair_artifact_persistence_failure_surfaces_immediately(
+    tmp_path: Path,
+) -> None:
+    class FailingArtifactStore(WorkspaceStore):
+        def save_invalid_output_artifact(self, execution_id: str, artifact: object) -> None:
+            _ = execution_id, artifact
+            raise sqlite3.OperationalError("artifact storage unavailable")
+
+    store = FailingArtifactStore(tmp_path)
+
+    with pytest.raises(sqlite3.OperationalError, match="artifact storage unavailable"):
+        reflect_once(
+            CandidateProgram(source="DEF run m( turnLeft m)"),
+            EpisodeResult(
+                outcome="partial_completion",
+                failure_type="stalled",
+                failure_reason="candidate stalled",
+                evaluation_evidence={"reason": "candidate stalled"},
+            ),
+            OpenAIProposer(FakeResponses(['{"source":"not dsl"}'])),
+            RepairCycle(task_name="CleanHouse"),
+            "exec_000001",
+            store,
+            "Repair CleanHouse using evidence",
+        )
 
 
 def test_invalid_output_persistence_failure_is_an_infrastructure_failure(tmp_path: Path) -> None:
@@ -309,6 +445,39 @@ def test_repair_feedback_includes_bounded_evaluation_evidence() -> None:
     assert len(repair_prompt) <= 8000
     assert "Allowed actions: move" in repair_prompt
     assert "sk-secret-value" not in repair_prompt
+
+
+def test_openai_proposer_observes_invalid_repair_output_before_successful_correction() -> None:
+    responses = FakeResponses(
+        ['{"source":"not dsl"}', '{"source":"DEF run m( move m)"}']
+    )
+    observed: list[InvalidOutputArtifact] = []
+    proposer = OpenAIProposer(responses)
+    proposer.set_invalid_output_observer(observed.append)
+
+    candidate = proposer.repair("Repair CleanHouse using evidence")
+
+    assert candidate.model_requests == 2
+    assert len(observed) == 1
+    assert observed[0].phase == "repair"
+    assert observed[0].attempt == 1
+    assert observed[0].correction_prompt is not None
+
+
+def test_openai_proposer_observes_terminal_empty_repair_outputs() -> None:
+    observed: list[InvalidOutputArtifact] = []
+    proposer = OpenAIProposer(FakeResponses(["", "", ""]))
+    proposer.set_invalid_output_observer(observed.append)
+
+    with pytest.raises(ModelOutputFailure, match="schema or DSL"):
+        proposer.repair("Repair CleanHouse using evidence")
+
+    assert [(artifact.phase, artifact.attempt) for artifact in observed] == [
+        ("repair", 1),
+        ("repair", 2),
+        ("repair", 3),
+    ]
+    assert observed[-1].correction_prompt is None
 
 
 def test_openai_proposer_blocks_token_budget_overrun() -> None:

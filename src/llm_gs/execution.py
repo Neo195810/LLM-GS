@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol, TypedDict, runtime_checkable
 
 from llm_gs.contracts import (
@@ -105,7 +106,12 @@ def reflect_once(
         intended_change="replace the stalled action sequence",
         preserved_behavior="a complete valid task DSL program",
     )
-    candidate = repairer.repair(prompt or f"Repair using: {diagnosis.observation}")
+    candidate = _repair_with_invalid_output_observation(
+        repairer,
+        prompt or f"Repair using: {diagnosis.observation}",
+        store,
+        execution_id,
+    )
     repair = cycle.repair(parent, diagnosis, intent, candidate, repair_round, seen_ast_hashes)
     store.save_repair_attempt(execution_id, repair)
     return repair.candidate
@@ -114,12 +120,31 @@ def reflect_once(
 def _propose_with_invalid_output_observation(
     model: ModelClient, prompt: str, store: WorkspaceStore, execution_id: str
 ) -> CandidateProgram:
+    return _with_invalid_output_observation(
+        model, lambda: model.propose(prompt), store, execution_id
+    )
+
+
+def _repair_with_invalid_output_observation(
+    repairer: Repairer, prompt: str, store: WorkspaceStore, execution_id: str
+) -> CandidateProgram:
+    return _with_invalid_output_observation(
+        repairer, lambda: repairer.repair(prompt), store, execution_id
+    )
+
+
+def _with_invalid_output_observation(
+    model: object,
+    request: Callable[[], CandidateProgram],
+    store: WorkspaceStore,
+    execution_id: str,
+) -> CandidateProgram:
     observer = getattr(model, "set_invalid_output_observer", None)
     if not callable(observer):
-        return model.propose(prompt)
+        return request()
     observer(lambda artifact: store.save_invalid_output_artifact(execution_id, artifact))
     try:
-        return model.propose(prompt)
+        return request()
     finally:
         observer(None)
 

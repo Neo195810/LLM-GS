@@ -133,6 +133,9 @@ class OpenAIProposer:
         self._invalid_output_observer = observer
 
     def propose(self, prompt: str) -> CandidateProgram:
+        return self._propose(prompt, phase="initial")
+
+    def _propose(self, prompt: str, *, phase: str) -> CandidateProgram:
         request_prompt = _bounded_feedback(prompt)
         if _token_estimate(request_prompt) > self._input_token_limit:
             raise ModelOutputFailure("request input exceeds the configured token budget")
@@ -162,7 +165,9 @@ class OpenAIProposer:
                 if attempt > CORRECTION_ATTEMPTS
                 else _correction_prompt(prompt, _response_candidate(response), validation_error)
             )
-            self._observe_invalid_output(response, attempt, validation_error, correction_prompt)
+            self._observe_invalid_output(
+                response, attempt, validation_error, correction_prompt, phase
+            )
             if attempt > CORRECTION_ATTEMPTS:
                 raise ModelOutputFailure(
                     "model output failed schema or DSL validation"
@@ -177,10 +182,10 @@ class OpenAIProposer:
         if task_name is None:
             raise ModelOutputFailure("repair prompt does not identify a supported task")
         bounded_context = _bounded_feedback(prompt, limit=5000)
-        return self.propose(
+        return self._propose(
             f"{task_prompt_for_repair(task_name)}\n"
-            "Repair context (bounded evaluation evidence): "
-            f"{bounded_context}"
+            "Repair context (bounded evaluation evidence): " f"{bounded_context}",
+            phase="repair",
         )
 
     def _reserve_request_cost(self) -> float | None:
@@ -224,6 +229,7 @@ class OpenAIProposer:
         attempt: int,
         validation_error: ProposalValidationError,
         correction_prompt: str | None,
+        phase: str,
     ) -> None:
         if self._invalid_output_observer is None:
             return
@@ -236,7 +242,7 @@ class OpenAIProposer:
         record = self.records[-1]
         self._invalid_output_observer(
             InvalidOutputArtifact(
-                phase="initial", attempt=attempt, validation_stage=validation_error.stage,
+                phase=phase, attempt=attempt, validation_stage=validation_error.stage,
                 validation_error=_bounded_feedback(str(validation_error), limit=1000),
                 finish_reason=record.finish_reason,
                 input_tokens=record.input_tokens, output_tokens=record.output_tokens,
