@@ -1,0 +1,17 @@
+LLM-GS V2 reuse and attribution notice
+
+The `prog_policies` baseline components are reused from:
+
+  Reclaiming the Source of Programmatic Policies: Programmatic versus Latent Spaces
+  https://github.com/lelis-research/prog_policies
+
+The reused CEM, CEBS, and hill-climbing baseline code is treated as GPL-3.0
+compatible material. The repository's LICENSE file contains the complete,
+verbatim GNU GPL version 3 text. Before claiming any V2 distribution, release
+owners must review the provenance and licenses of every reused component and
+dependency, preserve required attribution and notices, provide complete
+corresponding source where required, and obtain explicit legal clarification
+before distributing under closed or otherwise incompatible terms.
+
+TextWorld and its transitive runtime dependencies require a separate recorded
+license review before TextWorldPilot can be promoted to a formal benchmark.

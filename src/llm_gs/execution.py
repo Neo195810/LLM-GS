@@ -21,6 +21,7 @@ from llm_gs.manifest import (
     FOUR_CORNERS_PROMPT,
     OFFLINE_PROMPT,
     RED_BLUE_DOOR_PROMPT,
+    TEXTWORLD_PILOT_PROMPT,
     task_prompt,
 )
 from llm_gs.memory import (
@@ -37,6 +38,7 @@ from llm_gs.proposer import _validate_dsl
 from llm_gs.reflection import RepairCycle, RepeatedRepairError, _normalized_ast_hash
 from llm_gs.search import ScoredCandidate, resolve_search_strategy
 from llm_gs.storage import WorkspaceStore
+from llm_gs.textworld_pilot import TextWorldPilotAdapter, TextWorldPilotLimits
 from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 
 
@@ -72,6 +74,13 @@ class FakeOpenAIClient:
             return CandidateProgram(source="DEF run m( left m)")
         if prompt == RED_BLUE_DOOR_PROMPT:
             return CandidateProgram(source="DEF run m( left m)")
+        if prompt == TEXTWORLD_PILOT_PROMPT:
+            return CandidateProgram(
+                source=(
+                    "WHEN not_has_key DO take_key; WHEN has_key DO unlock_chest; "
+                    "WHEN chest_unlocked DO open_chest"
+                )
+            )
         if prompt != OFFLINE_PROMPT:
             raise ValueError("fake model received an unknown prompt")
         return CandidateProgram(source="SUCCESS")
@@ -205,6 +214,14 @@ class RedBlueDoorEvaluator:
         )
 
 
+class TextWorldPilotEvaluator:
+    def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+        _validate_dsl(candidate.source, task_name="TextWorldPilot")
+        return TextWorldPilotAdapter().evaluate(
+            candidate, task_seed, TextWorldPilotLimits(max_actions=3)
+        )
+
+
 def execute_resumable(
     manifest: ExperimentManifest,
     experiment_id: str,
@@ -218,7 +235,8 @@ def execute_resumable(
     if (
         manifest.failure_strategy["name"]
         in {"regenerate", "reflect", "memory_repair", "memory_reflect"}
-        and manifest.task["name"] in {"CleanHouse", "DoorKey", "FourCorners", "RedBlueDoor"}
+        and manifest.task["name"]
+        in {"CleanHouse", "DoorKey", "FourCorners", "RedBlueDoor", "TextWorldPilot"}
     ):
         return _execute_reflect(manifest, experiment_id, store, model, evaluator, stop_after)
     work = store.next_pending_work(experiment_id)

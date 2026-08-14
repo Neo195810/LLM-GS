@@ -297,6 +297,11 @@ def _normalize_source(source: str) -> str:
 
 
 def _validate_dsl(source: str, task_name: str | None = None) -> None:
+    if task_name == "TextWorldPilot":
+        from llm_gs.textworld_pilot import parse_program
+
+        parse_program(source)
+        return
     if task_name in {"DoorKey", "RedBlueDoor"}:
         MinigridDSL().parse_str_to_node(source)  # type: ignore[no-untyped-call]
         return
@@ -310,6 +315,8 @@ def _validate_dsl(source: str, task_name: str | None = None) -> None:
 
 
 def _task_name_from_prompt(prompt: str) -> str | None:
+    if "TextWorldPilot" in prompt:
+        return "TextWorldPilot"
     if "DoorKey" in prompt:
         return "DoorKey"
     if "RedBlueDoor" in prompt:

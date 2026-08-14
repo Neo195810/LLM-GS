@@ -10,7 +10,9 @@ class StrictContract(BaseModel):
 
 
 class TaskSpecification(StrictContract):
-    name: Literal["CleanHouse", "DoorKey", "FourCorners", "RedBlueDoor", "offline.echo"]
+    name: Literal[
+        "CleanHouse", "DoorKey", "FourCorners", "RedBlueDoor", "TextWorldPilot", "offline.echo"
+    ]
 
 
 class SeedSpecification(StrictContract):

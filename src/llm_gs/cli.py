@@ -19,6 +19,7 @@ from llm_gs.execution import (
     FourCornersEvaluator,
     OfflineEchoEvaluator,
     RedBlueDoorEvaluator,
+    TextWorldPilotEvaluator,
     execute_resumable,
 )
 from llm_gs.manifest import (
@@ -30,6 +31,7 @@ from llm_gs.manifest import (
 from llm_gs.matrix import build_matrix_manifests, matrix_report
 from llm_gs.proposer import CostBudget, ModelOutputFailure, OpenAIProposer
 from llm_gs.storage import WorkspaceStore
+from llm_gs.textworld_release_gate import evaluate_release_gate, evidence_from_dict
 
 
 def _validate(args: argparse.Namespace) -> dict[str, object]:
@@ -75,6 +77,8 @@ def _execute_with_failure_recording(
             if manifest.task["name"] == "RedBlueDoor"
             else FourCornersEvaluator()
             if manifest.task["name"] == "FourCorners"
+            else TextWorldPilotEvaluator()
+            if manifest.task["name"] == "TextWorldPilot"
             else OfflineEchoEvaluator(),
             stop_after,
         )
@@ -111,6 +115,19 @@ def _resume(args: argparse.Namespace) -> dict[str, object]:
 
 def _report(args: argparse.Namespace) -> dict[str, object]:
     return WorkspaceStore(args.workspace).reporting_view(args.experiment_id)
+
+
+def _textworld_promote(args: argparse.Namespace) -> dict[str, object]:
+    try:
+        payload = json.loads(args.evidence.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid TextWorld release evidence: {error}") from error
+    gate = evaluate_release_gate(evidence_from_dict(payload))
+    if not gate.passed:
+        raise ValueError(
+            "TextWorld formal promotion blocked: " + ", ".join(gate.unmet_requirements)
+        )
+    return {"passed": gate.passed, "unmet_requirements": list(gate.unmet_requirements)}
 
 
 def _matrix_validate(args: argparse.Namespace) -> dict[str, object]:
@@ -275,6 +292,17 @@ def _parser() -> argparse.ArgumentParser:
     report.add_argument("--workspace", type=Path, required=True)
     report.add_argument("--experiment-id", required=True)
     report.set_defaults(handler=_report)
+
+    textworld = commands.add_parser("textworld")
+    textworld_commands = textworld.add_subparsers(dest="textworld_command", required=True)
+    textworld_promote = textworld_commands.add_parser("promote")
+    textworld_promote.add_argument(
+        "--evidence",
+        type=Path,
+        required=True,
+        help="persisted JSON artifact containing formal TextWorld release evidence",
+    )
+    textworld_promote.set_defaults(handler=_textworld_promote)
 
     matrix = commands.add_parser("matrix")
     matrix_commands = matrix.add_subparsers(dest="matrix_command", required=True)

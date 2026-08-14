@@ -35,6 +35,13 @@ CLEAN_HOUSE_PROMPT = KAREL_DSL_PROMPT.format(task="CleanHouse")
 FOUR_CORNERS_PROMPT = KAREL_DSL_PROMPT.format(task="FourCorners")
 DOOR_KEY_PROMPT = MINIGRID_DSL_PROMPT.format(task="DoorKey")
 RED_BLUE_DOOR_PROMPT = MINIGRID_DSL_PROMPT.format(task="RedBlueDoor")
+TEXTWORLD_PILOT_PROMPT = (
+    "Return JSON with only source. Produce one deterministic TextWorldPilot V2 program. "
+    "Use one to three semicolon-separated rules: WHEN <predicate> DO <action>. "
+    "Predicates: not_has_key, has_key, chest_unlocked, chest_open. "
+    "Actions: take_key, unlock_chest, open_chest. Never output natural-language "
+    "commands, pseudocode, Markdown, or Python."
+)
 FINAL_CANDIDATE_SELECTION_RULE = (
     "attempt_outcome,success_proportion,mean_normalized_progress,"
     "worst_normalized_progress,lower_episode_cost,stable_identity"
@@ -100,11 +107,12 @@ def load_ablation_matrix_specification(path: Path) -> AblationMatrixSpecificatio
 def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManifest:
     is_karel_task = specification.task.name in {"CleanHouse", "FourCorners"}
     is_minigrid_task = specification.task.name in {"DoorKey", "RedBlueDoor"}
+    is_textworld_task = specification.task.name == "TextWorldPilot"
     task_name = specification.task.name
     repair_rounds = (
         specification.failure_strategy.max_repair_cycles
         if (
-            is_karel_task or is_minigrid_task
+            is_karel_task or is_minigrid_task or is_textworld_task
             or specification.failure_strategy.name != "regenerate"
             or specification.seed_suite is not None
         )
@@ -126,7 +134,9 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
     # OpenAIProposer permits up to three schema/DSL correction requests for
     # every candidate, so the request budget must include that bounded retry.
     model_request_budget = (
-        candidate_budget * 3 if is_karel_task or is_minigrid_task else candidate_budget
+        candidate_budget * 3
+        if is_karel_task or is_minigrid_task or is_textworld_task
+        else candidate_budget
     )
     memory_protocol = (
         "frozen-v1"
@@ -141,7 +151,11 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         components={
             "evaluator": (
                 f"minigrid-{task_name.lower()}-adapter-v1" if is_minigrid_task
-                else f"v1-{task_name.lower()}-adapter-v1" if is_karel_task else "offline-echo-v1"
+                else f"v1-{task_name.lower()}-adapter-v1"
+                if is_karel_task
+                else "textworld-pilot-adapter-v1"
+                if is_textworld_task
+                else "offline-echo-v1"
             ),
             "proposer": "fake-openai-v1",
             "reporter": "deterministic-json-v1",
@@ -153,6 +167,8 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
                 if is_minigrid_task
                 else "karel-dsl-v1"
                 if is_karel_task
+                else "textworld-pilot-dsl-v1"
+                if is_textworld_task
                 else "offline-dsl-v1"
             ),
             "prompt_sha256": sha256_bytes(
@@ -160,7 +176,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             ).removeprefix("sha256:"),
             **(
                 {"outcome_classifier": f"{task_name.lower()}-v1"}
-                if is_karel_task or is_minigrid_task
+                if is_karel_task or is_minigrid_task or is_textworld_task
                 else {}
             ),
         },
@@ -178,7 +194,11 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         task={
             "adapter_version": 1,
             "name": specification.task.name,
-            **({"outcome_classifier_version": 1} if is_karel_task or is_minigrid_task else {}),
+            **(
+                {"outcome_classifier_version": 1}
+                if is_karel_task or is_minigrid_task or is_textworld_task
+                else {}
+            ),
         },
         search_strategy={
             **specification.search_strategy.model_dump(mode="json"),
@@ -232,6 +252,8 @@ def task_prompt(task_name: str) -> str:
         return DOOR_KEY_PROMPT
     if task_name == "RedBlueDoor":
         return RED_BLUE_DOOR_PROMPT
+    if task_name == "TextWorldPilot":
+        return TEXTWORLD_PILOT_PROMPT
     return OFFLINE_PROMPT
 
 
