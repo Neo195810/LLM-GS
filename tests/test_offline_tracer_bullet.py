@@ -999,6 +999,6 @@ def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
             "task,failure_type,failure_reason,state_distance,evidence_quality,"
             "improvement,novelty,normalized_ast_hash,entry_id"
         ),
-        "retriever_version": "structured-clean-house-v3",
+        "retriever_version": "structured-task-v4",
         "retriever_weights": "1,1,1,1,1,1,1,1,1",
     }
