@@ -6,7 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_gs.proposer import MODEL_NAME, REASONING_EFFORT, ModelOutputFailure, OpenAIProposer
+from llm_gs.manifest import task_prompt
+from llm_gs.proposer import (
+    MODEL_NAME,
+    REASONING_EFFORT,
+    CostBudget,
+    ModelOutputFailure,
+    OpenAIProposer,
+)
 
 
 class FakeResponses:
@@ -59,7 +66,44 @@ def test_openai_proposer_corrects_invalid_output_at_most_twice() -> None:
 
     assert candidate.model_requests == 3
     assert len(responses.calls) == 3
-    assert "Validation error" in str(responses.calls[1]["input"])
+    correction = str(responses.calls[1]["input"])
+    assert "Validation error" in correction
+    assert "Candidate program" in correction
+    assert "DEF run m(" in correction
+    assert "Allowed actions:" in correction
+    assert "previous_response_id" not in responses.calls[1]
+
+
+def test_correction_feedback_is_bounded_and_redacts_secrets() -> None:
+    responses = FakeResponses(
+        [
+            '{"source":"not dsl"}',
+            '{"source":"still not dsl"}',
+            '{"source":"DEF run m( turnLeft m)"}',
+        ]
+    )
+
+    OpenAIProposer(responses).propose(
+        "Solve CleanHouse with token sk-test-secret-value and " + "x" * 20000
+    )
+
+    correction = str(responses.calls[1]["input"])
+    assert len(correction) <= 8000
+    assert "sk-test-secret-value" not in correction
+    assert "Candidate program: not dsl" in correction
+
+
+def test_repair_feedback_includes_bounded_evaluation_evidence() -> None:
+    responses = FakeResponses(['{"source":"DEF run m( move m)"}'])
+
+    OpenAIProposer(responses).repair(
+        "Repair CleanHouse using evidence " + "x" * 20000 + " sk-secret-value"
+    )
+
+    repair_prompt = str(responses.calls[0]["input"])
+    assert len(repair_prompt) <= 8000
+    assert "Allowed actions: move" in repair_prompt
+    assert "sk-secret-value" not in repair_prompt
 
 
 def test_openai_proposer_blocks_token_budget_overrun() -> None:
@@ -81,9 +125,51 @@ def test_openai_proposer_retries_an_invalid_karel_dsl() -> None:
     assert OpenAIProposer(responses).propose("make a program").model_requests == 2
 
 
+def test_openai_proposer_retries_an_invalid_task_specific_dsl() -> None:
+    responses = FakeResponses(
+        ['{"source":"CLEANHOUSE"}', '{"source":"DEF run m( turnLeft m)"}']
+    )
+
+    assert OpenAIProposer(responses).propose("Solve CleanHouse").model_requests == 2
+
+
+def test_openai_proposer_safely_extracts_and_normalizes_code_fenced_source() -> None:
+    responses = FakeResponses(["```\n DEF   run m(   turnLeft   m) \n```"])
+
+    candidate = OpenAIProposer(responses).propose("make a program")
+
+    assert candidate.source == "DEF run m( turnLeft m)"
+
+
+def test_openai_proposer_repair_includes_task_dsl_contract() -> None:
+    responses = FakeResponses(['{"source":"DEF run m( move m)"}'])
+
+    candidate = OpenAIProposer(responses).repair("Repair CleanHouse using evidence")
+
+    assert candidate.source == "DEF run m( move m)"
+    assert "Allowed actions: move" in str(responses.calls[0]["input"])
+
+
 def test_openai_proposer_blocks_input_before_sending_a_request() -> None:
     responses = FakeResponses(['{"source":"DEF run m( turnLeft m)"}'])
 
     with pytest.raises(ModelOutputFailure, match="input exceeds"):
         OpenAIProposer(responses, input_token_limit=1).propose("this prompt is too large")
     assert responses.calls == []
+
+
+def test_openai_proposer_enforces_shared_total_cost_cap() -> None:
+    budget = CostBudget(0.01)
+    responses = FakeResponses(['{"source":"DEF run m( turnLeft m)"}'])
+
+    with pytest.raises(ModelOutputFailure, match="total cost cap"):
+        OpenAIProposer(responses, total_cost_budget=budget).propose("make a program")
+    assert responses.calls == []
+
+
+@pytest.mark.parametrize("task_name", ["CleanHouse", "FourCorners", "DoorKey", "RedBlueDoor"])
+def test_task_prompt_includes_exact_dsl_envelope_and_example(task_name: str) -> None:
+    prompt = task_prompt(task_name)
+
+    assert "DEF run m(" in prompt
+    assert "Example valid source" in prompt
