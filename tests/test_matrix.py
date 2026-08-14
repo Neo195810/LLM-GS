@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from llm_gs import cli
-from llm_gs.contracts import AblationMatrixSpecification
+from llm_gs.contracts import AblationMatrixSpecification, CandidateProgram
+from llm_gs.execution import FakeOpenAIClient
 from llm_gs.matrix import build_matrix_manifests, matrix_report
 from llm_gs.proposer import ModelOutputFailure
 
@@ -221,7 +222,7 @@ max_repair_cycles: 1
     )
 
     class FailingModel:
-        def propose(self, prompt: str) -> object:
+        def propose(self, prompt: str) -> CandidateProgram:
             raise failure
 
         def repair(self, prompt: str) -> object:
@@ -337,3 +338,135 @@ max_repair_cycles: 1
     assert arm["missingness"] == {"incomplete_executions": 0}
     assert arm["failure_classes"]["infrastructure"] == 3
     assert arm["failure_classes"]["replacements"] == 3
+
+
+def test_matrix_run_recovers_with_fake_client_without_erasing_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specification = tmp_path / "matrix.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+matrix_version: 1
+display_name: fake-client-resume
+seed_suite:
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+    manifest = build_matrix_manifests(
+        AblationMatrixSpecification.model_validate(
+            {
+                "display_name": "fake-client-resume",
+                "seed_suite": {
+                    "memory_training": [1],
+                    "development": [2],
+                    "held_out": [3],
+                },
+            }
+        )
+    )[0]
+    monkeypatch.setattr(cli, "build_matrix_manifests", lambda _: (manifest,))
+
+    class FlakyClient(FakeOpenAIClient):
+        attempts = 0
+        transport_failures = 0
+
+        def propose(self, prompt: str) -> CandidateProgram:
+            self.attempts += 1
+            if self.attempts <= 3:
+                self.transport_failures += 1
+                raise OSError("temporary model transport outage")
+            return super().propose(prompt)
+
+    client = FlakyClient()
+    monkeypatch.setattr(cli, "_model_client", lambda *args, **kwargs: client)
+    args = cli._parser().parse_args(
+        ["matrix", "run", str(specification), "--workspace", str(workspace)]
+    )
+
+    failed = args.handler(args)["arm_reports"][0]
+    recovered = args.handler(args)
+    arm = recovered["arm_reports"][0]
+
+    assert client.transport_failures == 3
+    assert failed["arm_state"] == "infrastructure-failed"
+    assert [execution["status"] for execution in arm["executions"]] == [
+        "failed",
+        "failed",
+        "failed",
+        "completed",
+    ]
+    assert arm["failure_classes"] == {
+        "budget": 0,
+        "infrastructure": 3,
+        "model_output": 0,
+        "replacements": 3,
+    }
+    assert arm["arm_state"] == "completed"
+    assert recovered["protocols"]["Frozen"]["arms"] == 1
+    assert recovered["protocols"]["Online"]["arms"] == 0
+
+
+def test_matrix_run_does_not_retry_model_output_as_infrastructure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specification = tmp_path / "matrix.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+matrix_version: 1
+display_name: model-output-no-retry
+seed_suite:
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+    manifest = build_matrix_manifests(
+        AblationMatrixSpecification.model_validate(
+            {
+                "display_name": "model-output-no-retry",
+                "seed_suite": {
+                    "memory_training": [1],
+                    "development": [2],
+                    "held_out": [3],
+                },
+            }
+        )
+    )[0]
+    monkeypatch.setattr(cli, "build_matrix_manifests", lambda _: (manifest,))
+
+    class InvalidClient(FakeOpenAIClient):
+        attempts = 0
+
+        def propose(self, prompt: str) -> object:
+            self.attempts += 1
+            raise ModelOutputFailure("invalid schema")
+
+    client = InvalidClient()
+    monkeypatch.setattr(cli, "_model_client", lambda *args, **kwargs: client)
+    args = cli._parser().parse_args(
+        ["matrix", "run", str(specification), "--workspace", str(workspace)]
+    )
+
+    arm = args.handler(args)["arm_reports"][0]
+
+    assert client.attempts == 1
+    assert arm["arm_state"] == "model-output-failed"
+    assert arm["arm_error"] == {
+        "class": "model_output",
+        "detail": "model output failure: invalid schema",
+    }
+    assert arm["failure_classes"] == {
+        "budget": 0,
+        "infrastructure": 0,
+        "model_output": 1,
+        "replacements": 0,
+    }
+    assert [execution["status"] for execution in arm["executions"]] == ["failed"]
