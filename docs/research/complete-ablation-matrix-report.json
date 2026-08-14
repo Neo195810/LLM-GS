@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-08-14",
+  "specification": "docs/specs/complete-ablation-matrix.yaml",
+  "workspace": "artifacts/complete-ablation-matrix-fake-run",
+  "client": "fake (deterministic, scripted proposer/repair responses; no live OpenAI calls)",
+  "command": "llm-gs matrix run docs/specs/complete-ablation-matrix.yaml --workspace artifacts/complete-ablation-matrix-fake-run",
+  "arms": 48,
+  "arm_states": {
+    "pending": 0,
+    "running": 0,
+    "completed": 48,
+    "model-output-failed": 0,
+    "infrastructure-failed": 0,
+    "blocked-by-budget": 0
+  },
+  "missingness": {
+    "incomplete_executions": 0,
+    "unreported_arms": 0
+  },
+  "exclusions": {
+    "arms": [],
+    "count": 0
+  },
+  "failure_classes": {
+    "budget": 0,
+    "infrastructure": 0,
+    "model_output": 0,
+    "replacements": 0
+  },
+  "protocols": {
+    "Frozen": {
+      "arms": 48,
+      "fixed_budget_success_rate": 0.0,
+      "confidence_interval": {
+        "method": "wilson-95",
+        "lower": 0.0,
+        "upper": 0.0741026511527422
+      }
+    },
+    "Online": {
+      "arms": 0,
+      "fixed_budget_success_rate": null,
+      "confidence_interval": {
+        "method": "wilson-95",
+        "lower": null,
+        "upper": null
+      }
+    }
+  },
+  "note": "docs/specs/complete-ablation-matrix.yaml defines only the Frozen-Memory matrix (display_name: complete-frozen-ablation), so 0 Online arms is expected, not missing data. Frozen and Online statistics are never pooled (matrix_report keeps them in separate protocol buckets); this run has no Online arms to report."
+}
