@@ -188,7 +188,7 @@ max_repair_cycles: 1
             "budget",
         ),
         (TimeoutError("network unavailable"), "infrastructure-failed", "infrastructure"),
-        (RuntimeError("evaluator crashed"), "infrastructure-failed", "execution"),
+        (RuntimeError("evaluator crashed"), "infrastructure-failed", "infrastructure"),
     ],
 )
 def test_matrix_cli_persists_terminal_failure_state_for_every_arm(
@@ -241,7 +241,8 @@ max_repair_cycles: 1
     aggregate_class = (
         "infrastructure" if expected_error_class == "execution" else expected_error_class
     )
-    assert matrix["failure_classes"][aggregate_class] == 48
+    expected_failures = 144 if expected_state == "infrastructure-failed" else 48
+    assert matrix["failure_classes"][aggregate_class] == expected_failures
     assert all(
         arm["arm_error"]["class"] == expected_error_class for arm in matrix["arm_reports"]
     )
@@ -249,3 +250,84 @@ max_repair_cycles: 1
         str(failure) in arm["arm_error"]["detail"]
         for arm in matrix["arm_reports"]
     )
+
+
+def test_matrix_run_retries_infrastructure_with_new_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specification = tmp_path / "matrix.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+matrix_version: 1
+display_name: resumable
+seed_suite:
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+    manifest = build_matrix_manifests(
+        AblationMatrixSpecification.model_validate(
+            {
+                "display_name": "resumable",
+                "seed_suite": {
+                    "memory_training": [1],
+                    "development": [2],
+                    "held_out": [3],
+                },
+            }
+        )
+    )[0]
+    monkeypatch.setattr(cli, "build_matrix_manifests", lambda _: (manifest,))
+    attempts = 0
+
+    def execute(*args: object, **kwargs: object) -> tuple[object, str]:
+        nonlocal attempts
+        attempts += 1
+        store = args[2]
+        assert hasattr(store, "next_execution_id")
+        experiment = args[1]
+        execution_id = store.next_execution_id(experiment)
+        store.begin_execution_for_experiment(
+            manifest, experiment, execution_id, "DEF run m( move m)", 1
+        )
+        if attempts <= 3:
+            store.record_execution_failure(experiment, execution_id, "infrastructure", "transient")
+            raise ValueError("infrastructure failure: transient")
+        from llm_gs.contracts import ExperimentReport
+
+        report = ExperimentReport(
+            experiment_id=experiment,
+            execution_id=execution_id,
+            candidate_programs=1,
+            episode_evaluations=1,
+            model_requests=1,
+            outcomes={"success": 1},
+        )
+        store.save(manifest, report)
+        return report, "completed"
+
+    monkeypatch.setattr(cli, "_execute_with_failure_recording", execute)
+    args = cli._parser().parse_args(
+        ["matrix", "run", str(specification), "--workspace", str(workspace)]
+    )
+
+    first_matrix = args.handler(args)
+
+    first_arm = first_matrix["arm_reports"][0]
+    assert first_arm["arm_state"] == "infrastructure-failed"
+    assert len(first_arm["executions"]) == 3
+    assert first_arm["failure_classes"]["replacements"] == 2
+
+    matrix = args.handler(args)
+
+    assert attempts == 4
+    arm = matrix["arm_reports"][0]
+    assert arm["arm_state"] == "completed"
+    assert len(arm["executions"]) == 4
+    assert arm["missingness"] == {"incomplete_executions": 0}
+    assert arm["failure_classes"]["infrastructure"] == 3
+    assert arm["failure_classes"]["replacements"] == 3

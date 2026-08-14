@@ -28,7 +28,7 @@ from llm_gs.manifest import (
     resolve_manifest,
 )
 from llm_gs.matrix import build_matrix_manifests, matrix_report
-from llm_gs.proposer import ModelOutputFailure, OpenAIProposer
+from llm_gs.proposer import CostBudget, ModelOutputFailure, OpenAIProposer
 from llm_gs.storage import WorkspaceStore
 
 
@@ -59,13 +59,14 @@ def _execute_with_failure_recording(
     store: WorkspaceStore,
     args: argparse.Namespace,
     stop_after: int | None = None,
+    model: FakeOpenAIClient | OpenAIProposer | None = None,
 ) -> tuple[ExperimentReport | None, str]:
     try:
         report, status = execute_resumable(
             manifest,
             experiment_id,
             store,
-            _model_client(args),
+            model if model is not None else _model_client(args),
             CleanHouseEvaluator()
             if manifest.task["name"] == "CleanHouse"
             else DoorKeyEvaluator()
@@ -126,30 +127,71 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
     manifests = build_matrix_manifests(load_ablation_matrix_specification(args.specification))
     store = WorkspaceStore(args.workspace)
     reports = []
+    total_cost_budget = (
+        CostBudget(args.max_total_cost_usd)
+        if args.enable_live_openai and args.max_total_cost_usd is not None
+        else None
+    )
     for manifest in manifests:
         store.register_matrix_arm(manifest, experiment_id(manifest))
     for manifest in manifests:
         resolved_experiment_id = experiment_id(manifest)
-        store.set_matrix_arm_state(resolved_experiment_id, "running")
-        try:
-            report, _ = _execute_with_failure_recording(
-                manifest, resolved_experiment_id, store, args
-            )
-            if report is None:
-                raise ValueError("matrix arm did not produce a completed report")
-            store.set_matrix_arm_state(resolved_experiment_id, "completed")
-        except (RuntimeError, ValueError) as error:
-            state, error_class = _matrix_arm_failure(error)
-            if error_class == "execution":
-                store.record_execution_failure(
+        previous_failed_execution = store.latest_failed_execution_id(resolved_experiment_id)
+        for infrastructure_retry in range(3):
+            store.set_matrix_arm_state(resolved_experiment_id, "running")
+            try:
+                report, _ = _execute_with_failure_recording(
+                    manifest,
                     resolved_experiment_id,
-                    store.active_execution_id(resolved_experiment_id),
-                    "infrastructure",
-                    str(error),
+                    store,
+                    args,
+                    model=_model_client(args, total_cost_budget=total_cost_budget),
                 )
-            store.set_matrix_arm_state(resolved_experiment_id, state, error_class, str(error))
+                if report is None:
+                    raise ValueError("matrix arm did not produce a completed report")
+                if previous_failed_execution is not None:
+                    store.record_replacement_execution(
+                        resolved_experiment_id,
+                        previous_failed_execution,
+                        report.execution_id,
+                    )
+                store.set_matrix_arm_state(resolved_experiment_id, "completed")
+                break
+            except (RuntimeError, ValueError) as error:
+                state, error_class = _matrix_arm_failure(error)
+                failed_execution = store.active_execution_id(resolved_experiment_id)
+                if error_class == "execution":
+                    store.record_execution_failure(
+                        resolved_experiment_id,
+                        failed_execution,
+                        "infrastructure",
+                        str(error),
+                    )
+                    error_class = "infrastructure"
+                if failed_execution is not None:
+                    store.mark_execution_failed(failed_execution)
+                if error_class == "infrastructure":
+                    if failed_execution is not None:
+                        if previous_failed_execution is not None:
+                            store.record_replacement_execution(
+                                resolved_experiment_id,
+                                previous_failed_execution,
+                                failed_execution,
+                            )
+                        previous_failed_execution = failed_execution
+                    if infrastructure_retry < 2:
+                        continue
+                    state = "infrastructure-failed"
+                store.set_matrix_arm_state(resolved_experiment_id, state, error_class, str(error))
+                break
         reports.append(store.reporting_view(resolved_experiment_id))
-    return matrix_report(reports)
+    output = matrix_report(reports)
+    if total_cost_budget is not None:
+        output["cost"] = {
+            "cap_usd": total_cost_budget.max_cost_usd,
+            "used_usd": total_cost_budget.used_cost_usd,
+        }
+    return output
 
 
 def _matrix_report(args: argparse.Namespace) -> dict[str, object]:
@@ -244,6 +286,7 @@ def _parser() -> argparse.ArgumentParser:
     matrix_run.add_argument("--workspace", type=Path, required=True)
     matrix_run.add_argument("--enable-live-openai", action="store_true")
     matrix_run.add_argument("--max-cost-usd", type=float)
+    matrix_run.add_argument("--max-total-cost-usd", type=float)
     matrix_run.set_defaults(handler=_matrix_run)
     matrix_report_command = matrix_commands.add_parser("report")
     matrix_report_command.add_argument("specification", type=Path)
@@ -284,12 +327,16 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _model_client(args: argparse.Namespace) -> FakeOpenAIClient | OpenAIProposer:
+def _model_client(
+    args: argparse.Namespace, total_cost_budget: CostBudget | None = None
+) -> FakeOpenAIClient | OpenAIProposer:
     if not args.enable_live_openai:
         return FakeOpenAIClient()
     if args.max_cost_usd is None or args.max_cost_usd <= 0:
         raise ValueError("live OpenAI requires a positive --max-cost-usd")
-    return OpenAIProposer(max_cost_usd=args.max_cost_usd)
+    return OpenAIProposer(
+        max_cost_usd=args.max_cost_usd, total_cost_budget=total_cost_budget
+    )
 
 
 def _fail(message: str) -> NoReturn:

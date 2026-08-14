@@ -307,13 +307,12 @@ def _execute_frozen_memory_protocol(
 
     execution_id = store.next_execution_id(experiment_id)
     task_name = str(manifest.task["name"])
-    initial_candidate = model.propose(task_prompt(task_name))
     store.begin_execution_for_experiment(
-        manifest,
-        experiment_id,
-        execution_id,
-        initial_candidate.source,
-        initial_candidate.model_requests,
+        manifest, experiment_id, execution_id, "<pending-candidate>", 0
+    )
+    initial_candidate = model.propose(task_prompt(task_name))
+    store.update_execution_candidate(
+        execution_id, initial_candidate.source, initial_candidate.model_requests
     )
     training_results = _evaluate_candidate(
         store, execution_id, initial_candidate, suite["memory_training"], evaluator

@@ -178,6 +178,20 @@ class WorkspaceStore:
                     (execution_id, int(seed)),
                 )
 
+    def update_execution_candidate(
+        self, execution_id: str, candidate_source: str, model_requests: int
+    ) -> None:
+        if model_requests < 1:
+            raise ValueError("model request count must be positive")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE executions SET candidate_source = ?, model_requests = ? "
+                "WHERE execution_id = ? AND status = 'running'",
+                (candidate_source, model_requests, execution_id),
+            )
+        if cursor.rowcount != 1:
+            raise ValueError(f"running execution not found: {execution_id}")
+
     def next_pending_work(self, experiment_id: str) -> PendingWork | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -637,7 +651,9 @@ class WorkspaceStore:
             "fixed_budget_success_rate": _success_rate_from_outcomes(report["outcomes"]),
             "costs": {"model_requests": report["model_requests"], "episode_evaluations": report["episode_evaluations"]},
             "executions": executions,
-            "missingness": {"incomplete_executions": sum(item["status"] != "completed" for item in executions)},
+            "missingness": {
+                "incomplete_executions": sum(item["status"] == "running" for item in executions)
+            },
             "failure_classes": {
                 "budget": next((int(count) for kind, count in failures if kind == "budget"), 0),
                 "infrastructure": next((int(count) for kind, count in failures if kind == "infrastructure"), 0),
@@ -678,6 +694,16 @@ class WorkspaceStore:
                 "replacement_execution_id) VALUES (?, ?, ?)",
                 (experiment_id, failed_execution_id, replacement_execution_id),
             )
+
+    def mark_execution_failed(self, execution_id: str) -> None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE executions SET status = 'failed' "
+                "WHERE execution_id = ? AND status = 'running'",
+                (execution_id,),
+            )
+        if cursor.rowcount != 1:
+            raise ValueError(f"running execution not found: {execution_id}")
 
     def inspect_execution(self, execution_id: str) -> dict[str, object]:
         return self.execution_audit(execution_id)
@@ -847,6 +873,16 @@ class WorkspaceStore:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT execution_id FROM executions WHERE experiment_id = ? AND status = 'running' ORDER BY execution_id DESC LIMIT 1",
+                (experiment_id,),
+            ).fetchone()
+        return str(row[0]) if row is not None else None
+
+    def latest_failed_execution_id(self, experiment_id: str) -> str | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT execution_id FROM executions "
+                "WHERE experiment_id = ? AND status = 'failed' "
+                "ORDER BY execution_id DESC LIMIT 1",
                 (experiment_id,),
             ).fetchone()
         return str(row[0]) if row is not None else None
