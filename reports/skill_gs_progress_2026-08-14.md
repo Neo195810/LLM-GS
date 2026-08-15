@@ -33,7 +33,7 @@ Implemented components:
   - CLI entry point for single-seed and multi-seed smoke runs.
 
 - `tests/test_skill_gs_doorkey_mvp.py`
-  - Verifies state extraction, fixed policy behavior, planner skill mapping, seed 0 success, and seeds 0..7 success.
+  - Verifies state extraction, fixed policy behavior, planner skill mapping, seed 0 success, seeds 0..7 success, and skill-memory idempotency.
 
 ## Verification
 
@@ -50,7 +50,7 @@ Ran 5 tests
 OK
 ```
 
-Multi-seed smoke command:
+Initial multi-seed smoke command:
 
 ```powershell
 python scripts\skill_gs\run_doorkey_mvp.py --seeds 0 1 2 3 4 5 6 7 --trace-limit 0
@@ -72,6 +72,35 @@ Observed result:
 }
 ```
 
+Extended skill-memory command:
+
+```powershell
+python -c "import json; from prog_policies.skill_gs.evaluator import run_many_doorkey_mvp; result = run_many_doorkey_mvp(range(8, 128), skill_store_path=r'data\skill_gs\doorkey_skills.json'); keys = ['task', 'num_runs', 'successes', 'success_rate', 'failed_seeds', 'average_steps_successful', 'critic_decisions', 'skill_memory']; print(json.dumps({key: result[key] for key in keys}, indent=2))"
+```
+
+Observed result:
+
+```json
+{
+  "task": "DoorKey",
+  "num_runs": 120,
+  "successes": 120,
+  "success_rate": 1.0,
+  "failed_seeds": [],
+  "average_steps_successful": 15.041666666666666,
+  "critic_decisions": {
+    "store_skill": 120
+  },
+  "skill_memory": {
+    "store_path": "data\\skill_gs\\doorkey_skills.json",
+    "stored_skills": 0,
+    "updated_skills": 720,
+    "skipped_skills": 0,
+    "skipped_runs": 0
+  }
+}
+```
+
 ## What This Proves
 
 The project environment can run the current DoorKey MVP successfully.
@@ -84,7 +113,7 @@ The current Skill-GS layer can already support:
 - evaluator output through `run_doorkey_mvp`
 - evaluator-to-critic analysis through `CriticRepairAgent`
 - cumulative skill recording through `record_skills_from_evaluation`
-- reproducible smoke testing over seeds 0..7
+- reproducible smoke testing over seeds 0..127
 
 For DoorKey, the planner now retrieves reasonable skills:
 
@@ -111,8 +140,8 @@ step-budget failures produce structured repair hints such as
 
 The skill database can now accumulate successful skills into
 `data/skill_gs/doorkey_skills.json` when the CLI is run with `--skill-store`.
-The first DoorKey multi-seed run stores 6 learned skills and updates them
-across seeds 0..7, producing `num_evaluations=8` on each record.
+The DoorKey skill-memory run now covers seeds 0..127. It stores 6 learned
+skills, and each record has `num_evaluations=128`.
 
 This MVP uses the repo-native Karel DoorKey task. The paper-related MiniGrid
 tasks, such as PutNear, RedBlueDoor, and LavaGap, are still future integration
@@ -137,7 +166,7 @@ Verified critic behavior:
 
 - DoorKey success returns `repair_operator="store_skill"`.
 - Step-budget failure returns `repair_operator="retrieve_alternative_skill"`.
-- Multi-seed summary returns `critic_decisions={"store_skill": 8}`.
+- Extended multi-seed summary returns `critic_decisions={"store_skill": 120}` for seeds 8..127.
 
 Completed next step: the skill database can now be cumulative.
 
@@ -150,8 +179,9 @@ Reason:
 
 Verified skill-memory behavior:
 
-- DoorKey seeds 0..7 produce 6 learned skill records.
-- Each learned record has `num_evaluations=8`.
+- DoorKey seeds 0..127 produce 6 learned skill records.
+- Each learned record has `num_evaluations=128`.
+- Repeated seed observations are skipped instead of double-counted.
 - Failed or incomplete evaluations do not write skills.
 
 Suggested next task order:

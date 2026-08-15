@@ -144,5 +144,6 @@ def _summarize_skill_memory(
         "store_path": str(Path(skill_store_path)),
         "stored_skills": sum(item.get("stored_skills", 0) for item in memory_results),
         "updated_skills": sum(item.get("updated_skills", 0) for item in memory_results),
+        "skipped_skills": sum(item.get("skipped_skills", 0) for item in memory_results),
         "skipped_runs": sum(1 for item in memory_results if item.get("stored_skills", 0) == 0 and item.get("updated_skills", 0) == 0),
     }

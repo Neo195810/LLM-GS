@@ -111,6 +111,19 @@ class SkillGSDoorKeyMVPTests(unittest.TestCase):
         self.assertEqual(len(records), 6)
         self.assertTrue(all(record.num_evaluations == 2 for record in records))
 
+    def test_repeated_seed_does_not_duplicate_skill_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store_path = Path(directory) / "doorkey_skills.json"
+            run_many_doorkey_mvp(seeds=[0], skill_store_path=store_path)
+            result = run_many_doorkey_mvp(seeds=[0], skill_store_path=store_path)
+            records = JsonSkillStore(store_path).load().all()
+
+        self.assertEqual(result["skill_memory"]["stored_skills"], 0)
+        self.assertEqual(result["skill_memory"]["updated_skills"], 0)
+        self.assertEqual(result["skill_memory"]["skipped_skills"], 6)
+        self.assertEqual(len(records), 6)
+        self.assertTrue(all(record.num_evaluations == 1 for record in records))
+
     def test_failed_evaluation_does_not_record_skills(self):
         result = run_doorkey_mvp(seed=0, max_steps=1)
 

@@ -31,6 +31,7 @@ def record_skills_from_evaluation(
     store = JsonSkillStore(store_path).load()
     stored_skills = 0
     updated_skills = 0
+    skipped_skills = 0
 
     for step in evaluation.get("plan", {}).get("steps", []):
         if not step.get("skill_name") or not step.get("dsl_source"):
@@ -42,13 +43,16 @@ def record_skills_from_evaluation(
             store.upsert(_make_record(evaluation, step, skill_id, dsl, source_agent, created_from))
             stored_skills += 1
         else:
-            _merge_observation(existing, evaluation)
-            updated_skills += 1
+            if _merge_observation(existing, evaluation):
+                updated_skills += 1
+            else:
+                skipped_skills += 1
 
     store.save()
     return {
         "stored_skills": stored_skills,
         "updated_skills": updated_skills,
+        "skipped_skills": skipped_skills,
         "store_path": str(Path(store_path)),
     }
 
@@ -92,7 +96,12 @@ def _make_record(
     )
 
 
-def _merge_observation(record: SkillRecord, evaluation: dict[str, Any]) -> None:
+def _merge_observation(record: SkillRecord, evaluation: dict[str, Any]) -> bool:
+    seed = evaluation.get("seed")
+    source_seeds = list(record.metadata.get("source_seeds", []))
+    if seed is not None and seed in source_seeds:
+        return False
+
     previous_count = record.num_evaluations
     next_count = previous_count + 1
     reward = float(evaluation.get("reward", 0.0))
@@ -101,13 +110,11 @@ def _merge_observation(record: SkillRecord, evaluation: dict[str, Any]) -> None:
     record.mean_reward = ((record.mean_reward * previous_count) + reward) / next_count
     record.num_evaluations = next_count
 
-    seed = evaluation.get("seed")
     if seed is not None:
-        source_seeds = list(record.metadata.get("source_seeds", []))
-        if seed not in source_seeds:
-            source_seeds.append(seed)
-            source_seeds.sort()
+        source_seeds.append(seed)
+        source_seeds.sort()
         record.metadata["source_seeds"] = source_seeds
+    return True
 
 
 def _learned_skill_id(task: str, step: dict[str, Any]) -> str:
