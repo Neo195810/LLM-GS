@@ -89,7 +89,7 @@ A bounded sequence that reflects on a failed Candidate Program, repairs that sam
 _Avoid_: Retry loop, revision
 
 **Global Search**:
-The process that explores alternative Candidate Programs after a Repair Cycle succeeds or exhausts its correction budget.
+The process that samples `population_size` independent Candidate Programs, each completing its own Repair Cycle, before Search Strategy selects among them.
 _Avoid_: Restart, regeneration
 
 **Abstract Experience**:
