@@ -11,6 +11,7 @@ from .schemas import Critique, SkillPlan, SkillPlanStep, SkillQuery, SkillRecord
 from .doorkey_policy import DoorKeyFixedPolicy
 from .doorkey_state import DoorKeyState, extract_doorkey_state
 from .evaluator import run_doorkey_mvp, run_many_doorkey_mvp
+from .skill_memory import record_skills_from_evaluation
 from .skill_manager import (
     JsonSkillStore,
     SkillManager,
@@ -33,6 +34,7 @@ __all__ = [
     "extract_doorkey_state",
     "run_doorkey_mvp",
     "run_many_doorkey_mvp",
+    "record_skills_from_evaluation",
     "make_default_karel_doorkey_skills",
     "make_default_minigrid_skills",
 ]

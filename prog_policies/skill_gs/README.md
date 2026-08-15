@@ -13,6 +13,7 @@ that can be wired into experiments later.
 - `doorkey_state.py`: Karel DoorKey state extraction for key, goal, agent, and door.
 - `doorkey_policy.py`: fixed BFS/rule-based policy for the DoorKey MVP loop.
 - `evaluator.py`: DoorKey MVP runner and multi-seed summary.
+- `skill_memory.py`: cumulative JSON skill recording from successful evaluator results.
 - `schemas.py`: shared dataclasses for skill records, queries, plans, and critiques.
 
 ## First smoke command
@@ -29,11 +30,15 @@ task subgoals, and prints a structured plan plus a critic repair signal.
 ```bash
 python scripts/skill_gs/run_doorkey_mvp.py --seed 0
 python scripts/skill_gs/run_doorkey_mvp.py --seeds 0 1 2 3 4 5 6 7
+python scripts/skill_gs/run_doorkey_mvp.py --seeds 0 1 2 3 4 5 6 7 --skill-store data/skill_gs/doorkey_skills.json
 ```
 
 Expected behavior: the script uses the existing Karel DoorKey environment,
 wires Skill Manager and Planner into a fixed BFS/rule-based policy, and prints
-success, reward, steps, the retrieved skill plan, and action traces. This is a
+success, reward, steps, the retrieved skill plan, action traces, and a
+Critic/Repair decision. Multi-seed runs also include a `critic_decisions`
+summary. With `--skill-store`, successful runs persist learned skills into a
+cumulative JSON store with source-agent and source-seed metadata. This is a
 smoke baseline for the Skill-GS pipeline, not the final Skill-GS search method.
 
 ## Intended next wiring

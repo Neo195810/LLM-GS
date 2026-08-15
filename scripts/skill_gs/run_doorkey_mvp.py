@@ -18,14 +18,23 @@ def main() -> None:
     parser.add_argument("--seeds", type=int, nargs="*")
     parser.add_argument("--max-steps", type=int, default=200)
     parser.add_argument("--trace-limit", type=int, default=40)
+    parser.add_argument("--skill-store")
     args = parser.parse_args()
 
     if args.seeds:
-        result = run_many_doorkey_mvp(args.seeds, max_steps=args.max_steps)
+        result = run_many_doorkey_mvp(
+            args.seeds,
+            max_steps=args.max_steps,
+            skill_store_path=args.skill_store,
+        )
         for run in result["runs"]:
             run["trace"] = run["trace"][: args.trace_limit]
     else:
-        result = run_doorkey_mvp(seed=args.seed, max_steps=args.max_steps)
+        result = run_doorkey_mvp(
+            seed=args.seed,
+            max_steps=args.max_steps,
+            skill_store_path=args.skill_store,
+        )
         result["trace"] = result["trace"][: args.trace_limit]
 
     print(json.dumps(result, indent=2))

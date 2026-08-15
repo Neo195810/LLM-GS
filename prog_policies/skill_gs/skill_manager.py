@@ -37,6 +37,9 @@ class JsonSkillStore:
     def upsert(self, skill: SkillRecord) -> None:
         self._records[skill.skill_id] = skill
 
+    def get(self, skill_id: str) -> SkillRecord | None:
+        return self._records.get(skill_id)
+
     def extend(self, skills: list[SkillRecord]) -> None:
         for skill in skills:
             self.upsert(skill)

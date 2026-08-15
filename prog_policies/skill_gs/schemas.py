@@ -22,6 +22,7 @@ class SkillRecord:
     mean_reward: float = 0.0
     num_evaluations: int = 0
     failure_signatures: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     version: int = 1
 
     @property

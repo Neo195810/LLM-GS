@@ -1,0 +1,319 @@
+{
+  "skills": [
+    {
+      "skill_id": "learned.karel.doorkey.locate_key.navigate_forward_until_blocked.v1",
+      "name": "navigate_forward_until_blocked",
+      "description": "Learned from a successful DoorKey evaluation for subgoal locate_key.",
+      "task_family": "Karel",
+      "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+      "ast_json": {
+        "node_type": "While",
+        "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+        "name": "While",
+        "children": [
+          {
+            "node_type": "BoolFeature",
+            "dsl_source": "frontIsClear",
+            "name": "frontIsClear"
+          },
+          {
+            "node_type": "Action",
+            "dsl_source": "move",
+            "name": "move"
+          }
+        ]
+      },
+      "root_nonterminal": "While",
+      "semantic_tags": [
+        "blocked",
+        "forward",
+        "key",
+        "locate",
+        "navigate",
+        "until"
+      ],
+      "preconditions": [],
+      "postconditions": [],
+      "success_rate": 1.0,
+      "mean_reward": 1.0,
+      "num_evaluations": 8,
+      "failure_signatures": [],
+      "metadata": {
+        "source_agent": "critic",
+        "created_from": "successful_run",
+        "source_task": "DoorKey",
+        "source_subgoal": "locate_key",
+        "source_skill_id": "karel.doorkey.navigate_forward_until_blocked.v1",
+        "source_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "version": 1
+    },
+    {
+      "skill_id": "learned.karel.doorkey.navigate_to_key.navigate_forward_until_blocked.v1",
+      "name": "navigate_forward_until_blocked",
+      "description": "Learned from a successful DoorKey evaluation for subgoal navigate_to_key.",
+      "task_family": "Karel",
+      "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+      "ast_json": {
+        "node_type": "While",
+        "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+        "name": "While",
+        "children": [
+          {
+            "node_type": "BoolFeature",
+            "dsl_source": "frontIsClear",
+            "name": "frontIsClear"
+          },
+          {
+            "node_type": "Action",
+            "dsl_source": "move",
+            "name": "move"
+          }
+        ]
+      },
+      "root_nonterminal": "While",
+      "semantic_tags": [
+        "blocked",
+        "forward",
+        "key",
+        "navigate",
+        "to",
+        "until"
+      ],
+      "preconditions": [],
+      "postconditions": [],
+      "success_rate": 1.0,
+      "mean_reward": 1.0,
+      "num_evaluations": 8,
+      "failure_signatures": [],
+      "metadata": {
+        "source_agent": "critic",
+        "created_from": "successful_run",
+        "source_task": "DoorKey",
+        "source_subgoal": "navigate_to_key",
+        "source_skill_id": "karel.doorkey.navigate_forward_until_blocked.v1",
+        "source_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "version": 1
+    },
+    {
+      "skill_id": "learned.karel.doorkey.pickup_key.pick_marker.v1",
+      "name": "pick_marker",
+      "description": "Learned from a successful DoorKey evaluation for subgoal pickup_key.",
+      "task_family": "Karel",
+      "dsl_source": "pickMarker",
+      "ast_json": {
+        "node_type": "Action",
+        "dsl_source": "pickMarker",
+        "name": "pickMarker"
+      },
+      "root_nonterminal": "Action",
+      "semantic_tags": [
+        "key",
+        "marker",
+        "pick",
+        "pickup"
+      ],
+      "preconditions": [],
+      "postconditions": [],
+      "success_rate": 1.0,
+      "mean_reward": 1.0,
+      "num_evaluations": 8,
+      "failure_signatures": [],
+      "metadata": {
+        "source_agent": "critic",
+        "created_from": "successful_run",
+        "source_task": "DoorKey",
+        "source_subgoal": "pickup_key",
+        "source_skill_id": "karel.doorkey.pick_marker.v1",
+        "source_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "version": 1
+    },
+    {
+      "skill_id": "learned.karel.doorkey.navigate_to_door.navigate_forward_until_blocked.v1",
+      "name": "navigate_forward_until_blocked",
+      "description": "Learned from a successful DoorKey evaluation for subgoal navigate_to_door.",
+      "task_family": "Karel",
+      "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+      "ast_json": {
+        "node_type": "While",
+        "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+        "name": "While",
+        "children": [
+          {
+            "node_type": "BoolFeature",
+            "dsl_source": "frontIsClear",
+            "name": "frontIsClear"
+          },
+          {
+            "node_type": "Action",
+            "dsl_source": "move",
+            "name": "move"
+          }
+        ]
+      },
+      "root_nonterminal": "While",
+      "semantic_tags": [
+        "blocked",
+        "door",
+        "forward",
+        "navigate",
+        "to",
+        "until"
+      ],
+      "preconditions": [],
+      "postconditions": [],
+      "success_rate": 1.0,
+      "mean_reward": 1.0,
+      "num_evaluations": 8,
+      "failure_signatures": [],
+      "metadata": {
+        "source_agent": "critic",
+        "created_from": "successful_run",
+        "source_task": "DoorKey",
+        "source_subgoal": "navigate_to_door",
+        "source_skill_id": "karel.doorkey.navigate_forward_until_blocked.v1",
+        "source_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "version": 1
+    },
+    {
+      "skill_id": "learned.karel.doorkey.open_door.unlock_door_with_key.v1",
+      "name": "unlock_door_with_key",
+      "description": "Learned from a successful DoorKey evaluation for subgoal open_door.",
+      "task_family": "Karel",
+      "dsl_source": "pickMarker",
+      "ast_json": {
+        "node_type": "Action",
+        "dsl_source": "pickMarker",
+        "name": "pickMarker"
+      },
+      "root_nonterminal": "Action",
+      "semantic_tags": [
+        "door",
+        "key",
+        "open",
+        "unlock",
+        "with"
+      ],
+      "preconditions": [],
+      "postconditions": [],
+      "success_rate": 1.0,
+      "mean_reward": 1.0,
+      "num_evaluations": 8,
+      "failure_signatures": [],
+      "metadata": {
+        "source_agent": "critic",
+        "created_from": "successful_run",
+        "source_task": "DoorKey",
+        "source_subgoal": "open_door",
+        "source_skill_id": "karel.doorkey.unlock_door_with_key.v1",
+        "source_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "version": 1
+    },
+    {
+      "skill_id": "learned.karel.doorkey.navigate_to_goal.navigate_forward_until_blocked.v1",
+      "name": "navigate_forward_until_blocked",
+      "description": "Learned from a successful DoorKey evaluation for subgoal navigate_to_goal.",
+      "task_family": "Karel",
+      "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+      "ast_json": {
+        "node_type": "While",
+        "dsl_source": "WHILE c( frontIsClear c) w( move w)",
+        "name": "While",
+        "children": [
+          {
+            "node_type": "BoolFeature",
+            "dsl_source": "frontIsClear",
+            "name": "frontIsClear"
+          },
+          {
+            "node_type": "Action",
+            "dsl_source": "move",
+            "name": "move"
+          }
+        ]
+      },
+      "root_nonterminal": "While",
+      "semantic_tags": [
+        "blocked",
+        "forward",
+        "goal",
+        "navigate",
+        "to",
+        "until"
+      ],
+      "preconditions": [],
+      "postconditions": [],
+      "success_rate": 1.0,
+      "mean_reward": 1.0,
+      "num_evaluations": 8,
+      "failure_signatures": [],
+      "metadata": {
+        "source_agent": "critic",
+        "created_from": "successful_run",
+        "source_task": "DoorKey",
+        "source_subgoal": "navigate_to_goal",
+        "source_skill_id": "karel.doorkey.navigate_forward_until_blocked.v1",
+        "source_seeds": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      },
+      "version": 1
+    }
+  ]
+}
