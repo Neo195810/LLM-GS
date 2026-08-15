@@ -11,6 +11,7 @@ from .schemas import Critique, SkillPlan, SkillPlanStep, SkillQuery, SkillRecord
 from .doorkey_policy import DoorKeyFixedPolicy
 from .doorkey_state import DoorKeyState, extract_doorkey_state
 from .evaluator import run_doorkey_mvp, run_many_doorkey_mvp
+from .agent_workflow import run_doorkey_agent_loop
 from .skill_memory import record_skills_from_evaluation
 from .skill_manager import (
     JsonSkillStore,
@@ -32,6 +33,7 @@ __all__ = [
     "SkillQuery",
     "SkillRecord",
     "extract_doorkey_state",
+    "run_doorkey_agent_loop",
     "run_doorkey_mvp",
     "run_many_doorkey_mvp",
     "record_skills_from_evaluation",

@@ -29,11 +29,21 @@ Implemented components:
   - Persists successful evaluator results as cumulative JSON skill records.
   - Tracks source agent, source task, source subgoal, source seeds, and evaluation count.
 
+- `prog_policies/skill_gs/agent_workflow.py`
+  - Wraps the DoorKey MVP as an explicit multi-agent data flow.
+  - Reports the Planner, Skill Manager, Evaluator, Critic/Repair, and Skill Memory roles without changing the underlying DoorKey solver.
+
 - `scripts/skill_gs/run_doorkey_mvp.py`
   - CLI entry point for single-seed and multi-seed smoke runs.
 
+- `scripts/skill_gs/run_agent_loop.py`
+  - CLI entry point for the explicit Skill-GS agent workflow.
+
 - `tests/test_skill_gs_doorkey_mvp.py`
   - Verifies state extraction, fixed policy behavior, planner skill mapping, seed 0 success, seeds 0..7 success, and skill-memory idempotency.
+
+- `tests/test_skill_gs_agent_workflow.py`
+  - Verifies the agent sequence, data-flow artifacts, evaluator summary, and skill-memory output.
 
 ## Verification
 
@@ -113,7 +123,22 @@ The current Skill-GS layer can already support:
 - evaluator output through `run_doorkey_mvp`
 - evaluator-to-critic analysis through `CriticRepairAgent`
 - cumulative skill recording through `record_skills_from_evaluation`
+- explicit agent data flow through `run_doorkey_agent_loop`
 - reproducible smoke testing over seeds 0..127
+
+Current agent workflow:
+
+```text
+PlannerAgent -> SkillManagerAgent -> EvaluatorAgent -> CriticRepairAgent -> SkillMemoryAgent
+```
+
+The agent layer is intentionally role-based rather than personality-based:
+
+- PlannerAgent prefers reusable subgoals over raw action sequences.
+- SkillManagerAgent prefers high-confidence skills with matching metadata.
+- EvaluatorAgent prefers reproducible seed-based evaluation.
+- CriticRepairAgent prefers structured repair operators over free-form feedback.
+- SkillMemoryAgent persists only critic-approved successful skills.
 
 For DoorKey, the planner now retrieves reasonable skills:
 
@@ -186,6 +211,6 @@ Verified skill-memory behavior:
 
 Suggested next task order:
 
-1. Decide how agent roles should read/write skills.
-2. Add a compact report output that summarizes success rate, average steps, critic decisions, and skill-memory updates.
+1. Add a compact report output that summarizes success rate, average steps, critic decisions, and skill-memory updates.
+2. Decide whether SkillManagerAgent should rank learned skills by seed coverage, success rate, or task metadata.
 3. Later: integrate this loop with the original LLM-GS candidate search.

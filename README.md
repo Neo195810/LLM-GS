@@ -105,6 +105,28 @@ Please note that the result of LLM-GS might not be the same as the one we report
 
 The experiment results will be in the `output` directory.
 
+### Skill-GS DoorKey MVP
+
+This branch also includes a small Skill-GS MVP layer for the repo-native Karel
+DoorKey task. It keeps the current baseline solver intact while exposing a
+modular agent workflow:
+
+```text
+PlannerAgent -> SkillManagerAgent -> EvaluatorAgent -> CriticRepairAgent -> SkillMemoryAgent
+```
+
+Run the DoorKey MVP directly:
+
+```bash
+python scripts/skill_gs/run_doorkey_mvp.py --seeds 0 1 2 3 4 5 6 7 --trace-limit 0
+```
+
+Run the same loop through the explicit agent workflow:
+
+```bash
+python scripts/skill_gs/run_agent_loop.py --seeds 0 1 --skill-store data/skill_gs/doorkey_skills.json
+```
+
 ## Adapting LLM-GS to Your Environment
 
 To use LLM-GS for your custom PRL task:
