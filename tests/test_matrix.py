@@ -174,6 +174,19 @@ max_repair_cycles: 1
         "blocked-by-budget": 0,
     }
 
+    progress_lines = [line for line in run.stderr.splitlines() if line]
+    running_lines = [line for line in progress_lines if "-> running" in line]
+    completed_lines = [line for line in progress_lines if "-> completed" in line]
+    assert len(running_lines) == 48
+    assert len(completed_lines) == 48
+    for index, (running_line, completed_line) in enumerate(
+        zip(running_lines, completed_lines, strict=True), start=1
+    ):
+        assert running_line.startswith(f"[{index}/48] ")
+        assert running_line.endswith("-> running (attempt 1/3)")
+        assert completed_line.startswith(f"[{index}/48] ")
+        assert completed_line.endswith("-> completed")
+
 
 @pytest.mark.parametrize(
     ("failure", "expected_state", "expected_error_class"),
@@ -260,7 +273,7 @@ max_repair_cycles: 1
 
 
 def test_matrix_run_retries_infrastructure_with_new_execution(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     specification = tmp_path / "matrix.yaml"
     workspace = tmp_path / "workspace"
@@ -323,11 +336,20 @@ max_repair_cycles: 1
     )
 
     first_matrix = args.handler(args)
+    first_run_progress = [
+        line for line in capsys.readouterr().err.splitlines() if line
+    ]
 
     first_arm = first_matrix["arm_reports"][0]
     assert first_arm["arm_state"] == "infrastructure-failed"
     assert len(first_arm["executions"]) == 3
     assert first_arm["failure_classes"]["replacements"] == 2
+    assert first_run_progress == [
+        "[1/1] " + first_arm["experiment_id"] + " -> running (attempt 1/3)",
+        "[1/1] " + first_arm["experiment_id"] + " -> running (attempt 2/3)",
+        "[1/1] " + first_arm["experiment_id"] + " -> running (attempt 3/3)",
+        "[1/1] " + first_arm["experiment_id"] + " -> infrastructure-failed",
+    ]
 
     matrix = args.handler(args)
 
@@ -412,7 +434,7 @@ max_repair_cycles: 1
 
 
 def test_matrix_run_does_not_retry_model_output_as_infrastructure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     specification = tmp_path / "matrix.yaml"
     workspace = tmp_path / "workspace"
@@ -456,9 +478,14 @@ max_repair_cycles: 1
     )
 
     arm = args.handler(args)["arm_reports"][0]
+    progress = [line for line in capsys.readouterr().err.splitlines() if line]
 
     assert client.attempts == 1
     assert arm["arm_state"] == "model-output-failed"
+    assert progress == [
+        "[1/1] " + arm["experiment_id"] + " -> running (attempt 1/3)",
+        "[1/1] " + arm["experiment_id"] + " -> model-output-failed",
+    ]
     assert arm["arm_error"] == {
         "class": "model_output",
         "detail": "model output failure: invalid schema",

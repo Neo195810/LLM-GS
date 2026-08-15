@@ -151,10 +151,16 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
     )
     for manifest in manifests:
         store.register_matrix_arm(manifest, experiment_id(manifest))
-    for manifest in manifests:
+    total = len(manifests)
+    for index, manifest in enumerate(manifests, start=1):
         resolved_experiment_id = experiment_id(manifest)
         previous_failed_execution = store.latest_failed_execution_id(resolved_experiment_id)
         for infrastructure_retry in range(3):
+            attempt = infrastructure_retry + 1
+            print(
+                f"[{index}/{total}] {resolved_experiment_id} -> running (attempt {attempt}/3)",
+                file=sys.stderr,
+            )
             store.set_matrix_arm_state(resolved_experiment_id, "running")
             try:
                 report, _ = _execute_with_failure_recording(
@@ -173,6 +179,10 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
                         report.execution_id,
                     )
                 store.set_matrix_arm_state(resolved_experiment_id, "completed")
+                print(
+                    f"[{index}/{total}] {resolved_experiment_id} -> completed",
+                    file=sys.stderr,
+                )
                 break
             except Exception as error:
                 state, error_class = _matrix_arm_failure(error)
@@ -200,6 +210,10 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
                         continue
                     state = "infrastructure-failed"
                 store.set_matrix_arm_state(resolved_experiment_id, state, error_class, str(error))
+                print(
+                    f"[{index}/{total}] {resolved_experiment_id} -> {state}",
+                    file=sys.stderr,
+                )
                 break
         reports.append(store.reporting_view(resolved_experiment_id))
     output = matrix_report(reports)
