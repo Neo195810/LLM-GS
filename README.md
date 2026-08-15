@@ -8,133 +8,42 @@ LLM-GS combines the large language model and search algorithms for solving Progr
 
 
 
-## Getting Started
+## Getting Started (V2)
 
-### Clone
+LLM-GS V2 is the actively developed research platform: a `uv`-managed CLI with structured proposal, diagnosis, and repair, an Experience Memory, and preregistered ablation matrices. See [`docs/V2-DESIGN.md`](docs/V2-DESIGN.md) for the full architecture.
 
-After you download the repo, please initialize the leaps submodule.
-```bash
-git submodule update --init --recursive
-```
+### Install
 
-### Dependencies
-
-We recommend using `conda` to install the dependencies:
+V2 targets **Python 3.11** under `uv`. `pyproject.toml` and `uv.lock` are the dependency authorities.
 
 ```bash
-conda env create --name llm_gs_env --file environment.yml
-pip install -r requirements.txt
+uv sync
 ```
 
-If `conda` is not available, it is also possible to install dependencies using `pip` on **Python 3.9**:
-
-```bash
-pip install -r requirements.txt
-```
-
-LLM-GS uses a local Ollama model by default. Install Ollama, download the default model, and verify that the NVIDIA GPU is visible:
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen3-coder:30b
-ollama ps
-```
-
-If the WSL account cannot use `sudo`, install the same official archive under the
-current user's home directory instead:
-
-```bash
-mkdir -p "$HOME/.local"
-curl -L https://ollama.com/download/ollama-linux-amd64.tar.zst \
-  | tar --zstd -x -C "$HOME/.local"
-export PATH="$HOME/.local/bin:$PATH"
-ollama pull qwen3-coder:30b
-```
-
-On WSL without a running systemd service, start Ollama in a separate terminal:
-
-```bash
-OLLAMA_CONTEXT_LENGTH=8192 OLLAMA_NUM_PARALLEL=1 ollama serve
-```
-
-The local default does not require an API key. OpenAI remains available as an optional provider:
+V2 calls the OpenAI API directly:
 
 ```bash
 export OPENAI_KEY="YOUR_API_KEY"
-python scripts/main.py --llm_provider openai
 ```
 
-### Execution
-To execute our main method and baselines. You can change **method** and **task** inside the scripts. **(LLM-GS is our main method.)**
+### CLI
 
-```bash
-bash scripts/run_main_results.sh
+The `uv run llm-gs` CLI provides:
+
+```
+run              memory build     inspect attempt
+resume           evaluate         validate
+                 report
 ```
 
-Or you can run specific algorithm and tasks
-```bash
-# All scripts are in scripts/{baseline}/run_{task}.sh
-bash scripts/LLM-GS/run_DoorKey.sh
-```
-
-### Gradio experiment utility
-
-Start the local dashboard from the Conda environment:
-
-```bash
-conda activate llm_gs_env
-export LD_PRELOAD="$CONDA_PREFIX/lib/libstdc++.so.6"
-python gradio_utility.py
-```
-
-Open `http://127.0.0.1:7860`. The utility can launch and stop every script under `scripts/`, display live candidate and best-reward events, replay Karel and MiniGrid programs, and inspect historical runs without stopping the active job. The task's stdout/stderr and tqdm progress bars are mirrored to the terminal that launched Gradio.
-
-UI-launched experiments are isolated under `output/ui_runs/<run_id>`. Each run stores `stdout.log`, structured `events.jsonl`, and full local-model diagnostics in `llm_debug.jsonl`. Ollama requests default to 1024 output tokens and a 300-second timeout; override them through Additional CLI arguments when needed:
-
-```text
---llm_max_tokens 2048 --llm_request_timeout 600
-```
-
-You can run revision method of the task DoorKey
-```bash
-# The revision scripts are in scripts/evision/run_{revision_method}.sh
-bash scripts/LLM-Revision/run_regeneration.sh
-```
-
-Please note that the result of LLM-GS might not be the same as the one we reported in our paper due to the randomness of the LLMs.
-
-The experiment results will be in the `output` directory.
-
-## Adapting LLM-GS to Your Environment
-
-To use LLM-GS for your custom PRL task:
-
-1. **Define your DSL**
-   Create a new DSL in `prog_policies/your_dsl/` and specify production rules.
-
-2. **Register your environment**
-   Add it to `prog_policies/utils/__init__.py`.
-
-3. **Implement your PRL environment**
-   - Write your environment in `prog_policies/your_environment/`
-   - Option A: Subclass `BaseEnvironment` in `prog_policies/base/environment.py`  
-   - Option B: Use `gymnasium.core.Wrapper`
-
-4. **Write your prompt template**
-   Follow `llm/prompt_template.py` structure to write your system prompt and user prompt.
-
-5. **Set up search space (if needed)**
-   Create a custom search space in `prog_policies/search_space`. You can specify your mutation method here for local search. If the production rules are more complicated than Karel's, writing your own search space is necessary.
-
-6. **Parse LLM output**
-   Use `convert()` and `get_program_str_from_llm_response_dsl()` in `llm/utils.py` to post-process Python and DSL programs.
-
-
+Users author versioned YAML Experiment Specifications, which resolve into immutable Experiment Manifests and IDs. Details on each subcommand, delivery slices, and verification gates are in [`docs/V2-DESIGN.md`](docs/V2-DESIGN.md).
 
 ## Acknowledge and licence
 
 1. The baseline implementations in `prog_policies` are from [Reclaiming the Source of Programmatic Policies: Programmatic versus Latent Spaces](https://github.com/lelis-research/prog_policies). The baselines (CEM, CEBS, HC) code under `prog_policies` should follow the GPL-3.0 license.
 2. The [HPRL](https://arxiv.org/abs/2301.12950) baseline implementation is not in this repository. We run our experiment in [this repository](https://github.com/a015kh/hprl)
+
+See [`NOTICE`](NOTICE) for the complete third-party attribution and license review record.
 
 ## Citation
 
