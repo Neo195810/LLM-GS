@@ -19,6 +19,13 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=200)
     parser.add_argument("--skill-store")
     parser.add_argument("--include-runs", action="store_true")
+    parser.add_argument("--adaptive-retry", action="store_true")
+    parser.add_argument("--initial-max-steps", type=int)
+    parser.add_argument("--retry-max-steps", type=int)
+    parser.add_argument("--max-attempts", type=int, default=2)
+    parser.add_argument("--attempt-memory")
+    parser.add_argument("--perturbation-seed", type=int, default=0)
+    parser.add_argument("--disable-perturbation", action="store_true")
     args = parser.parse_args()
 
     seeds = args.seeds if args.seeds else [args.seed]
@@ -27,6 +34,13 @@ def main() -> None:
         max_steps=args.max_steps,
         skill_store_path=args.skill_store,
         include_runs=args.include_runs,
+        adaptive_retry=args.adaptive_retry,
+        initial_max_steps=args.initial_max_steps,
+        retry_max_steps=args.retry_max_steps,
+        max_attempts=args.max_attempts,
+        attempt_memory_path=args.attempt_memory,
+        perturbation_seed=args.perturbation_seed,
+        perturbation_enabled=not args.disable_perturbation,
     )
     print(json.dumps(result, indent=2))
 

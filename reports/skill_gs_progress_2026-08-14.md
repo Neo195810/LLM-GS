@@ -33,6 +33,24 @@ Implemented components:
   - Wraps the DoorKey MVP as an explicit multi-agent data flow.
   - Reports the Planner, Skill Manager, Evaluator, Critic/Repair, and Skill Memory roles without changing the underlying DoorKey solver.
 
+- `prog_policies/skill_gs/adaptive_retry.py`
+  - Adds the first Adaptive Core retry wrapper.
+  - Detects failed attempts through the existing critic output, then retries with a repaired step budget.
+
+- `prog_policies/skill_gs/failure_detector.py`
+  - Normalizes evaluator and critic output into a stable failure diagnosis.
+  - Classifies forced DoorKey step-budget failures as `step_budget_exhausted`.
+
+- `prog_policies/skill_gs/stochastic_perturbation.py`
+  - Selects a seeded repair strategy from diagnosis-specific candidates.
+  - Keeps perturbation reproducible through `perturbation_seed`.
+
+- `prog_policies/skill_gs/replanner.py`
+  - Converts a diagnosis and perturbation strategy into the next attempt configuration.
+
+- `prog_policies/skill_gs/adaptive_memory.py`
+  - Persists attempt-level diagnoses, repair plans, and repair outcomes.
+
 - `scripts/skill_gs/run_doorkey_mvp.py`
   - CLI entry point for single-seed and multi-seed smoke runs.
 
@@ -124,6 +142,11 @@ The current Skill-GS layer can already support:
 - evaluator-to-critic analysis through `CriticRepairAgent`
 - cumulative skill recording through `record_skills_from_evaluation`
 - explicit agent data flow through `run_doorkey_agent_loop`
+- adaptive retry attempts through `run_doorkey_retry_loop`
+- formal failure detection through `detect_failure`
+- seeded repair perturbation through `choose_repair_strategy`
+- diagnosis-guided replanning through `replan_after_failure`
+- attempt-level adaptive memory through `AdaptiveAttemptMemory`
 - reproducible smoke testing over seeds 0..127
 
 Current agent workflow:
@@ -168,6 +191,18 @@ The skill database can now accumulate successful skills into
 The DoorKey skill-memory run now covers seeds 0..127. It stores 6 learned
 skills, and each record has `num_evaluations=128`.
 
+The first Adaptive Core slice is now scoped to retry behavior. It can force an
+initial step-budget failure, detect the critic repair signal, retry the same
+seed with a larger budget, and store the successful retry result in skill
+memory. Stochastic perturbation is now seeded and strategy-level; skill-ranking
+mutation is still future work.
+
+Adaptive Core smoke command:
+
+```powershell
+python scripts\skill_gs\run_agent_loop.py --seeds 0 --adaptive-retry --initial-max-steps 1 --retry-max-steps 200 --max-attempts 2 --attempt-memory output\skill_gs\adaptive_attempts.json --perturbation-seed 123
+```
+
 This MVP uses the repo-native Karel DoorKey task. The paper-related MiniGrid
 tasks, such as PutNear, RedBlueDoor, and LavaGap, are still future integration
 targets.
@@ -211,6 +246,6 @@ Verified skill-memory behavior:
 
 Suggested next task order:
 
-1. Add a compact report output that summarizes success rate, average steps, critic decisions, and skill-memory updates.
-2. Decide whether SkillManagerAgent should rank learned skills by seed coverage, success rate, or task metadata.
+1. Decide whether SkillManagerAgent should rank learned skills by seed coverage, success rate, or task metadata.
+2. Add a compact report output that summarizes success rate, average steps, critic decisions, retry attempts, and skill-memory updates.
 3. Later: integrate this loop with the original LLM-GS candidate search.

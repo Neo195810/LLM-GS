@@ -8,11 +8,16 @@ into structured repair signals.
 from .critic import CriticRepairAgent
 from .planner import HierarchicalPlanner
 from .schemas import Critique, SkillPlan, SkillPlanStep, SkillQuery, SkillRecord
+from .adaptive_memory import AdaptiveAttemptMemory
+from .adaptive_retry import run_doorkey_retry_loop
 from .doorkey_policy import DoorKeyFixedPolicy
 from .doorkey_state import DoorKeyState, extract_doorkey_state
 from .evaluator import run_doorkey_mvp, run_many_doorkey_mvp
+from .failure_detector import FailureDiagnosis, detect_failure
+from .replanner import RepairPlan, replan_after_failure
 from .agent_workflow import run_doorkey_agent_loop
 from .skill_memory import record_skills_from_evaluation
+from .stochastic_perturbation import choose_repair_strategy
 from .skill_manager import (
     JsonSkillStore,
     SkillManager,
@@ -21,9 +26,12 @@ from .skill_manager import (
 )
 
 __all__ = [
+    "AdaptiveAttemptMemory",
     "CriticRepairAgent",
+    "FailureDiagnosis",
     "HierarchicalPlanner",
     "JsonSkillStore",
+    "RepairPlan",
     "SkillManager",
     "DoorKeyFixedPolicy",
     "DoorKeyState",
@@ -33,9 +41,13 @@ __all__ = [
     "SkillQuery",
     "SkillRecord",
     "extract_doorkey_state",
+    "choose_repair_strategy",
+    "detect_failure",
+    "replan_after_failure",
     "run_doorkey_agent_loop",
     "run_doorkey_mvp",
     "run_many_doorkey_mvp",
+    "run_doorkey_retry_loop",
     "record_skills_from_evaluation",
     "make_default_karel_doorkey_skills",
     "make_default_minigrid_skills",

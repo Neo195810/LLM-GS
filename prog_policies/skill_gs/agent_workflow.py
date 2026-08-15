@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from .adaptive_retry import run_doorkey_retry_loop
 from .evaluator import run_many_doorkey_mvp
 
 
@@ -70,15 +71,36 @@ def run_doorkey_agent_loop(
     max_steps: int = 200,
     skill_store_path: str | Path | None = None,
     include_runs: bool = False,
+    adaptive_retry: bool = False,
+    initial_max_steps: int | None = None,
+    retry_max_steps: int | None = None,
+    max_attempts: int = 2,
+    attempt_memory_path: str | Path | None = None,
+    perturbation_seed: int = 0,
+    perturbation_enabled: bool = True,
 ) -> dict[str, Any]:
     """Run the DoorKey MVP as an explicit Skill-GS agent workflow."""
 
     seed_list = list(seeds)
-    evaluation = run_many_doorkey_mvp(
-        seeds=seed_list,
-        max_steps=max_steps,
-        skill_store_path=skill_store_path,
-    )
+    if adaptive_retry:
+        evaluation = run_doorkey_retry_loop(
+            seeds=seed_list,
+            initial_max_steps=(
+                initial_max_steps if initial_max_steps is not None else max_steps
+            ),
+            retry_max_steps=retry_max_steps if retry_max_steps is not None else max_steps,
+            max_attempts=max_attempts,
+            skill_store_path=skill_store_path,
+            attempt_memory_path=attempt_memory_path,
+            perturbation_seed=perturbation_seed,
+            perturbation_enabled=perturbation_enabled,
+        )
+    else:
+        evaluation = run_many_doorkey_mvp(
+            seeds=seed_list,
+            max_steps=max_steps,
+            skill_store_path=skill_store_path,
+        )
     first_run = evaluation["runs"][0] if evaluation["runs"] else None
     run_summary = _compact_run_summary(evaluation)
 
@@ -104,13 +126,18 @@ def run_doorkey_agent_loop(
         ),
         "run_summary": run_summary,
     }
+    if adaptive_retry:
+        result["adaptive_retry"] = evaluation["adaptive_retry"]
+        result["adaptive_core"] = evaluation["adaptive_core"]
+        result["adaptive_memory"] = evaluation["adaptive_memory"]
+        result["attempts"] = evaluation["attempts"]
     if include_runs:
         result["runs"] = evaluation["runs"]
     return result
 
 
 def _compact_run_summary(evaluation: dict[str, Any]) -> dict[str, Any]:
-    return {
+    summary = {
         "task": evaluation["task"],
         "num_runs": evaluation["num_runs"],
         "successes": evaluation["successes"],
@@ -119,6 +146,11 @@ def _compact_run_summary(evaluation: dict[str, Any]) -> dict[str, Any]:
         "average_steps_successful": evaluation["average_steps_successful"],
         "critic_decisions": evaluation["critic_decisions"],
     }
+    if "num_attempts" in evaluation:
+        summary["num_attempts"] = evaluation["num_attempts"]
+        summary["retried_seeds"] = evaluation["retried_seeds"]
+        summary["attempt_critic_decisions"] = evaluation["attempt_critic_decisions"]
+    return summary
 
 
 def _planner_output(run: dict[str, Any] | None) -> dict[str, Any]:

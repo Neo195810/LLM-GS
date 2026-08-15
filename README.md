@@ -127,6 +127,18 @@ Run the same loop through the explicit agent workflow:
 python scripts/skill_gs/run_agent_loop.py --seeds 0 1 --skill-store data/skill_gs/doorkey_skills.json
 ```
 
+Run the first adaptive retry wrapper by forcing a small first-attempt budget:
+
+```bash
+python scripts/skill_gs/run_agent_loop.py --seeds 0 --adaptive-retry --initial-max-steps 1 --retry-max-steps 200 --max-attempts 2
+```
+
+Optionally persist Adaptive Core attempt memory:
+
+```bash
+python scripts/skill_gs/run_agent_loop.py --seeds 0 --adaptive-retry --initial-max-steps 1 --retry-max-steps 200 --max-attempts 2 --attempt-memory output/skill_gs/adaptive_attempts.json --perturbation-seed 123
+```
+
 ## Adapting LLM-GS to Your Environment
 
 To use LLM-GS for your custom PRL task:

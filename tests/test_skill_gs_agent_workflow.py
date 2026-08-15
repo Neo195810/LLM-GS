@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from prog_policies.skill_gs.agent_workflow import run_doorkey_agent_loop
+from prog_policies.skill_gs import run_doorkey_agent_loop, run_doorkey_retry_loop
 from prog_policies.skill_gs.skill_manager import JsonSkillStore
 
 
@@ -52,6 +52,42 @@ class SkillGSAgentWorkflowTests(unittest.TestCase):
         self.assertEqual(
             preferences["SkillMemoryAgent"],
             "persist only critic-approved successful skills",
+        )
+
+    def test_retry_loop_repairs_step_budget_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store_path = Path(directory) / "retry_skills.json"
+            result = run_doorkey_retry_loop(
+                seeds=[0],
+                initial_max_steps=1,
+                retry_max_steps=200,
+                max_attempts=2,
+                skill_store_path=store_path,
+            )
+            records = JsonSkillStore(store_path).load().all()
+
+        self.assertEqual(result["success_rate"], 1.0)
+        self.assertEqual(result["retried_seeds"], [0])
+        self.assertEqual(result["failed_seeds"], [])
+        self.assertEqual(result["attempt_critic_decisions"], {
+            "retrieve_alternative_skill": 1,
+            "store_skill": 1,
+        })
+        self.assertEqual(result["skill_memory"]["stored_skills"], 6)
+        self.assertEqual(len(records), 6)
+
+        attempt_summaries = result["attempts"]
+        self.assertEqual(
+            [attempt["max_steps"] for attempt in attempt_summaries],
+            [1, 200],
+        )
+        self.assertEqual(
+            [attempt["repair_operator"] for attempt in attempt_summaries],
+            ["retrieve_alternative_skill", "store_skill"],
+        )
+        self.assertEqual(
+            [attempt["success"] for attempt in attempt_summaries],
+            [False, True],
         )
 
 
