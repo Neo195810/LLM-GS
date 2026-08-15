@@ -250,3 +250,45 @@ def test_frozen_protocol_arms_must_keep_paired_seed_suites_and_budgets(tmp_path)
         store.preregister_paired_protocol(mismatched_arm)
     with pytest.raises(ValueError, match="paired seed suite or budget"):
         store.preregister_paired_protocol(budget_mismatched_arm)
+
+
+def test_resolve_manifest_scales_budgets_with_population_size() -> None:
+    single_candidate = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "single",
+                "task": {"name": "CleanHouse"},
+                "seeds": {"task": [1, 2]},
+                "search_strategy": {
+                    "name": "single_candidate",
+                    "population_size": 1,
+                    "elite_count": 1,
+                },
+                "failure_strategy": {"name": "reflect", "max_repair_cycles": 2},
+            }
+        )
+    )
+    population = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "population",
+                "task": {"name": "CleanHouse"},
+                "seeds": {"task": [1, 2]},
+                "search_strategy": {
+                    "name": "cem",
+                    "population_size": 4,
+                    "elite_count": 1,
+                },
+                "failure_strategy": {"name": "reflect", "max_repair_cycles": 2},
+            }
+        )
+    )
+
+    # population_size == 1 stays byte-identical to the pre-population-search
+    # baseline: candidate_budget == 1 + repair_rounds.
+    assert single_candidate.budgets["episode_evaluations"] == 2 * 3
+    assert single_candidate.budgets["model_requests"] == 3 * 3
+
+    # population_size > 1 scales candidate_budget by population_size.
+    assert population.budgets["episode_evaluations"] == 2 * (4 * 3)
+    assert population.budgets["model_requests"] == (4 * 3) * 3

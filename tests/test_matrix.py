@@ -54,7 +54,6 @@ def test_complete_frozen_ablation_matrix_is_paired_and_reports_all_arms() -> Non
     }
     for task_name in {manifest.task["name"] for manifest in manifests}:
         task_manifests = [manifest for manifest in manifests if manifest.task["name"] == task_name]
-        assert len({frozenset(manifest.budgets.items()) for manifest in task_manifests}) == 1
         assert len({frozenset(manifest.model.items()) for manifest in task_manifests}) == 1
         assert len(
             {
@@ -62,6 +61,22 @@ def test_complete_frozen_ablation_matrix_is_paired_and_reports_all_arms() -> Non
                 for manifest in task_manifests
             }
         ) == 1
+        for strategy_name in {manifest.search_strategy["name"] for manifest in task_manifests}:
+            strategy_manifests = [
+                manifest
+                for manifest in task_manifests
+                if manifest.search_strategy["name"] == strategy_name
+            ]
+            budgets = {frozenset(manifest.budgets.items()) for manifest in strategy_manifests}
+            assert len(budgets) == 1
+        single_candidate_budget = next(
+            manifest.budgets["episode_evaluations"]
+            for manifest in task_manifests
+            if manifest.search_strategy["name"] == "single_candidate"
+        )
+        for manifest in task_manifests:
+            if manifest.search_strategy["name"] != "single_candidate":
+                assert manifest.budgets["episode_evaluations"] > single_candidate_budget
 
     report = matrix_report(
         [

@@ -118,7 +118,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         )
         else 0
     )
-    candidate_budget = 1 + repair_rounds
+    candidate_budget = specification.search_strategy.population_size * (1 + repair_rounds)
     seed_suite = specification.seed_suite
     if specification.seeds is None and seed_suite is None:
         raise ValueError("resolved specification has no seed definition")

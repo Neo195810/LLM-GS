@@ -84,6 +84,7 @@ class WorkspaceStore:
         pairing = canonical_json(
             {
                 "task": manifest.task["name"],
+                "search_strategy": manifest.search_strategy["name"],
                 "search_seed": manifest.search_strategy["seed"],
                 "replicate": manifest.search_strategy["replicate"],
             }
