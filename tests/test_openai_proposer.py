@@ -462,6 +462,164 @@ def test_resumable_execution_persists_terminal_invalid_repair_outputs(
     ]
 
 
+def test_frozen_memory_protocol_samples_independent_candidates_per_population_member(
+    tmp_path: Path,
+) -> None:
+    manifest = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "population-search",
+                "task": {"name": "CleanHouse"},
+                "seed_suite": {
+                    "version": 1,
+                    "memory_training": [1],
+                    "development": [2],
+                    "held_out": [3],
+                },
+                "search_strategy": {"name": "cem", "population_size": 2, "elite_count": 1},
+                "failure_strategy": {"name": "reflect", "max_repair_cycles": 1},
+            }
+        )
+    )
+    store = WorkspaceStore(tmp_path)
+
+    class DistinguishableModel:
+        def __init__(self) -> None:
+            self.propose_sources = [
+                "DEF run m( turnLeft m)",  # dedicated Memory Snapshot proposal
+                "DEF run m( turnRight m)",  # population member 0's development candidate
+                "DEF run m( turnLeft turnLeft m)",  # population member 1's development candidate
+            ]
+            self.repair_sources = [
+                "DEF run m( move m)",  # member 0's own repair
+                "DEF run m( move move m)",  # member 1's own repair
+            ]
+            self.propose_calls = 0
+            self.repair_prompts: list[str] = []
+
+        def propose(self, prompt: str) -> CandidateProgram:
+            _ = prompt
+            self.propose_calls += 1
+            return CandidateProgram(source=self.propose_sources.pop(0))
+
+        def repair(self, prompt: str) -> CandidateProgram:
+            self.repair_prompts.append(prompt)
+            return CandidateProgram(source=self.repair_sources.pop(0))
+
+    model = DistinguishableModel()
+
+    class ScriptedEvaluator:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, int]] = []
+
+        def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+            self.calls.append((candidate.source, task_seed))
+            if candidate.source in {"DEF run m( move m)", "DEF run m( move move m)"}:
+                return EpisodeResult(outcome="success")
+            return EpisodeResult(
+                outcome="partial_completion",
+                failure_type="stalled",
+                failure_reason=f"{candidate.source} stalled",
+                evaluation_evidence={"initial_marker_count": 3, "remaining_marker_count": 2},
+            )
+
+    evaluator = ScriptedEvaluator()
+
+    report, status = execute_resumable(manifest, experiment_id(manifest), store, model, evaluator)
+
+    assert status == "completed"
+    assert report is not None
+    protocol = cast(dict[str, object], report.audit["frozen_memory_protocol"])
+    secondary_metrics = cast(dict[str, object], protocol["secondary_metrics"])
+    assert secondary_metrics["population_size"] == 2
+    # Each population member independently runs its own Repair Cycle.
+    assert secondary_metrics["total_repair_attempts"] == 2
+    assert secondary_metrics["development_candidate_count"] == 4
+    assert model.propose_calls == 3
+    assert len(model.repair_prompts) == 2
+    assert "DEF run m( turnRight m) stalled" in model.repair_prompts[0]
+    assert "DEF run m( turnLeft turnLeft m) stalled" in model.repair_prompts[1]
+
+    # The Memory Snapshot proposal is independent of the population's
+    # development-search candidates: it alone answers the memory_training
+    # seed, and never reappears against the development seed.
+    memory_training_calls = [call for call in evaluator.calls if call[1] == 1]
+    development_calls = [call for call in evaluator.calls if call[1] == 2]
+    held_out_calls = [call for call in evaluator.calls if call[1] == 3]
+    assert memory_training_calls == [("DEF run m( turnLeft m)", 1)]
+    assert {source for source, _ in development_calls} == {
+        "DEF run m( turnRight m)",
+        "DEF run m( move m)",
+        "DEF run m( turnLeft turnLeft m)",
+        "DEF run m( move move m)",
+    }
+    assert len(development_calls) == 4
+    assert len(held_out_calls) == 1
+
+
+def test_frozen_memory_protocol_single_candidate_population_is_byte_identical(
+    tmp_path: Path,
+) -> None:
+    manifest = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "single-candidate-population",
+                "task": {"name": "CleanHouse"},
+                "seed_suite": {
+                    "version": 1,
+                    "memory_training": [1],
+                    "development": [2],
+                    "held_out": [3],
+                },
+                "failure_strategy": {"name": "reflect", "max_repair_cycles": 1},
+            }
+        )
+    )
+    store = WorkspaceStore(tmp_path)
+
+    class SingleCallModel:
+        def __init__(self) -> None:
+            self.propose_calls = 0
+
+        def propose(self, prompt: str) -> CandidateProgram:
+            _ = prompt
+            self.propose_calls += 1
+            return CandidateProgram(source="DEF run m( turnLeft m)")
+
+        def repair(self, prompt: str) -> CandidateProgram:
+            _ = prompt
+            return CandidateProgram(source="DEF run m( move m)")
+
+    model = SingleCallModel()
+
+    class ScriptedEvaluator:
+        def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+            _ = task_seed
+            if candidate.source == "DEF run m( move m)":
+                return EpisodeResult(outcome="success")
+            return EpisodeResult(
+                outcome="partial_completion",
+                failure_type="stalled",
+                failure_reason="candidate stalled",
+                evaluation_evidence={"initial_marker_count": 3, "remaining_marker_count": 2},
+            )
+
+    report, status = execute_resumable(
+        manifest, experiment_id(manifest), store, model, ScriptedEvaluator()
+    )
+
+    assert status == "completed"
+    assert report is not None
+    protocol = cast(dict[str, object], report.audit["frozen_memory_protocol"])
+    secondary_metrics = cast(dict[str, object], protocol["secondary_metrics"])
+    assert secondary_metrics["population_size"] == 1
+    assert secondary_metrics["total_repair_attempts"] == 1
+    assert secondary_metrics["development_candidate_count"] == 2
+    # A population of exactly one reuses the dedicated Memory Snapshot
+    # proposal as its sole development candidate: one propose() call total.
+    assert model.propose_calls == 1
+
+
 def test_invalid_repair_artifact_persistence_failure_surfaces_immediately(
     tmp_path: Path,
 ) -> None:

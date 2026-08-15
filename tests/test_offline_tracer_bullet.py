@@ -749,7 +749,9 @@ failure_strategy:
     assert selection["version"] == "v1"
     assert selection["configured_population_size"] == 2
     assert selection["configured_elite_count"] == 1
-    assert selection["observed_population_size"] == 2
+    # Each of the 2 population members independently runs its own repair
+    # cycle (max_repair_cycles: 1), so the flattened population is 4.
+    assert selection["observed_population_size"] == 4
     assert len(selection["elite_candidates"]) == 1
 
 
@@ -804,7 +806,9 @@ failure_strategy:
     assert selection["version"] == "v1"
     assert selection["configured_population_size"] == 2
     assert selection["configured_elite_count"] == 1
-    assert selection["observed_population_size"] == 2
+    # Each of the 2 population members independently runs its own repair
+    # cycle (max_repair_cycles: 1), so the flattened population is 4.
+    assert selection["observed_population_size"] == 4
     assert len(selection["elite_candidates"]) == 1
 
 

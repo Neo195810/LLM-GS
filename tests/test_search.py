@@ -46,6 +46,40 @@ def test_cem_selects_the_best_development_candidate_and_records_elites() -> None
     assert provenance["selection"] == provenance["elite_candidates"][0]
 
 
+def test_cem_selects_across_a_population_sized_flattened_candidate_set() -> None:
+    candidates = (
+        ScoredCandidate(
+            CandidateProgram(source="DEF run m( turnLeft m)"),
+            (EpisodeResult(outcome="partial_completion", normalized_progress=0.2),),
+        ),
+        ScoredCandidate(
+            CandidateProgram(source="DEF run m( move m)"),
+            (EpisodeResult(outcome="partial_completion", normalized_progress=0.5),),
+        ),
+        ScoredCandidate(
+            CandidateProgram(source="DEF run m( turnRight m)"),
+            (EpisodeResult(outcome="success", normalized_progress=1.0),),
+        ),
+        ScoredCandidate(
+            CandidateProgram(source="DEF run m( move move m)"),
+            (EpisodeResult(outcome="partial_completion", normalized_progress=0.8),),
+        ),
+    )
+
+    selected_index, provenance = CEMSearchStrategy(population_size=4, elite_count=2).select(
+        candidates
+    )
+
+    assert selected_index == 2
+    assert provenance["configured_population_size"] == 4
+    assert provenance["configured_elite_count"] == 2
+    assert provenance["observed_population_size"] == 4
+    elite_progress = [
+        entry["development_mean_normalized_progress"] for entry in provenance["elite_candidates"]
+    ]
+    assert elite_progress == [1.0, 0.8]
+
+
 def test_search_strategy_registry_does_not_depend_on_task_or_orchestrator() -> None:
     strategy = resolve_search_strategy(
         ResolvedSearchStrategyConfiguration(

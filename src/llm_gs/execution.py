@@ -101,6 +101,7 @@ def reflect_once(
     seen_ast_hashes: set[str] | None = None,
     reflect: bool = True,
     retrieved_data: str | None = None,
+    storage_round: int | None = None,
 ) -> CandidateProgram:
     diagnosis = (
         cycle.diagnose(result, evidence_index=0, retrieved_data=retrieved_data)
@@ -122,7 +123,10 @@ def reflect_once(
         execution_id,
     )
     repair = cycle.repair(parent, diagnosis, intent, candidate, repair_round, seen_ast_hashes)
-    store.save_repair_attempt(execution_id, repair)
+    stored_repair = (
+        repair if storage_round is None else repair.model_copy(update={"round": storage_round})
+    )
+    store.save_repair_attempt(execution_id, stored_repair)
     return repair.candidate
 
 
@@ -328,91 +332,116 @@ def _execute_frozen_memory_protocol(
         store.save_memory_entry(entry)
     snapshot_entries = store.freeze_memory_snapshot(execution_id, training_entries)
 
-    candidates: list[tuple[CandidateProgram, list[EpisodeResult]]] = []
-    current_candidate = initial_candidate
-    current_results = _evaluate_candidate(
-        store, execution_id, current_candidate, suite["development"], evaluator
-    )
-    candidates.append((current_candidate, current_results))
     strategy = str(manifest.failure_strategy["name"])
     if strategy != "regenerate" and not isinstance(model, Repairer):
         raise AssertionError(
             "non-regenerate frozen memory protocols require a repair-capable model"
         )
-    cycle = RepairCycle(int(manifest.failure_strategy["max_repair_cycles"]), task_name)
-    seen_ast_hashes = {_normalized_ast_hash(current_candidate.source, task_name)}
-    for repair_round in range(1, int(manifest.failure_strategy["max_repair_cycles"]) + 1):
-        failed_results = [result for result in current_results if result.outcome != "success"]
-        if not failed_results:
-            break
-        failed_result = failed_results[0]
-        if strategy == "regenerate":
-            replacement = _propose_with_invalid_output_observation(
+    max_repair_cycles = int(manifest.failure_strategy["max_repair_cycles"])
+    cycle = RepairCycle(max_repair_cycles, task_name)
+    population_size = int(manifest.search_strategy["population_size"])
+    candidates: list[tuple[CandidateProgram, list[EpisodeResult]]] = []
+    total_repair_attempts = 0
+    next_repair_attempt_round = 1
+    for member_index in range(population_size):
+        if member_index == 0 and population_size == 1:
+            # A population of exactly one reuses the dedicated Memory Snapshot
+            # proposal as its sole development candidate, matching the
+            # pre-population-search single-candidate chain byte-for-byte.
+            current_candidate = initial_candidate
+        else:
+            proposed_candidate = _propose_with_invalid_output_observation(
                 model, task_prompt(task_name), store, execution_id
             )
-            if store.model_requests(execution_id) + replacement.model_requests > int(
+            if store.model_requests(execution_id) + proposed_candidate.model_requests > int(
                 manifest.budgets["model_requests"]
             ):
                 break
-            store.add_model_requests(execution_id, replacement.model_requests)
-            current_candidate = replacement
-            current_results = _evaluate_candidate(
-                store, execution_id, current_candidate, suite["development"], evaluator
-            )
-            candidates.append((current_candidate, current_results))
-            seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source, task_name))
-            continue
-        if not isinstance(model, Repairer):
-            raise AssertionError("non-regenerate strategy requires a repair-capable model")
-        memory_context: str | None = None
-        retrieval_id: int | None = None
-        if strategy in {"memory_repair", "memory_reflect"}:
-            retrieved, retrieval = StructuredRetriever(
-                tuple(snapshot_entries), task=task_name
-            ).retrieve(
-                failed_result
-            )
-            retrieval_id = store.save_retrieval_outcome(execution_id, retrieval)
-            memory_context = serialize_repair_context(failed_result, retrieved)
-        else:
-            memory_context = serialize_repair_context(failed_result, [])
-        prompt_prefix = (
-            "Reflect on evidence then repair" if strategy == "memory_reflect" else "Repair"
-        )
-        try:
-            repaired_candidate = reflect_once(
-                current_candidate,
-                failed_result,
-                model,
-                cycle,
-                execution_id,
-                store,
-                f"{prompt_prefix} {task_name} using data: "
-                f"{memory_context}",
-                repair_round=repair_round,
-                seen_ast_hashes=seen_ast_hashes,
-                reflect=strategy != "memory_repair",
-                retrieved_data=memory_context,
-            )
-        except RepeatedRepairError:
-            if retrieval_id is not None:
-                store.record_no_retrieval_impact(retrieval_id)
-            break
-        if store.model_requests(execution_id) + repaired_candidate.model_requests > int(
-            manifest.budgets["model_requests"]
-        ):
-            if retrieval_id is not None:
-                store.record_no_retrieval_impact(retrieval_id)
-            break
-        store.add_model_requests(execution_id, repaired_candidate.model_requests)
-        current_candidate = repaired_candidate
+            store.add_model_requests(execution_id, proposed_candidate.model_requests)
+            current_candidate = proposed_candidate
         current_results = _evaluate_candidate(
             store, execution_id, current_candidate, suite["development"], evaluator
         )
-        if retrieval_id is not None:
-            store.record_retrieval_impact(retrieval_id, failed_results, current_results)
         candidates.append((current_candidate, current_results))
-        seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source, task_name))
+        seen_ast_hashes = {_normalized_ast_hash(current_candidate.source, task_name)}
+        for repair_round in range(1, max_repair_cycles + 1):
+            failed_results = [
+                result for result in current_results if result.outcome != "success"
+            ]
+            if not failed_results:
+                break
+            failed_result = failed_results[0]
+            if strategy == "regenerate":
+                replacement = _propose_with_invalid_output_observation(
+                    model, task_prompt(task_name), store, execution_id
+                )
+                if store.model_requests(execution_id) + replacement.model_requests > int(
+                    manifest.budgets["model_requests"]
+                ):
+                    break
+                store.add_model_requests(execution_id, replacement.model_requests)
+                current_candidate = replacement
+                current_results = _evaluate_candidate(
+                    store, execution_id, current_candidate, suite["development"], evaluator
+                )
+                candidates.append((current_candidate, current_results))
+                total_repair_attempts += 1
+                seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source, task_name))
+                continue
+            if not isinstance(model, Repairer):
+                raise AssertionError("non-regenerate strategy requires a repair-capable model")
+            memory_context: str | None = None
+            retrieval_id: int | None = None
+            if strategy in {"memory_repair", "memory_reflect"}:
+                retrieved, retrieval = StructuredRetriever(
+                    tuple(snapshot_entries), task=task_name
+                ).retrieve(
+                    failed_result
+                )
+                retrieval_id = store.save_retrieval_outcome(execution_id, retrieval)
+                memory_context = serialize_repair_context(failed_result, retrieved)
+            else:
+                memory_context = serialize_repair_context(failed_result, [])
+            prompt_prefix = (
+                "Reflect on evidence then repair" if strategy == "memory_reflect" else "Repair"
+            )
+            try:
+                repaired_candidate = reflect_once(
+                    current_candidate,
+                    failed_result,
+                    model,
+                    cycle,
+                    execution_id,
+                    store,
+                    f"{prompt_prefix} {task_name} using data: "
+                    f"{memory_context}",
+                    repair_round=repair_round,
+                    seen_ast_hashes=seen_ast_hashes,
+                    reflect=strategy != "memory_repair",
+                    retrieved_data=memory_context,
+                    storage_round=next_repair_attempt_round,
+                )
+            except RepeatedRepairError:
+                if retrieval_id is not None:
+                    store.record_no_retrieval_impact(retrieval_id)
+                break
+            next_repair_attempt_round += 1
+            if store.model_requests(execution_id) + repaired_candidate.model_requests > int(
+                manifest.budgets["model_requests"]
+            ):
+                if retrieval_id is not None:
+                    store.record_no_retrieval_impact(retrieval_id)
+                break
+            store.add_model_requests(execution_id, repaired_candidate.model_requests)
+            current_candidate = repaired_candidate
+            current_results = _evaluate_candidate(
+                store, execution_id, current_candidate, suite["development"], evaluator
+            )
+            if retrieval_id is not None:
+                store.record_retrieval_impact(retrieval_id, failed_results, current_results)
+            candidates.append((current_candidate, current_results))
+            total_repair_attempts += 1
+            seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source, task_name))
 
     selected_candidate, selection = _select_final_candidate(
         candidates, manifest.search_strategy, task_name
@@ -437,7 +466,8 @@ def _execute_frozen_memory_protocol(
             "development_candidate_count": len(candidates),
             "episode_evaluations": total_episode_evaluations,
             "model_requests": store.model_requests(execution_id),
-            "repair_attempts": len(candidates) - 1,
+            "population_size": population_size,
+            "total_repair_attempts": total_repair_attempts,
         },
         "seed_suite": suite,
         "selection": {
