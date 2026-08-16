@@ -1,6 +1,6 @@
 name: llm_gs
 dependencies:
-  - python=3.9
+  - python=3.10
   - numpy<2.0
   - scipy
   - Pillow
@@ -23,6 +23,7 @@ dependencies:
       - progressbar
       - langchain==0.1.16
       - langchain-openai==0.1.3
+      - langchain-community==0.0.32
       - python-dotenv
       - wrapt-timeout-decorator
   # Minigrid installation

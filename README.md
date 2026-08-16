@@ -32,10 +32,16 @@ If `conda` is not available, it is also possible to install dependencies using `
 pip install -r requirements.txt
 ```
 
-After installing the environment, please export your **OpenAI API key** to execute our main method:
+The current LLM backend is [Ollama](https://ollama.com/). Install and start
+Ollama, then download both the configured generation model and the embedding
+model used by Skill RAG:
 ```bash
-export OPENAI_KEY="YOUR_API_KEY"
+ollama pull qwen3-coder:30b
+ollama pull nomic-embed-text
 ```
+
+`qwen3-coder:30b` is configured in `llm/llm_program_generator.py`. If you use
+a different local model, update that constant before running an experiment.
 
 ### Execution
 To execute our main method and baselines. You can change **method** and **task** inside the scripts. **(LLM-GS is our main method.)**
@@ -59,6 +65,35 @@ bash scripts/LLM-Revision/run_regeneration.sh
 Please note that the result of LLM-GS might not be the same as the one we reported in our paper due to the randomness of the LLMs.
 
 The experiment results will be in the `output` directory.
+
+## Skill RAG extension
+
+This extension lets LLM-GS retain successful, verified DSL programs as
+reusable skills. A successful final program and its non-trivial control-flow
+subprograms are saved in `output/skills.json` with their task description,
+reward, DSL source and Ollama embedding. On a later task, the library uses
+cosine similarity to retrieve the most relevant same-environment skills. They
+are injected into the LLM prompt and also evaluated as hill-climbing seeds.
+
+Run with Skill RAG enabled:
+
+```bash
+python scripts/main.py --task DoorKey --seed 0 \
+  --use_skill_library \
+  --skill_library_path output/skills.json \
+  --skill_top_k 3 \
+  --output_name Skill-RAG
+```
+
+Useful options are `--skill_embedding_model` (default:
+`nomic-embed-text`) and `--skill_min_reward` (default: `1.0`). The run log
+records retrieved skills and their similarity scores for auditing. See
+[`prog_policies/skills/README.md`](prog_policies/skills/README.md) for the
+storage format, experimental protocol and integration details.
+
+For a fair transfer experiment, build the library with source tasks and hold
+out the target task. Reusing a solved DoorKey program for DoorKey measures
+same-task memory reuse rather than cross-task generalization.
 
 ## Adapting LLM-GS to Your Environment
 
@@ -86,10 +121,13 @@ To use LLM-GS for your custom PRL task:
 
 
 
-## Acknowledge and licence
+## Acknowledgement and licence
 
-1. The baseline implementations in `prog_policies` are from [Reclaiming the Source of Programmatic Policies: Programmatic versus Latent Spaces](https://github.com/lelis-research/prog_policies). The baselines (CEM, CEBS, HC) code under `prog_policies` should follow the GPL-3.0 license.
+1. The baseline implementations in `prog_policies` are from [Reclaiming the Source of Programmatic Policies: Programmatic versus Latent Spaces](https://github.com/lelis-research/prog_policies), which is licensed under GPL-3.0. Keep its copyright and licence notices intact, and distribute modifications to that GPL-covered code under GPL-3.0 when redistributing the combined work.
 2. The [HPRL](https://arxiv.org/abs/2301.12950) baseline implementation is not in this repository. We run our experiment in [this repository](https://github.com/a015kh/hprl)
+3. The Skill RAG extension was inspired by the skill-library retrieval pattern
+   in [Voyager](https://github.com/MineDojo/Voyager). It is an independent
+   implementation and does not copy Voyager source code.
 
 ## Citation
 
