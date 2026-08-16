@@ -1,0 +1,16 @@
+spec_version: 1
+display_name: pilot-25-doorkey-cem
+task:
+  name: DoorKey
+seed_suite:
+  version: 1
+  memory_training: [101]
+  development: [102]
+  held_out: [103]
+search_strategy:
+  name: cem
+  population_size: 4
+  elite_count: 1
+failure_strategy:
+  name: regenerate
+  max_repair_cycles: 1
