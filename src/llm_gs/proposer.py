@@ -113,7 +113,7 @@ class OpenAIProposer:
         self,
         client: ResponsesClient | None = None,
         input_token_limit: int = 4096,
-        output_token_limit: int = 1024,
+        output_token_limit: int = 4096,
         max_cost_usd: float = 1.0,
         total_cost_budget: CostBudget | None = None,
     ) -> None:

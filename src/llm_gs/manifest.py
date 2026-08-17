@@ -17,24 +17,47 @@ from llm_gs.contracts import (
 from llm_gs.memory import RETRIEVER_ORDER, RETRIEVER_VERSION, RETRIEVER_WEIGHTS
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
+DSL_CONTROL_FLOW_PROMPT = (
+    "Control syntax: WHILE c( <condition> c) w( <statements> w); "
+    "REPEAT R=<0-19> r( <statements> r); "
+    "IF c( <condition> c) i( <statements> i); "
+    "IFELSE c( <condition> c) i( <statements> i) ELSE e( <statements> e); "
+    "negate conditions with not c( <condition> c). "
+)
 KAREL_DSL_PROMPT = (
     "Return JSON with only source. Produce one deterministic {task} Karel program. "
     "Source must use exact Karel DSL syntax: DEF run m( <statements> m). "
-    "Allowed actions: move, turnLeft, turnRight, pickMarker, putMarker. "
+    + DSL_CONTROL_FLOW_PROMPT
+    + "Actions: move, turnLeft, turnRight, pickMarker, putMarker. "
+    "Conditions: frontIsClear, leftIsClear, rightIsClear, markersPresent, noMarkersPresent. "
+    "Goal: {goal}. "
     "Example valid source: DEF run m( move turnLeft m). "
     "Never output task name, pseudocode, Markdown, or Python."
 )
 MINIGRID_DSL_PROMPT = (
     "Return JSON with only source. Produce one deterministic {task} MiniGrid program. "
     "Source must use exact MiniGrid DSL syntax: DEF run m( <statements> m). "
-    "Allowed actions: left, right, forward, pickup, drop, toggle. "
+    + DSL_CONTROL_FLOW_PROMPT
+    + "Actions: left, right, forward, pickup, drop, toggle. "
+    "Conditions: front_is_clear, is_carrying_object, front_object_type h( red h), "
+    "front_object_type h( blue h), front_object_color h( lava h), "
+    "front_object_color h( door h), front_object_color h( ball h), "
+    "front_object_color h( box h). Goal: {goal}. "
     "Example valid source: DEF run m( forward left m). "
     "Never output task name, pseudocode, Markdown, or Python."
 )
-CLEAN_HOUSE_PROMPT = KAREL_DSL_PROMPT.format(task="CleanHouse")
-FOUR_CORNERS_PROMPT = KAREL_DSL_PROMPT.format(task="FourCorners")
-DOOR_KEY_PROMPT = MINIGRID_DSL_PROMPT.format(task="DoorKey")
-RED_BLUE_DOOR_PROMPT = MINIGRID_DSL_PROMPT.format(task="RedBlueDoor")
+CLEAN_HOUSE_PROMPT = KAREL_DSL_PROMPT.format(
+    task="CleanHouse", goal="collect every marker"
+)
+FOUR_CORNERS_PROMPT = KAREL_DSL_PROMPT.format(
+    task="FourCorners", goal="place a marker on each of the four corner cells and nowhere else"
+)
+DOOR_KEY_PROMPT = MINIGRID_DSL_PROMPT.format(
+    task="DoorKey", goal="pick up the key, unlock the door, then reach the goal"
+)
+RED_BLUE_DOOR_PROMPT = MINIGRID_DSL_PROMPT.format(
+    task="RedBlueDoor", goal="open the red door before opening the blue door"
+)
 TEXTWORLD_PILOT_PROMPT = (
     "Return JSON with only source. Produce one deterministic TextWorldPilot V2 program. "
     "Use one to three semicolon-separated rules: WHEN <predicate> DO <action>. "
@@ -187,7 +210,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
         },
         model={
             "client": "fake",
-            "max_output_tokens": 1024,
+            "max_output_tokens": 4096,
             "model": "fake-openai-v1",
             "reasoning_effort": "medium",
         },
@@ -211,7 +234,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "episode_evaluations": task_seed_count,
             "input_tokens": 4096,
             "model_requests": model_request_budget,
-            "output_tokens": 1024,
+            "output_tokens": 4096,
         },
         memory_snapshot={
             "id": (

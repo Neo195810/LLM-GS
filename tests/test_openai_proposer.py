@@ -54,6 +54,7 @@ def test_openai_proposer_uses_pinned_structured_responses_request() -> None:
     assert proposer.propose("make a program").source == "DEF run m( turnLeft m)"
     assert responses.calls[0]["model"] == MODEL_NAME
     assert responses.calls[0]["reasoning"] == {"effort": REASONING_EFFORT}
+    assert responses.calls[0]["max_output_tokens"] == 4096
     assert responses.calls[0]["text"] == {
         "format": {
             "type": "json_schema",
@@ -706,7 +707,7 @@ def test_repair_feedback_includes_bounded_evaluation_evidence() -> None:
 
     repair_prompt = str(responses.calls[0]["input"])
     assert len(repair_prompt) <= 8000
-    assert "Allowed actions: move" in repair_prompt
+    assert "Actions: move" in repair_prompt
     assert "sk-secret-value" not in repair_prompt
 
 
@@ -784,7 +785,8 @@ def test_openai_proposer_repair_includes_task_dsl_contract() -> None:
     candidate = OpenAIProposer(responses).repair("Repair CleanHouse using evidence")
 
     assert candidate.source == "DEF run m( move m)"
-    assert "Allowed actions: move" in str(responses.calls[0]["input"])
+    assert "Goal: collect every marker" in str(responses.calls[0]["input"])
+    assert "REPEAT R=<0-19> r(" in str(responses.calls[0]["input"])
 
 
 def test_openai_proposer_blocks_input_before_sending_a_request() -> None:
@@ -804,9 +806,24 @@ def test_openai_proposer_enforces_shared_total_cost_cap() -> None:
     assert responses.calls == []
 
 
-@pytest.mark.parametrize("task_name", ["CleanHouse", "FourCorners", "DoorKey", "RedBlueDoor"])
-def test_task_prompt_includes_exact_dsl_envelope_and_example(task_name: str) -> None:
+@pytest.mark.parametrize(
+    ("task_name", "goal", "task_condition"),
+    [
+        ("CleanHouse", "collect every marker", "markersPresent"),
+        ("FourCorners", "four corner cells and nowhere else", "putMarker"),
+        ("DoorKey", "pick up the key, unlock the door, then reach the goal", "is_carrying_object"),
+        ("RedBlueDoor", "red door before opening the blue door", "front_object_type h( red h)"),
+    ],
+)
+def test_task_prompt_includes_goal_and_exact_dsl_contract(
+    task_name: str, goal: str, task_condition: str
+) -> None:
     prompt = task_prompt(task_name)
 
     assert "DEF run m(" in prompt
     assert "Example valid source" in prompt
+    assert "REPEAT R=<0-19> r(" in prompt
+    assert "WHILE c(" in prompt
+    assert "IFELSE c(" in prompt
+    assert goal in prompt
+    assert task_condition in prompt

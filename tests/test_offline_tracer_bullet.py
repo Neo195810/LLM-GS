@@ -50,7 +50,7 @@ def test_valid_specification_runs_offline_through_a_deterministic_report(
     assert validation["experiment_id"].startswith("exp_")
     assert validation["manifest"]["model"] == {
         "client": "fake",
-        "max_output_tokens": 1024,
+        "max_output_tokens": 4096,
         "model": "fake-openai-v1",
         "reasoning_effort": "medium",
     }
@@ -58,7 +58,7 @@ def test_valid_specification_runs_offline_through_a_deterministic_report(
         "episode_evaluations": 1,
         "input_tokens": 4096,
         "model_requests": 1,
-        "output_tokens": 1024,
+        "output_tokens": 4096,
     }
     assert validation["manifest"]["failure_strategy"] == {
         "max_repair_cycles": 3,
@@ -339,7 +339,7 @@ failure_strategy:
         "episode_evaluations": 2,
         "input_tokens": 4096,
         "model_requests": 6,
-        "output_tokens": 1024,
+        "output_tokens": 4096,
     }
     expected_search_strategy = {
         "elite_count": 1,
