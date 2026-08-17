@@ -61,6 +61,55 @@ class SkillGSAdaptiveCoreTests(unittest.TestCase):
         self.assertEqual(plan.next_attempt["max_steps"], 200)
         self.assertEqual(plan.next_attempt["reason"], "step_budget_exhausted")
 
+    def test_replanner_uses_top_ranked_skill_for_plan_variant(self):
+        diagnosis = detect_failure(run_doorkey_mvp(seed=0, max_steps=1), max_steps=1)
+        skill_ranking = {
+            "failure_type": "step_budget_exhausted",
+            "ranking_policy": "prefer_low_complexity_high_success",
+            "query": {
+                "task": "DoorKey",
+                "subgoal": "navigate_to_goal",
+                "context_tags": ["karel", "navigation"],
+            },
+            "ranked_skills": [
+                {
+                    "skill_id": "karel.doorkey.navigate_forward_until_blocked.v1",
+                    "name": "navigate_forward_until_blocked",
+                    "score_after": 11.775,
+                    "reasons": ["progress_postcondition_bonus"],
+                },
+                {
+                    "skill_id": "karel.doorkey.turn_left.v1",
+                    "name": "turn_left",
+                    "score_after": 8.0,
+                    "reasons": ["turn_only_penalty"],
+                },
+            ],
+        }
+
+        plan = replan_after_failure(
+            diagnosis,
+            attempt=1,
+            current_max_steps=1,
+            retry_max_steps=50,
+            perturbation={
+                "strategy_id": "increase_step_budget",
+                "failure_type": "step_budget_exhausted",
+            },
+            skill_ranking=skill_ranking,
+        )
+
+        self.assertEqual(
+            plan.selected_skill["skill_id"],
+            "karel.doorkey.navigate_forward_until_blocked.v1",
+        )
+        self.assertEqual(plan.plan_variant["source"], "skill_ranking")
+        self.assertEqual(plan.plan_variant["target_subgoal"], "navigate_to_goal")
+        self.assertEqual(
+            plan.next_attempt["selected_skill_id"],
+            "karel.doorkey.navigate_forward_until_blocked.v1",
+        )
+
     def test_retry_loop_records_adaptive_attempt_memory(self):
         with tempfile.TemporaryDirectory() as directory:
             memory_path = Path(directory) / "adaptive_attempts.json"
@@ -82,6 +131,14 @@ class SkillGSAdaptiveCoreTests(unittest.TestCase):
         self.assertEqual(len(payload["attempts"]), 2)
         self.assertEqual(payload["attempts"][0]["diagnosis"]["failure_type"], "step_budget_exhausted")
         self.assertEqual(payload["attempts"][0]["repair_plan"]["status"], "retry")
+        self.assertEqual(
+            payload["attempts"][0]["repair_plan"]["selected_skill"]["skill_id"],
+            "karel.doorkey.navigate_forward_until_blocked.v1",
+        )
+        self.assertEqual(
+            payload["repair_outcomes"][0]["selected_skill_id"],
+            "karel.doorkey.navigate_forward_until_blocked.v1",
+        )
         self.assertTrue(payload["attempts"][1]["success"])
 
 

@@ -13,6 +13,8 @@ class RepairPlan:
     next_attempt: dict[str, Any] = field(default_factory=dict)
     rationale: str = ""
     perturbation: dict[str, Any] = field(default_factory=dict)
+    selected_skill: dict[str, Any] = field(default_factory=dict)
+    plan_variant: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -24,6 +26,7 @@ def replan_after_failure(
     current_max_steps: int,
     retry_max_steps: int,
     perturbation: dict[str, Any] | None = None,
+    skill_ranking: dict[str, Any] | None = None,
     can_retry: bool = True,
 ) -> RepairPlan:
     """Convert a failure diagnosis into the next retry configuration."""
@@ -49,17 +52,26 @@ def replan_after_failure(
         if perturbation
         else diagnosis.recommended_repair
     )
+    selected_skill = _select_skill(skill_ranking)
+    plan_variant = _make_plan_variant(diagnosis, skill_ranking, selected_skill)
     next_max_steps = _next_max_steps(strategy_id, current_max_steps, retry_max_steps)
+    next_attempt = {
+        "attempt": attempt + 1,
+        "max_steps": next_max_steps,
+        "reason": diagnosis.failure_type,
+    }
+    if selected_skill:
+        next_attempt["selected_skill_id"] = selected_skill["skill_id"]
+        next_attempt["selected_skill_name"] = selected_skill.get("name")
+
     return RepairPlan(
         status="retry",
         strategy_id=strategy_id,
-        next_attempt={
-            "attempt": attempt + 1,
-            "max_steps": next_max_steps,
-            "reason": diagnosis.failure_type,
-        },
+        next_attempt=next_attempt,
         rationale=_rationale(diagnosis.failure_type, strategy_id),
         perturbation=perturbation or {},
+        selected_skill=selected_skill,
+        plan_variant=plan_variant,
     )
 
 
@@ -84,3 +96,37 @@ def _rationale(failure_type: str, strategy_id: str) -> str:
         f"Diagnosis {failure_type} selected repair strategy {strategy_id}; "
         "rerun with the planned retry configuration."
     )
+
+
+def _select_skill(skill_ranking: dict[str, Any] | None) -> dict[str, Any]:
+    if not skill_ranking:
+        return {}
+    ranked = skill_ranking.get("ranked_skills", [])
+    if not ranked:
+        return {}
+    top = ranked[0]
+    return {
+        "skill_id": top["skill_id"],
+        "name": top.get("name"),
+        "score_after": top.get("score_after"),
+        "ranking_reasons": list(top.get("reasons", [])),
+    }
+
+
+def _make_plan_variant(
+    diagnosis: FailureDiagnosis,
+    skill_ranking: dict[str, Any] | None,
+    selected_skill: dict[str, Any],
+) -> dict[str, Any]:
+    if not skill_ranking or not selected_skill:
+        return {}
+    query = skill_ranking.get("query", {})
+    return {
+        "source": "skill_ranking",
+        "failure_type": diagnosis.failure_type,
+        "ranking_policy": skill_ranking.get("ranking_policy"),
+        "target_subgoal": query.get("subgoal"),
+        "context_tags": list(query.get("context_tags", [])),
+        "selected_skill_id": selected_skill["skill_id"],
+        "selected_skill_name": selected_skill.get("name"),
+    }

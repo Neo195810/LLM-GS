@@ -55,11 +55,9 @@ def run_doorkey_retry_loop(
                 max_steps=max_steps,
             )
             can_retry = not run["success"] and attempt_index < max_attempts - 1
-            repair_plan = _make_repair_plan(
+            perturbation = _make_perturbation(
                 diagnosis,
                 attempt_index + 1,
-                max_steps,
-                retry_max_steps,
                 seed,
                 perturbation_seed,
                 perturbation_enabled,
@@ -67,7 +65,16 @@ def run_doorkey_retry_loop(
             )
             skill_ranking = _make_skill_ranking(
                 diagnosis,
-                repair_plan.perturbation,
+                perturbation,
+                can_retry,
+            )
+            repair_plan = _make_repair_plan(
+                diagnosis,
+                attempt_index + 1,
+                max_steps,
+                retry_max_steps,
+                perturbation,
+                skill_ranking,
                 can_retry,
             )
             attempt = _summarize_attempt(
@@ -93,6 +100,9 @@ def run_doorkey_retry_loop(
                 seed=seed,
                 failure_type=seed_attempts[0]["diagnosis"]["failure_type"],
                 strategy_id=seed_attempts[0]["repair_plan"]["strategy_id"],
+                selected_skill_id=seed_attempts[0]["repair_plan"]
+                .get("selected_skill", {})
+                .get("skill_id"),
                 from_attempt=seed_attempts[0]["attempt"],
                 to_attempt=seed_attempts[-1]["attempt"],
                 success=bool(seed_attempts[-1]["success"]),
@@ -143,29 +153,39 @@ def run_doorkey_retry_loop(
     return result
 
 
+def _make_perturbation(
+    diagnosis: FailureDiagnosis,
+    attempt: int,
+    seed: int,
+    perturbation_seed: int,
+    perturbation_enabled: bool,
+    can_retry: bool,
+) -> dict[str, Any]:
+    if perturbation_enabled and can_retry:
+        return choose_repair_strategy(
+            diagnosis,
+            seed=perturbation_seed + seed,
+            attempt=attempt,
+        )
+    return {}
+
+
 def _make_repair_plan(
     diagnosis: FailureDiagnosis,
     attempt: int,
     max_steps: int,
     retry_max_steps: int,
-    seed: int,
-    perturbation_seed: int,
-    perturbation_enabled: bool,
+    perturbation: dict[str, Any],
+    skill_ranking: dict[str, Any],
     can_retry: bool,
 ) -> RepairPlan:
-    perturbation = {}
-    if perturbation_enabled and can_retry:
-        perturbation = choose_repair_strategy(
-            diagnosis,
-            seed=perturbation_seed + seed,
-            attempt=attempt,
-        )
     return replan_after_failure(
         diagnosis,
         attempt=attempt,
         current_max_steps=max_steps,
         retry_max_steps=retry_max_steps,
         perturbation=perturbation,
+        skill_ranking=skill_ranking,
         can_retry=can_retry,
     )
 

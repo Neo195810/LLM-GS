@@ -32,7 +32,7 @@ Skill-GS layer 目前包含以下 Adaptive Core 模組：
 | Failure Detector | `prog_policies/skill_gs/failure_detector.py` | 將 evaluator 與 critic output 轉換成穩定的 failure diagnosis |
 | Stochastic Perturbation | `prog_policies/skill_gs/stochastic_perturbation.py` | 使用可重現的 random seed 選擇 repair strategy |
 | Skill Ranker | `prog_policies/skill_gs/skill_ranker.py` | 根據 failure diagnosis 重新排序候選 skill |
-| Replanner | `prog_policies/skill_gs/replanner.py` | 將 diagnosis 與 perturbation 轉換成下一次 attempt config |
+| Replanner | `prog_policies/skill_gs/replanner.py` | 將 diagnosis、perturbation 與 skill ranking 轉換成下一次 attempt config 與 plan variant |
 | Adaptive Memory | `prog_policies/skill_gs/adaptive_memory.py` | 儲存 attempts、diagnoses、repair plans 與 repair outcomes |
 | Retry Wrapper | `prog_policies/skill_gs/adaptive_retry.py` | 串接 detector、perturbation、replanning、retry 與 memory |
 | Agent Workflow | `prog_policies/skill_gs/agent_workflow.py` | 將 DoorKey loop 暴露成 role-based agent data flow |
@@ -220,20 +220,21 @@ terminated 的情況。因此在 loop engineering 實驗中，`step_budget_exhau
 4. 對 seeds 0..63 而言，`max_steps=6` 低於觀察到的 first-attempt success threshold。
 5. 對 seeds 0..63 且 `initial max_steps=10` 的設定來說，完整成功所需的 retry budget 是 22。
 6. 本次實驗中 retry count 與 replan count 相同，因為每個失敗 seed 都只在第二次 attempt 前 replan 一次。
-7. Adaptive Skill Ranking 已經能根據 failure diagnosis 產生候選 skill 的 reranking artifact，讓下一階段 replanning 可以使用 skill-level 訊號。
+7. Adaptive Skill Ranking 已經能根據 failure diagnosis 產生候選 skill 的 reranking artifact。
+8. Replanner 已能讀取 skill ranking，選出 top-ranked skill，並在 repair plan 中輸出 `selected_skill`、`plan_variant` 與下一次 attempt 的 `selected_skill_id`。
 
 ## 目前限制
 
 - 目前 policy 仍是 BFS/rule-based baseline，還不是 learned policy 或 LLM-generated policy。
 - Stochastic perturbation 目前已能選擇 repair strategy，並透過 Skill Ranker 產生候選 skill reranking；但尚未 mutate AST structure。
-- Replanning 目前主要改變 attempt configuration，也就是 step budget，尚未合成新的 DSL program。
-- Adaptive memory 目前會記錄 attempts 與 repair outcomes，但尚未回饋到未來的 skill retrieval。
+- Replanning 目前已會根據 `skill_ranking` 選擇 top-ranked skill 並產生 plan variant；但尚未合成新的 DSL program。
+- Adaptive memory 目前會記錄 attempts、repair outcomes 與 selected skill id，但尚未回饋到未來的 skill retrieval。
 
 ## 建議下一步
 
 1. 加入小型 report generator，將 `output/skill_gs/*.json` 自動轉成 Markdown tables。
 2. 做 skill-ranking experiment，測試 reranked skills 是否應該依照 seed coverage、success rate 或 failure signature 排序。
-3. 將 replanning 擴展到 step budget 以外，例如讓 Replanner 根據 `skill_ranking` 選擇 alternative navigation skill。
+3. 將 replanning 擴展到 DSL program level，例如讓 Replanner 根據 `plan_variant` 產生可執行的 alternative DSL subtree。
 4. 後續再將 Adaptive Core 接到原始 LLM-GS candidate programs，讓 failure detection 與 repair 不只用在 BFS baseline，也能用在 generated programs。
 
 ## 驗證
