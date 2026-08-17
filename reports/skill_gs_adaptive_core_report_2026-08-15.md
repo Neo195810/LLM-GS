@@ -1,53 +1,55 @@
-# Skill-GS Adaptive Core Progress and Experiment Report
+# Skill-GS Adaptive Core 進度與實驗報告
 
-Date: 2026-08-15  
-Branch: `Branch_NerdyClaush`  
-Repo: `F:\GitHub_Experiment\LLM-GS-team`
+日期：2026-08-15
+Branch：`Branch_NerdyClaush`
+Repo：`F:\GitHub_Experiment\LLM-GS-team`
 
-## Summary
+## 摘要
 
-Today we moved the DoorKey MVP from a stable BFS/rule-based baseline into a
-small but complete Adaptive Core loop.
+今天的主要進度，是把原本穩定可跑的 DoorKey MVP，從 BFS/rule-based
+baseline 往前推進成一個小型但完整的 Adaptive Core loop。
 
-The current system can:
+目前系統已經可以做到：
 
-- run the repo-native Karel DoorKey task over fixed seed ranges
-- detect failure from evaluator and critic output
-- select a seeded repair perturbation
-- replan the next attempt
-- retry failed seeds
-- persist attempt-level adaptive memory
-- summarize success rate, retry count, replan count, and failure types
+- 在 repo 原生的 Karel DoorKey 任務上跑固定 seed 範圍
+- 從 evaluator 與 critic output 中偵測 failure
+- 使用固定 random seed 選擇 repair perturbation
+- 根據 failure diagnosis 產生下一次 attempt 的 replan
+- 對失敗 seed 進行 retry
+- 儲存 attempt-level adaptive memory
+- 統計 success rate、retry count、replan count 與 failure type
 
-This is still not the full paper-level Skill-GS algorithm. The current version
-uses the BFS/rule-based DoorKey policy as a stable baseline and tests Adaptive
-Core behavior by controlling the step budget.
+這仍然不是完整論文級別的 Skill-GS 演算法。目前版本使用
+BFS/rule-based DoorKey policy 作為穩定 baseline，並透過控制 step budget
+來測試 Adaptive Core 的行為。
 
-## Implemented Components
+## 已完成元件
 
-The Skill-GS layer now includes the following Adaptive Core modules:
+Skill-GS layer 目前包含以下 Adaptive Core 模組：
 
 | Component | File | Role |
 |---|---|---|
-| Failure Detector | `prog_policies/skill_gs/failure_detector.py` | Converts evaluator and critic output into a stable failure diagnosis |
-| Stochastic Perturbation | `prog_policies/skill_gs/stochastic_perturbation.py` | Selects a repair strategy with a reproducible random seed |
-| Replanner | `prog_policies/skill_gs/replanner.py` | Converts a diagnosis and perturbation into the next attempt configuration |
-| Adaptive Memory | `prog_policies/skill_gs/adaptive_memory.py` | Stores attempts, diagnoses, repair plans, and repair outcomes |
-| Retry Wrapper | `prog_policies/skill_gs/adaptive_retry.py` | Connects detector, perturbation, replanning, retry, and memory |
-| Agent Workflow | `prog_policies/skill_gs/agent_workflow.py` | Exposes the DoorKey loop as a role-based agent data flow |
+| Failure Detector | `prog_policies/skill_gs/failure_detector.py` | 將 evaluator 與 critic output 轉換成穩定的 failure diagnosis |
+| Stochastic Perturbation | `prog_policies/skill_gs/stochastic_perturbation.py` | 使用可重現的 random seed 選擇 repair strategy |
+| Skill Ranker | `prog_policies/skill_gs/skill_ranker.py` | 根據 failure diagnosis 重新排序候選 skill |
+| Replanner | `prog_policies/skill_gs/replanner.py` | 將 diagnosis 與 perturbation 轉換成下一次 attempt config |
+| Adaptive Memory | `prog_policies/skill_gs/adaptive_memory.py` | 儲存 attempts、diagnoses、repair plans 與 repair outcomes |
+| Retry Wrapper | `prog_policies/skill_gs/adaptive_retry.py` | 串接 detector、perturbation、replanning、retry 與 memory |
+| Agent Workflow | `prog_policies/skill_gs/agent_workflow.py` | 將 DoorKey loop 暴露成 role-based agent data flow |
 
-The current data flow is:
+目前 Adaptive Core 的資料流如下：
 
 ```text
 Evaluator output
 -> Failure Detector
 -> Seeded Perturbation
+-> Adaptive Skill Ranking
 -> Replanner
 -> Retry Wrapper
 -> Adaptive Memory
 ```
 
-At the agent level, the data flow is:
+Agent 層級的資料流如下：
 
 ```text
 PlannerAgent
@@ -57,31 +59,30 @@ PlannerAgent
 -> SkillMemoryAgent
 ```
 
-## Experiment Setup
+## 實驗設定
 
-All experiments used:
+所有實驗皆使用：
 
-- task: Karel DoorKey
-- policy: current BFS/rule-based fixed policy
-- adaptive mode: enabled
-- max attempts: 2
-- perturbation seed: 123
-- output directory: `output/skill_gs/`
+- task：Karel DoorKey
+- policy：目前的 BFS/rule-based fixed policy
+- adaptive mode：enabled
+- max attempts：2
+- perturbation seed：123
+- output directory：`output/skill_gs/`
 
-The failure is intentionally induced through step-budget limits. This means the
-experiment is not trying to make BFS behave badly. Instead, it tests whether the
-Adaptive Core can detect that the first attempt ran out of budget, generate a
-repair plan, retry, and record the outcome.
+本次 failure 是透過 step-budget limit 人為誘發。也就是說，這些實驗不是
+在證明 BFS 很差，而是在測試 Adaptive Core 能不能偵測第一次 attempt
+因步數不足而失敗，接著產生 repair plan、retry，並記錄結果。
 
-Example command:
+範例指令：
 
 ```powershell
 python scripts\skill_gs\run_agent_loop.py --seeds 0 --adaptive-retry --initial-max-steps 10 --retry-max-steps 22 --max-attempts 2 --perturbation-seed 123
 ```
 
-## Experiment 1: Seeds 0..127, Broad Retry Budget
+## 實驗 1：Seeds 0..127，寬鬆 Retry Budget
 
-Configuration:
+設定：
 
 ```text
 seeds = 0..127
@@ -90,7 +91,7 @@ retry max_steps = 100
 max_attempts = 2
 ```
 
-Result:
+結果：
 
 | Metric | Value |
 |---|---:|
@@ -105,45 +106,45 @@ Result:
 | final success rate | 1.0 |
 | average successful steps | 15.078125 |
 
-Interpretation:
+解讀：
 
-With `initial max_steps=10`, most seeds cannot finish on the first attempt.
-However, a broad retry budget of 100 solves every failed seed. This verifies the
-end-to-end Adaptive Core pipeline under a generous repair budget.
+在 `initial max_steps=10` 時，大多數 seed 無法在第一次 attempt 中完成。
+然而，當 retry budget 放寬到 100 時，所有失敗 seed 都能在 retry 後成功。
+這驗證了 Adaptive Core pipeline 在寬鬆 repair budget 下可以完整運作。
 
-Result file:
+結果檔案：
 
 ```text
 output/skill_gs/adaptive_retry_seed0_127_max10_retry100.json
 ```
 
-## Experiment 2: Seeds 0..63, Short Budget Tests
+## 實驗 2：Seeds 0..63，短步數 Budget 測試
 
 | Initial max_steps | Retry max_steps | First success | Retried | Replans | Retry success | Final success | Success rate |
 |---:|---:|---:|---:|---:|---:|---:|---:|
 | 6 | 50 | 0/64 | 64 | 64 | 64 | 64/64 | 1.0 |
 | 8 | 10 | 2/64 | 62 | 62 | 4 | 6/64 | 0.09375 |
 
-Interpretation:
+解讀：
 
-`max_steps=6` is too low for all seeds in 0..63; none of them finish on the
-first attempt. When retry budget is raised to 50, every case is repaired.
+`max_steps=6` 對 seeds 0..63 來說太低，沒有任何 seed 能在第一次 attempt
+完成。當 retry budget 提高到 50 時，全部 case 都能被 repair 成功。
 
-`max_steps=8` starts to solve a few short-path cases. Only seeds `6` and `16`
-succeed immediately. With `retry_max_steps=10`, only four additional seeds are
-recovered: `13`, `17`, `25`, and `61`. This shows that a retry budget of 10 is
-still too tight for most DoorKey layouts.
+`max_steps=8` 開始能解出少數短路徑 case。第一次 attempt 成功的 seed
+只有 `6` 與 `16`。當 `retry_max_steps=10` 時，只額外救回四個 seed：
+`13`、`17`、`25`、`61`。這代表 retry budget 10 對大多數 DoorKey layout
+仍然太緊。
 
-Result files:
+結果檔案：
 
 ```text
 output/skill_gs/adaptive_retry_seed0_63_max6_retry50.json
 output/skill_gs/adaptive_retry_seed0_63_max8_retry10.json
 ```
 
-## Experiment 3: Retry Budget Sweep, Seeds 0..63
+## 實驗 3：Retry Budget Sweep，Seeds 0..63
 
-Configuration:
+設定：
 
 ```text
 seeds = 0..63
@@ -152,7 +153,7 @@ retry max_steps = 20..30
 max_attempts = 2
 ```
 
-Result:
+結果：
 
 | retry max_steps | first success | retried | replans | retry success | final success | failed seeds |
 |---:|---:|---:|---:|---:|---:|---|
@@ -168,35 +169,35 @@ Result:
 | 29 | 6/64 | 58 | 58 | 58 | 64/64 | none |
 | 30 | 6/64 | 58 | 58 | 58 | 64/64 | none |
 
-Interpretation:
+解讀：
 
-For seeds 0..63, when the first attempt is limited to `max_steps=10`, only 6
-seeds succeed immediately. The remaining 58 seeds trigger failure detection and
-replanning.
+對 seeds 0..63 而言，當第一次 attempt 限制在 `max_steps=10` 時，只有
+6 個 seed 會立即成功。剩下 58 個 seed 都會觸發 failure detection 與
+replanning。
 
-The observed full-success retry threshold is:
+觀察到的完整成功 retry threshold 是：
 
 ```text
 retry_max_steps = 22
 ```
 
-At retry budget 20, four seeds still fail: `1`, `19`, `29`, `57`.
-At retry budget 21, three seeds still fail: `1`, `19`, `29`.
-At retry budget 22 and above, every seed in 0..63 succeeds.
+當 retry budget 為 20 時，仍有四個 seed 失敗：`1`、`19`、`29`、`57`。
+當 retry budget 為 21 時，仍有三個 seed 失敗：`1`、`19`、`29`。
+當 retry budget 到 22 或以上時，seeds 0..63 全部成功。
 
-Result files:
+結果檔案：
 
 ```text
 output/skill_gs/adaptive_retry_sweep_seed0_63_max10_retry20_30_summary.json
 output/skill_gs/adaptive_retry_sweep_seed0_63_max10_retry20_30_full.json
 ```
 
-## Failure Detector Observations
+## Failure Detector 觀察
 
-The raw critic and formal failure detector do not always produce the same label.
-This is expected and useful.
+Raw critic 與 formal failure detector 不一定會產生相同標籤。這是預期內的，
+而且對 Adaptive Core 很有用。
 
-Example from the retry sweep:
+Retry sweep 中的一個例子：
 
 ```text
 raw critic:
@@ -206,62 +207,49 @@ formal failure detector:
   step_budget_exhausted
 ```
 
-The critic looks at task progress and repair hints. The failure detector adds
-runtime context, especially whether `steps == max_steps` and the environment did
-not terminate. This makes `step_budget_exhausted` the more appropriate diagnosis
-for loop engineering experiments.
+Critic 主要從任務進度與 repair hint 的角度判斷。Failure Detector 則額外
+加入 runtime context，特別是 `steps == max_steps` 且 environment 尚未
+terminated 的情況。因此在 loop engineering 實驗中，`step_budget_exhausted`
+是更適合交給 replanner 的正式 diagnosis。
 
-## Main Findings
+## 主要發現
 
-1. The BFS/rule-based DoorKey baseline is stable when the step budget is high
-   enough.
-2. Small step budgets expose controlled failures without changing the task or
-   policy.
-3. The Adaptive Core successfully turns these failures into retry/replan events.
-4. For seeds 0..63, `max_steps=6` is below the observed first-attempt success
-   threshold.
-5. For seeds 0..63 with `initial max_steps=10`, the observed retry budget needed
-   for full success is 22.
-6. Retry and replan counts are equal in these experiments because each failed
-   seed gets exactly one replan before the second attempt.
+1. BFS/rule-based DoorKey baseline 在 step budget 足夠時是穩定的。
+2. 小 step budget 可以在不修改 task 與 policy 的情況下製造 controlled failure。
+3. Adaptive Core 可以把這些 failure 轉換成 retry/replan event。
+4. 對 seeds 0..63 而言，`max_steps=6` 低於觀察到的 first-attempt success threshold。
+5. 對 seeds 0..63 且 `initial max_steps=10` 的設定來說，完整成功所需的 retry budget 是 22。
+6. 本次實驗中 retry count 與 replan count 相同，因為每個失敗 seed 都只在第二次 attempt 前 replan 一次。
+7. Adaptive Skill Ranking 已經能根據 failure diagnosis 產生候選 skill 的 reranking artifact，讓下一階段 replanning 可以使用 skill-level 訊號。
 
-## Current Limitations
+## 目前限制
 
-- The current policy is still a BFS/rule-based baseline, not a learned or LLM
-  generated policy.
-- Stochastic perturbation currently selects among repair strategies, but it does
-  not yet mutate skill ranking or AST structure.
-- Replanning currently changes attempt configuration, mainly the step budget.
-  It does not yet synthesize a new DSL program.
-- Adaptive memory records attempts and repair outcomes, but it does not yet feed
-  back into future skill retrieval.
+- 目前 policy 仍是 BFS/rule-based baseline，還不是 learned policy 或 LLM-generated policy。
+- Stochastic perturbation 目前已能選擇 repair strategy，並透過 Skill Ranker 產生候選 skill reranking；但尚未 mutate AST structure。
+- Replanning 目前主要改變 attempt configuration，也就是 step budget，尚未合成新的 DSL program。
+- Adaptive memory 目前會記錄 attempts 與 repair outcomes，但尚未回饋到未來的 skill retrieval。
 
-## Suggested Next Steps
+## 建議下一步
 
-1. Add a small report generator that converts `output/skill_gs/*.json` into
-   Markdown tables automatically.
-2. Add a skill-ranking experiment where learned skills are ranked by seed
-   coverage, success rate, or failure signature.
-3. Extend replanning beyond step budget repair, such as switching to an
-   alternative navigation skill.
-4. Later, connect Adaptive Core to original LLM-GS candidate programs so that
-   failure detection and repair apply to generated programs, not only the BFS
-   baseline.
+1. 加入小型 report generator，將 `output/skill_gs/*.json` 自動轉成 Markdown tables。
+2. 做 skill-ranking experiment，測試 reranked skills 是否應該依照 seed coverage、success rate 或 failure signature 排序。
+3. 將 replanning 擴展到 step budget 以外，例如讓 Replanner 根據 `skill_ranking` 選擇 alternative navigation skill。
+4. 後續再將 Adaptive Core 接到原始 LLM-GS candidate programs，讓 failure detection 與 repair 不只用在 BFS baseline，也能用在 generated programs。
 
-## Verification
+## 驗證
 
-Fresh verification command used after implementing Adaptive Core:
+Adaptive Core 實作後使用的 fresh verification command：
 
 ```powershell
 python -m unittest tests.test_skill_gs_doorkey_mvp tests.test_skill_gs_agent_workflow tests.test_skill_gs_adaptive_core -v
 ```
 
-Observed result:
+觀察結果：
 
 ```text
 Ran 16 tests
 OK
 ```
 
-The experiment output files are under `output/skill_gs/`, and `output/` is
-ignored by `.gitignore`.
+實驗 output files 位於 `output/skill_gs/`，且 `output/` 已經被 `.gitignore`
+忽略，不會進入版控。

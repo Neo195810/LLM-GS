@@ -17,6 +17,7 @@ from .failure_detector import FailureDiagnosis, detect_failure
 from .replanner import RepairPlan, replan_after_failure
 from .agent_workflow import run_doorkey_agent_loop
 from .skill_memory import record_skills_from_evaluation
+from .skill_ranker import build_default_doorkey_skill_ranking, rank_skills_for_failure
 from .stochastic_perturbation import choose_repair_strategy
 from .skill_manager import (
     JsonSkillStore,
@@ -41,8 +42,10 @@ __all__ = [
     "SkillQuery",
     "SkillRecord",
     "extract_doorkey_state",
+    "build_default_doorkey_skill_ranking",
     "choose_repair_strategy",
     "detect_failure",
+    "rank_skills_for_failure",
     "replan_after_failure",
     "run_doorkey_agent_loop",
     "run_doorkey_mvp",

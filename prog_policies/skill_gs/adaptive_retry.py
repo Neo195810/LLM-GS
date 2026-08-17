@@ -9,6 +9,7 @@ from .adaptive_memory import AdaptiveAttemptMemory
 from .evaluator import run_doorkey_mvp
 from .failure_detector import FailureDiagnosis, detect_failure
 from .replanner import RepairPlan, replan_after_failure
+from .skill_ranker import build_default_doorkey_skill_ranking
 from .stochastic_perturbation import choose_repair_strategy
 
 
@@ -64,12 +65,18 @@ def run_doorkey_retry_loop(
                 perturbation_enabled,
                 can_retry,
             )
+            skill_ranking = _make_skill_ranking(
+                diagnosis,
+                repair_plan.perturbation,
+                can_retry,
+            )
             attempt = _summarize_attempt(
                 run,
                 attempt_index + 1,
                 max_steps,
                 diagnosis,
                 repair_plan,
+                skill_ranking,
             )
             attempts.append(attempt)
             seed_attempts.append(attempt)
@@ -112,6 +119,7 @@ def run_doorkey_retry_loop(
         "adaptive_core": {
             "failure_detector": "prog_policies.skill_gs.failure_detector",
             "stochastic_perturbation": "prog_policies.skill_gs.stochastic_perturbation",
+            "skill_ranker": "prog_policies.skill_gs.skill_ranker",
             "replanner": "prog_policies.skill_gs.replanner",
             "memory": "prog_policies.skill_gs.adaptive_memory",
         },
@@ -162,12 +170,26 @@ def _make_repair_plan(
     )
 
 
+def _make_skill_ranking(
+    diagnosis: FailureDiagnosis,
+    perturbation: dict[str, Any],
+    can_retry: bool,
+) -> dict[str, Any]:
+    if diagnosis.success or not can_retry:
+        return {}
+    return build_default_doorkey_skill_ranking(
+        diagnosis,
+        perturbation=perturbation,
+    )
+
+
 def _summarize_attempt(
     run: dict[str, Any],
     attempt: int,
     max_steps: int,
     diagnosis: FailureDiagnosis,
     repair_plan: RepairPlan,
+    skill_ranking: dict[str, Any],
 ) -> dict[str, Any]:
     critique = run.get("critique", {})
     summary = {
@@ -183,6 +205,8 @@ def _summarize_attempt(
         "diagnosis": diagnosis.to_dict(),
         "repair_plan": repair_plan.to_dict(),
     }
+    if skill_ranking:
+        summary["skill_ranking"] = skill_ranking
     if "skill_memory" in run:
         summary["skill_memory"] = run["skill_memory"]
     return summary
