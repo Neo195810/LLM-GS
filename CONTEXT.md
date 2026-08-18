@@ -151,8 +151,12 @@ The separately tracked limits on model requests and consumed tokens; every submi
 _Avoid_: Retry budget, LLM budget
 
 **Model Price**:
-The USD charge for one million input, cached-input, or output tokens supplied as a command-line override. It is converted to a per-token rate only for cost calculation.
+The USD charge for one million input, cached-input, or output tokens in the Model Price Catalog or supplied as a `matrix run` command-line override. It is converted to a per-token rate only for cost calculation.
 _Avoid_: Per-token CLI price, model cost budget
+
+**Model Price Catalog**:
+The project-shared mapping of model identifiers to input, cached-input, and output Model Prices. `matrix run` reads it; valid supplied prices update the corresponding model entry before execution.
+_Avoid_: Cost Budget, provider price list
 
 **Cost Budget**:
 The USD cap shared by one Matrix Run. It tracks Settled Cost, Cost Reservations, and Unknown Usage separately; it is not an OpenAI account-credit balance.

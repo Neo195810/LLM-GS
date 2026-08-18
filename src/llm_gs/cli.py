@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sqlite3
 import sys
 from collections.abc import Callable
 from contextlib import suppress
+from decimal import Decimal
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import NoReturn
 
+import yaml
 from openai import APIError, APIStatusError
 from pydantic import BaseModel
 
@@ -42,6 +45,39 @@ from llm_gs.proposer import (
 )
 from llm_gs.storage import WorkspaceStore
 from llm_gs.textworld_release_gate import evaluate_release_gate, evidence_from_dict
+
+MODEL_PRICING_CATALOG_PATH = Path(__file__).resolve().parents[2] / "model-pricing.yaml"
+_PRICE_FIELDS = (
+    "input_usd_per_million_token",
+    "cached_input_usd_per_million_token",
+    "output_usd_per_million_token",
+)
+_PRICE_ARGUMENTS = {
+    "input_usd_per_million_token": "input_price_usd_per_million_token",
+    "cached_input_usd_per_million_token": "cached_input_price_usd_per_million_token",
+    "output_usd_per_million_token": "output_price_usd_per_million_token",
+}
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """YAML loader that rejects duplicate mapping keys."""
+
+
+def _construct_unique_mapping(
+    loader: yaml.SafeLoader, node: yaml.MappingNode, deep: bool = False
+) -> dict[object, object]:
+    mapping: dict[object, object] = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise ValueError(f"duplicate key {key!r}")
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping
+)
 
 
 class ModelConfigurationError(ValueError):
@@ -181,12 +217,13 @@ def _matrix_validate(args: argparse.Namespace) -> dict[str, object]:
 
 def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
     manifests = build_matrix_manifests(load_ablation_matrix_specification(args.specification))
+    pricing = _matrix_pricing_from_args(args) if args.enable_live_openai else None
     total_cost_budget = (
         CostBudget(args.max_total_cost_usd)
         if args.enable_live_openai and args.max_total_cost_usd is not None
         else None
     )
-    model = _model_client(args, total_cost_budget=total_cost_budget)
+    model = _model_client(args, total_cost_budget=total_cost_budget, pricing=pricing)
     store = WorkspaceStore(args.workspace)
     reports = []
     for manifest in manifests:
@@ -259,10 +296,14 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
                 break
         reports.append(store.reporting_view(resolved_experiment_id))
     output = matrix_report(reports)
-    if total_cost_budget is not None:
-        cost_summary: dict[str, object] = {
-            key: value for key, value in total_cost_budget.summary().items()
-        }
+    if total_cost_budget is not None or pricing is not None:
+        cost_summary: dict[str, object] = (
+            {key: value for key, value in total_cost_budget.summary().items()}
+            if total_cost_budget is not None
+            else {}
+        )
+        if pricing is not None:
+            cost_summary["pricing"] = _pricing_snapshot(args.model, pricing)
         output["cost"] = cost_summary
         store.save_matrix_cost_summary(_matrix_cost_key(manifests), cost_summary)
     _write_matrix_report(args.workspace, output)
@@ -430,7 +471,9 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _model_client(
-    args: argparse.Namespace, total_cost_budget: CostBudget | None = None
+    args: argparse.Namespace,
+    total_cost_budget: CostBudget | None = None,
+    pricing: ModelPricing | None = None,
 ) -> FakeOpenAIClient | OpenAIProposer:
     if not args.enable_live_openai:
         return FakeOpenAIClient()
@@ -439,7 +482,7 @@ def _model_client(
     return OpenAIProposer(
         max_cost_usd=args.max_cost_usd,
         total_cost_budget=total_cost_budget,
-        pricing=_pricing_from_args(args),
+        pricing=pricing if pricing is not None else _pricing_from_args(args),
         model_name=args.model,
     )
 
@@ -503,6 +546,145 @@ def _pricing_from_args(args: argparse.Namespace) -> ModelPricing | None:
     ):
         raise ValueError("token prices must be positive, except cached input may be zero")
     return pricing
+
+
+def _matrix_pricing_from_args(args: argparse.Namespace) -> ModelPricing:
+    catalog = _load_model_pricing_catalog(MODEL_PRICING_CATALOG_PATH)
+    model_name = args.model
+    current = catalog.get(model_name)
+    values = {
+        field: getattr(args, argument, None) for field, argument in _PRICE_ARGUMENTS.items()
+    }
+    if all(value is None for value in values.values()):
+        if current is None:
+            raise ValueError(
+                "unknown model requires all three --*-price-usd-per-million-token options"
+            )
+        return current
+    if current is None and any(value is None for value in values.values()):
+        raise ValueError(
+            "unknown model requires all three --*-price-usd-per-million-token options"
+        )
+    merged = {
+        field: values[field] if values[field] is not None else _pricing_value(current, field)
+        for field in _PRICE_FIELDS
+    }
+    pricing = _model_pricing_from_million_values(merged, model_name)
+    catalog[model_name] = pricing
+    _write_model_pricing_catalog(MODEL_PRICING_CATALOG_PATH, catalog)
+    return pricing
+
+
+def _load_model_pricing_catalog(path: Path) -> dict[str, ModelPricing]:
+    try:
+        raw = yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as error:
+        raise ValueError(f"invalid model pricing catalog {path}: {error}") from error
+    if not isinstance(raw, dict) or set(raw) != {"models"} or not isinstance(raw["models"], dict):
+        raise ValueError(f"invalid model pricing catalog {path}: expected only a models mapping")
+    catalog: dict[str, ModelPricing] = {}
+    for model_name, values in raw["models"].items():
+        if not isinstance(model_name, str) or not model_name or not isinstance(values, dict):
+            raise ValueError(f"invalid model pricing catalog {path}: invalid model entry")
+        if set(values) != set(_PRICE_FIELDS):
+            raise ValueError(
+                f"invalid model pricing catalog {path}: invalid prices for {model_name}"
+            )
+        catalog[model_name] = _model_pricing_from_million_values(values, model_name)
+    return catalog
+
+
+def _model_pricing_from_million_values(
+    values: dict[str, object], model_name: str
+) -> ModelPricing:
+    pricing = ModelPricing(
+        input_usd_per_token=(
+            float(
+                Decimal(str(_price_number(values["input_usd_per_million_token"], model_name)))
+                / Decimal(1_000_000)
+            )
+        ),
+        cached_input_usd_per_token=(
+            float(
+                Decimal(
+                    str(_price_number(values["cached_input_usd_per_million_token"], model_name))
+                )
+                / Decimal(1_000_000)
+            )
+        ),
+        output_usd_per_token=(
+            float(
+                Decimal(str(_price_number(values["output_usd_per_million_token"], model_name)))
+                / Decimal(1_000_000)
+            )
+        ),
+    )
+    if (
+        pricing.input_usd_per_token <= 0
+        or pricing.cached_input_usd_per_token < 0
+        or pricing.output_usd_per_token <= 0
+    ):
+        raise ValueError(
+            f"invalid model prices for {model_name}: token prices must be positive, "
+            "except cached input may be zero"
+        )
+    return pricing
+
+
+def _price_number(value: object, model_name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise ValueError(f"invalid model prices for {model_name}: prices must be finite numbers")
+    return float(value)
+
+
+def _pricing_value(pricing: ModelPricing | None, field: str) -> float:
+    if pricing is None:
+        raise ValueError("missing model price")
+    return {
+        "input_usd_per_million_token": float(
+            Decimal(str(pricing.input_usd_per_token)) * Decimal(1_000_000)
+        ),
+        "cached_input_usd_per_million_token": float(
+            Decimal(str(pricing.cached_input_usd_per_token)) * Decimal(1_000_000)
+        ),
+        "output_usd_per_million_token": float(
+            Decimal(str(pricing.output_usd_per_token)) * Decimal(1_000_000)
+        ),
+    }[field]
+
+
+def _pricing_snapshot(model_name: str, pricing: ModelPricing) -> dict[str, object]:
+    return {
+        "model": model_name,
+        **{field: _pricing_value(pricing, field) for field in _PRICE_FIELDS},
+    }
+
+
+def _write_model_pricing_catalog(path: Path, catalog: dict[str, ModelPricing]) -> None:
+    payload = {
+        "models": {
+            model_name: {field: _pricing_value(pricing, field) for field in _PRICE_FIELDS}
+            for model_name, pricing in sorted(catalog.items())
+        }
+    }
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            yaml.safe_dump(payload, temporary_file, sort_keys=False)
+        temporary_path.replace(path)
+    except OSError as error:
+        if temporary_path is not None:
+            with suppress(OSError):
+                temporary_path.unlink(missing_ok=True)
+        raise ValueError(f"could not write model pricing catalog {path}: {error}") from error
 
 
 def _fail(message: str) -> NoReturn:

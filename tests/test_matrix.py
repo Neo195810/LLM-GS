@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 import httpx
 import pytest
@@ -294,6 +294,130 @@ def test_unknown_model_with_all_prices_builds_a_live_client(
     assert pricing.output_usd_per_token == 0.000_002
 
 
+def test_matrix_pricing_catalog_persists_new_models_and_partial_updates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog_path = tmp_path / "model-pricing.yaml"
+    catalog_path.write_text(
+        """\
+models:
+  existing-model:
+    input_usd_per_million_token: 1
+    cached_input_usd_per_million_token: 0
+    output_usd_per_million_token: 2
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(cli, "MODEL_PRICING_CATALOG_PATH", catalog_path)
+
+    new_model = cli._parser().parse_args(
+        [
+            "matrix", "run", str(tmp_path / "matrix.yaml"), "--workspace",
+            str(tmp_path / "workspace"),
+            "--enable-live-openai", "--max-cost-usd", "1", "--model", "new-model",
+            "--input-price-usd-per-million-token", "3",
+            "--cached-input-price-usd-per-million-token", "0",
+            "--output-price-usd-per-million-token", "4",
+        ]
+    )
+    assert cli._matrix_pricing_from_args(new_model).output_usd_per_token == 0.000_004
+
+    remembered = cli._parser().parse_args(
+        [
+            "matrix", "run", str(tmp_path / "matrix.yaml"), "--workspace",
+            str(tmp_path / "workspace"),
+            "--enable-live-openai", "--max-cost-usd", "1", "--model", "new-model",
+        ]
+    )
+    assert cli._matrix_pricing_from_args(remembered).input_usd_per_token == 0.000_003
+
+    update = cli._parser().parse_args(
+        [
+            "matrix", "run", str(tmp_path / "matrix.yaml"), "--workspace",
+            str(tmp_path / "workspace"),
+            "--enable-live-openai", "--max-cost-usd", "1", "--model", "existing-model",
+            "--output-price-usd-per-million-token", "5",
+        ]
+    )
+    pricing = cli._matrix_pricing_from_args(update)
+    assert pricing.input_usd_per_token == 0.000_001
+    assert pricing.cached_input_usd_per_token == 0
+    assert pricing.output_usd_per_token == 0.000_005
+    assert cli._load_model_pricing_catalog(catalog_path)["existing-model"] == pricing
+
+
+def test_matrix_pricing_catalog_rejects_invalid_or_incomplete_entries_before_workspace_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    catalog_path = tmp_path / "model-pricing.yaml"
+    catalog_path.write_text("models:\n  broken: [1, 2, 3]\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "MODEL_PRICING_CATALOG_PATH", catalog_path)
+    args = cli._parser().parse_args(
+        [
+            "matrix", "run", str(tmp_path / "matrix.yaml"), "--workspace",
+            str(tmp_path / "workspace"),
+            "--enable-live-openai", "--max-cost-usd", "1",
+        ]
+    )
+    with pytest.raises(ValueError, match="invalid model pricing catalog"):
+        cli._matrix_pricing_from_args(args)
+    assert not (tmp_path / "workspace").exists()
+
+    catalog_path.write_text("models: {}\n", encoding="utf-8")
+    incomplete = cli._parser().parse_args(
+        [
+            "matrix", "run", str(tmp_path / "matrix.yaml"), "--workspace",
+            str(tmp_path / "workspace"),
+            "--enable-live-openai", "--max-cost-usd", "1", "--model", "new-model",
+            "--input-price-usd-per-million-token", "1",
+        ]
+    )
+    with pytest.raises(ValueError, match="unknown model requires all three"):
+        cli._matrix_pricing_from_args(incomplete)
+    assert not (tmp_path / "workspace").exists()
+
+
+def test_matrix_pricing_is_saved_before_model_client_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specification = tmp_path / "matrix.yaml"
+    specification.write_text(
+        """\
+matrix_version: 1
+display_name: priced-before-execution
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+    catalog_path = tmp_path / "model-pricing.yaml"
+    catalog_path.write_text("models: {}\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "MODEL_PRICING_CATALOG_PATH", catalog_path)
+    monkeypatch.setattr(
+        cli, "_model_client", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("offline"))
+    )
+    workspace = tmp_path / "workspace"
+    args = cli._parser().parse_args(
+        [
+            "matrix", "run", str(specification), "--workspace", str(workspace),
+            "--enable-live-openai", "--max-cost-usd", "1", "--model", "new-model",
+            "--input-price-usd-per-million-token", "1",
+            "--cached-input-price-usd-per-million-token", "0",
+            "--output-price-usd-per-million-token", "2",
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="offline"):
+        args.handler(args)
+
+    assert "new-model" in cli._load_model_pricing_catalog(catalog_path)
+    assert not workspace.exists()
+
+
 @pytest.mark.parametrize("status_code", [400, 403, 404])
 def test_model_configuration_status_error_is_not_retriable(
     monkeypatch: pytest.MonkeyPatch, status_code: int
@@ -399,19 +523,27 @@ max_repair_cycles: 1
     budgets: list[CostBudget] = []
 
     def model_client(
-        args: object, total_cost_budget: CostBudget | None = None
+        args: object, total_cost_budget: CostBudget | None = None, pricing: object = None
     ) -> OpenAIProposer:
-        _ = args
         assert total_cost_budget is not None
+        assert pricing is not None
         budgets.append(total_cost_budget)
-        return OpenAIProposer(Responses(), total_cost_budget=total_cost_budget, max_cost_usd=1)
+        return OpenAIProposer(
+            Responses(), total_cost_budget=total_cost_budget, max_cost_usd=1, pricing=pricing
+        )
 
     monkeypatch.setattr(cli, "_model_client", model_client)
+    catalog = tmp_path / "model-pricing.yaml"
+    catalog.write_text("models: {}\n", encoding="utf-8")
+    monkeypatch.setattr(cli, "MODEL_PRICING_CATALOG_PATH", catalog)
     args = cli._parser().parse_args(
         [
             "matrix", "run", str(specification), "--workspace", str(workspace),
             "--enable-live-openai", "--max-cost-usd", "1", "--max-total-cost-usd", "7",
             "--model", "test-model",
+            "--input-price-usd-per-million-token", "0.2",
+            "--cached-input-price-usd-per-million-token", "0.2",
+            "--output-price-usd-per-million-token", "1.2",
         ]
     )
 
@@ -429,6 +561,12 @@ max_repair_cycles: 1
     assert cost["remaining_usd"] == pytest.approx(7 - cost["settled_usd"])
     assert cost["cached_tokens"] == cost["input_tokens"] / 5
     assert cost["output_tokens"] == cost["input_tokens"] / 2
+    assert cost["pricing"] == {
+        "model": "test-model",
+        "input_usd_per_million_token": 0.2,
+        "cached_input_usd_per_million_token": 0.2,
+        "output_usd_per_million_token": 1.2,
+    }
     arm_settled = sum(arm["cost"]["settled_usd"] for arm in matrix["arm_reports"])
     assert arm_settled == pytest.approx(cost["settled_usd"])
 
