@@ -53,6 +53,10 @@ class ModelOutputFailure(ValueError):
     """The model exhausted its bounded output-format corrections."""
 
 
+class RequestNotSubmittedError(Exception):
+    """A transport can prove a reserved request never reached the API."""
+
+
 class ProposalValidationError(ValueError):
     """A candidate failed schema extraction or task DSL validation."""
 
@@ -61,21 +65,76 @@ class ProposalValidationError(ValueError):
         super().__init__(detail)
 
 
+@dataclass(frozen=True)
+class ModelPricing:
+    input_usd_per_token: float
+    cached_input_usd_per_token: float
+    output_usd_per_token: float
+
+
+MODEL_PRICING = {
+    MODEL_NAME: ModelPricing(
+        input_usd_per_token=0.000_000_2,
+        cached_input_usd_per_token=0.000_000_2,
+        output_usd_per_token=0.000_001_2,
+    )
+}
+
+
 class CostBudget:
-    """Shared, conservative dollar budget for one or more proposer instances."""
+    """Shared dollar cap with settled, reserved, and unknown usage separated."""
 
     def __init__(self, max_cost_usd: float) -> None:
         self.max_cost_usd = max_cost_usd
-        self.used_cost_usd = 0.0
+        self.reserved_cost_usd = 0.0
+        self.settled_cost_usd = 0.0
+        self.unknown_cost_usd = 0.0
+        self.input_tokens = 0
+        self.cached_tokens = 0
+        self.output_tokens = 0
+
+    @property
+    def used_cost_usd(self) -> float:
+        return self.reserved_cost_usd + self.settled_cost_usd + self.unknown_cost_usd
 
     def reserve(self, maximum_cost_usd: float) -> float:
         if self.used_cost_usd + maximum_cost_usd > self.max_cost_usd:
             raise ModelOutputFailure("model request exceeds the configured total cost cap")
-        self.used_cost_usd += maximum_cost_usd
+        self.reserved_cost_usd += maximum_cost_usd
         return maximum_cost_usd
 
-    def settle(self, reserved_cost_usd: float, actual_cost_usd: float) -> None:
-        self.used_cost_usd -= reserved_cost_usd - actual_cost_usd
+    def settle(
+        self,
+        reserved_cost_usd: float,
+        actual_cost_usd: float,
+        input_tokens: int,
+        cached_tokens: int,
+        output_tokens: int,
+    ) -> None:
+        self.reserved_cost_usd -= reserved_cost_usd
+        self.settled_cost_usd += actual_cost_usd
+        self.input_tokens += input_tokens
+        self.cached_tokens += cached_tokens
+        self.output_tokens += output_tokens
+
+    def mark_unknown(self, reserved_cost_usd: float) -> None:
+        self.reserved_cost_usd -= reserved_cost_usd
+        self.unknown_cost_usd += reserved_cost_usd
+
+    def release(self, reserved_cost_usd: float) -> None:
+        self.reserved_cost_usd -= reserved_cost_usd
+
+    def summary(self) -> dict[str, float | int]:
+        return {
+            "cap_usd": self.max_cost_usd,
+            "reserved_usd": self.reserved_cost_usd,
+            "settled_usd": self.settled_cost_usd,
+            "unknown_usd": self.unknown_cost_usd,
+            "remaining_usd": self.max_cost_usd - self.used_cost_usd,
+            "input_tokens": self.input_tokens,
+            "cached_tokens": self.cached_tokens,
+            "output_tokens": self.output_tokens,
+        }
 
 
 @dataclass(frozen=True)
@@ -86,6 +145,8 @@ class ModelRequestRecord:
     cached_tokens: int
     finish_reason: str | None
     warning: str | None
+    cost_usd: float
+    cost_state: str
 
 
 @dataclass(frozen=True)
@@ -116,6 +177,7 @@ class OpenAIProposer:
         output_token_limit: int = 4096,
         max_cost_usd: float = 1.0,
         total_cost_budget: CostBudget | None = None,
+        pricing: ModelPricing | None = None,
     ) -> None:
         self._client: ResponsesClient = (
             client if client is not None else cast(ResponsesClient, OpenAI().responses)
@@ -124,6 +186,7 @@ class OpenAIProposer:
         self._output_token_limit = output_token_limit
         self._max_cost_usd = max_cost_usd
         self._total_cost_budget = total_cost_budget
+        self._pricing = pricing if pricing is not None else MODEL_PRICING[MODEL_NAME]
         self.records: list[ModelRequestRecord] = []
         self._invalid_output_observer: Callable[[InvalidOutputArtifact], None] | None = None
 
@@ -141,13 +204,20 @@ class OpenAIProposer:
             raise ModelOutputFailure("request input exceeds the configured token budget")
         for attempt in range(1, CORRECTION_ATTEMPTS + 2):
             reservation = self._reserve_request_cost()
-            response = self._client.create(
-                model=MODEL_NAME,
-                reasoning={"effort": REASONING_EFFORT},
-                input=request_prompt,
-                max_output_tokens=self._output_token_limit,
-                text={"format": {"type": "json_schema", **PROPOSAL_SCHEMA}},
-            )
+            try:
+                response = self._client.create(
+                    model=MODEL_NAME,
+                    reasoning={"effort": REASONING_EFFORT},
+                    input=request_prompt,
+                    max_output_tokens=self._output_token_limit,
+                    text={"format": {"type": "json_schema", **PROPOSAL_SCHEMA}},
+                )
+            except RequestNotSubmittedError:
+                self._release_reservation(reservation)
+                raise
+            except Exception:
+                self._record_unknown_request(attempt, reservation)
+                raise
             self._record_usage(response, attempt, reservation)
             try:
                 source = _proposal_source(response)
@@ -192,36 +262,95 @@ class OpenAIProposer:
         if self._total_cost_budget is None:
             return None
         return self._total_cost_budget.reserve(
-            _estimated_cost_usd(self._input_token_limit, self._output_token_limit)
+            _estimated_cost_usd(
+                self._input_token_limit, 0, self._output_token_limit, self._pricing
+            )
         )
 
     def _record_usage(self, response: object, attempt: int, reservation: float | None) -> None:
         usage = getattr(response, "usage", None)
-        input_tokens = int(getattr(usage, "input_tokens", 0))
-        output_tokens = int(getattr(usage, "output_tokens", 0))
-        details = getattr(usage, "input_tokens_details", None)
-        cached_tokens = int(getattr(details, "cached_tokens", 0))
-        if input_tokens > self._input_token_limit or output_tokens > self._output_token_limit:
-            raise ModelOutputFailure("model request exceeds the configured token budget")
+        if usage is None:
+            self._record_unknown_request(attempt, reservation, getattr(response, "status", None))
+            return
+        try:
+            input_tokens = int(usage.input_tokens)
+            output_tokens = int(usage.output_tokens)
+            details = getattr(usage, "input_tokens_details", None)
+            cached_tokens = int(getattr(details, "cached_tokens", 0))
+            if min(input_tokens, output_tokens, cached_tokens) < 0:
+                raise ValueError("model response reports negative token usage")
+            if cached_tokens > input_tokens:
+                raise ValueError("model response reports more cached than input tokens")
+        except (AttributeError, TypeError, ValueError) as error:
+            self._record_unknown_request(attempt, reservation, getattr(response, "status", None))
+            raise ModelOutputFailure("model response contains invalid usage") from error
         used_tokens = input_tokens + output_tokens
-        cost_usd = _estimated_cost_usd(input_tokens, output_tokens)
-        if cost_usd > self._max_cost_usd:
-            raise ModelOutputFailure("model request exceeds the configured cost cap")
+        cost_usd = _estimated_cost_usd(
+            input_tokens, cached_tokens, output_tokens, self._pricing
+        )
         if reservation is not None:
             assert self._total_cost_budget is not None
-            self._total_cost_budget.settle(reservation, cost_usd)
+            self._total_cost_budget.settle(
+                reservation, cost_usd, input_tokens, cached_tokens, output_tokens
+            )
         total_limit = self._input_token_limit + self._output_token_limit
         warning = "token_budget_80_percent" if used_tokens * 100 >= total_limit * 80 else None
         self.records.append(
             ModelRequestRecord(
-                attempt=attempt,
+                attempt=self._next_record_attempt(),
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,
                 finish_reason=getattr(response, "status", None),
                 warning=warning,
+                cost_usd=cost_usd,
+                cost_state="settled",
             )
         )
+        if input_tokens > self._input_token_limit or output_tokens > self._output_token_limit:
+            raise ModelOutputFailure("model request exceeds the configured token budget")
+        if cost_usd > self._max_cost_usd:
+            raise ModelOutputFailure("model request exceeds the configured cost cap")
+
+    def _record_unknown_request(
+        self, attempt: int, reservation: float | None, finish_reason: object = None
+    ) -> None:
+        cost_usd = reservation or 0.0
+        if reservation is not None:
+            assert self._total_cost_budget is not None
+            self._total_cost_budget.mark_unknown(reservation)
+        self.records.append(
+            ModelRequestRecord(
+                attempt=self._next_record_attempt(),
+                input_tokens=0,
+                output_tokens=0,
+                cached_tokens=0,
+                finish_reason=finish_reason if isinstance(finish_reason, str) else None,
+                warning=None,
+                cost_usd=cost_usd,
+                cost_state="unknown",
+            )
+        )
+
+    def _next_record_attempt(self) -> int:
+        return len(self.records) + 1
+
+    def _release_reservation(self, reservation: float | None) -> None:
+        if reservation is not None:
+            assert self._total_cost_budget is not None
+            self._total_cost_budget.release(reservation)
+
+    def cost_summary(self) -> dict[str, float | int]:
+        settled = [record for record in self.records if record.cost_state == "settled"]
+        unknown = [record for record in self.records if record.cost_state == "unknown"]
+        return {
+            "reserved_usd": 0.0,
+            "settled_usd": sum(record.cost_usd for record in settled),
+            "unknown_usd": sum(record.cost_usd for record in unknown),
+            "input_tokens": sum(record.input_tokens for record in settled),
+            "cached_tokens": sum(record.cached_tokens for record in settled),
+            "output_tokens": sum(record.output_tokens for record in settled),
+        }
 
     def _observe_invalid_output(
         self,
@@ -338,9 +467,15 @@ def _token_estimate(prompt: str) -> int:
     return (len(prompt.encode("utf-8")) + 3) // 4
 
 
-def _estimated_cost_usd(input_tokens: int, output_tokens: int) -> float:
-    """Conservative per-request ceiling used only to enforce an explicit client cap."""
-    return input_tokens * 0.000_005 + output_tokens * 0.000_015
+def _estimated_cost_usd(
+    input_tokens: int, cached_tokens: int, output_tokens: int, pricing: ModelPricing
+) -> float:
+    """Price actual usage; reservations substitute input/output limits for usage."""
+    return (
+        (input_tokens - cached_tokens) * pricing.input_usd_per_token
+        + cached_tokens * pricing.cached_input_usd_per_token
+        + output_tokens * pricing.output_usd_per_token
+    )
 
 
 def _correction_prompt(

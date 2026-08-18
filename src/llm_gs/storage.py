@@ -144,6 +144,20 @@ class WorkspaceStore:
         if cursor.rowcount != 1:
             raise ValueError(f"matrix arm not found: {experiment_id}")
 
+    def save_matrix_cost_summary(self, matrix_id: str, summary: dict[str, object]) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO matrix_cost_summaries(matrix_id, summary_json) VALUES (?, ?)",
+                (matrix_id, canonical_json(summary)),
+            )
+
+    def matrix_cost_summary(self, matrix_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT summary_json FROM matrix_cost_summaries WHERE matrix_id = ?", (matrix_id,)
+            ).fetchone()
+        return json.loads(str(row[0])) if row is not None else None
+
     def begin_execution_for_experiment(
         self,
         manifest: ExperimentManifest,
@@ -263,7 +277,7 @@ class WorkspaceStore:
                 connection.execute(
                     """INSERT OR IGNORE INTO model_request_records(
                     execution_id, attempt, input_tokens, output_tokens, cached_tokens, finish_reason,
-                    warning) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    warning, cost_usd, cost_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         execution_id,
                         record.attempt,
@@ -272,6 +286,8 @@ class WorkspaceStore:
                         record.cached_tokens,
                         record.finish_reason,
                         record.warning,
+                        record.cost_usd,
+                        record.cost_state,
                     ),
                 )
 
@@ -691,6 +707,18 @@ class WorkspaceStore:
                     (experiment_id,),
                 )
             )
+            cost_row = connection.execute(
+                """SELECT
+                COALESCE(SUM(CASE WHEN cost_state = 'settled' THEN cost_usd ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN cost_state = 'unknown' THEN cost_usd ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN cost_state = 'settled' THEN input_tokens ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN cost_state = 'settled' THEN cached_tokens ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN cost_state = 'settled' THEN output_tokens ELSE 0 END), 0)
+                FROM model_request_records WHERE execution_id IN (
+                    SELECT execution_id FROM executions WHERE experiment_id = ?
+                )""",
+                (experiment_id,),
+            ).fetchone()
         audit = report.get("audit")
         protocol = str(audit.get("memory_protocol", "none")) if isinstance(audit, dict) else "none"
         matrix_arm_state = str(matrix_arm[0]) if matrix_arm is not None else "unregistered"
@@ -708,6 +736,14 @@ class WorkspaceStore:
             "protocol": "Frozen" if protocol == "frozen-v1" else "Online" if protocol == "online-v1" else "None",
             "fixed_budget_success_rate": _success_rate_from_outcomes(report["outcomes"]),
             "costs": {"model_requests": report["model_requests"], "episode_evaluations": report["episode_evaluations"]},
+            "cost": {
+                "reserved_usd": 0.0,
+                "settled_usd": float(cost_row[0]) if cost_row else 0.0,
+                "unknown_usd": float(cost_row[1]) if cost_row else 0.0,
+                "input_tokens": int(cost_row[2]) if cost_row else 0,
+                "cached_tokens": int(cost_row[3]) if cost_row else 0,
+                "output_tokens": int(cost_row[4]) if cost_row else 0,
+            },
             "executions": executions,
             "missingness": {
                 "incomplete_executions": sum(item["status"] == "running" for item in executions)
@@ -827,7 +863,7 @@ class WorkspaceStore:
                 raise ValueError(f"referenced artifact is missing: {artifact_hash}")
             artifacts[artifact_hash] = b64encode(path.read_bytes()).decode("ascii")
         payload: dict[str, object] = {
-            "bundle_version": 3,
+            "bundle_version": 4,
             "experiment_id": experiment_id,
             "manifest": json.loads(str(manifest_row[0])),
             "records": records,
@@ -839,7 +875,7 @@ class WorkspaceStore:
         checksum = bundle.get("checksum")
         payload = {key: value for key, value in bundle.items() if key != "checksum"}
         bundle_version = bundle.get("bundle_version")
-        if bundle_version not in {1, 2, 3} or not isinstance(checksum, str):
+        if bundle_version not in {1, 2, 3, 4} or not isinstance(checksum, str):
             raise ValueError("unsupported or unsigned export bundle")
         if checksum != _bundle_checksum(payload):
             raise ValueError("export bundle checksum does not match")
@@ -857,6 +893,7 @@ class WorkspaceStore:
                 "matrix_arms": records.get("matrix_arms", []),
                 "invalid_output_artifacts": records.get("invalid_output_artifacts", []),
             }
+        records = _upgrade_model_request_record_costs(records)
         if set(records) != _EXPORT_TABLES:
             raise ValueError("export bundle record tables do not match the bundle schema")
         executions = records.get("executions")
@@ -1004,7 +1041,7 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS program_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, source TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS artifacts (artifact_hash TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS episode_evaluations (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, task_seed INTEGER NOT NULL, episode_json TEXT NOT NULL, artifact_hash TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, PRIMARY KEY (execution_id, attempt));
+        CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, cost_usd REAL NOT NULL DEFAULT 0, cost_state TEXT NOT NULL DEFAULT 'unavailable', PRIMARY KEY (execution_id, attempt));
         CREATE TABLE IF NOT EXISTS invalid_output_artifacts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, phase TEXT NOT NULL, attempt INTEGER NOT NULL, validation_stage TEXT NOT NULL, validation_error TEXT NOT NULL, finish_reason TEXT, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, response_hash TEXT NOT NULL, response_original_length INTEGER NOT NULL, response_truncated INTEGER NOT NULL, correction_prompt_hash TEXT, correction_prompt_original_length INTEGER, correction_prompt_truncated INTEGER);
         CREATE TABLE IF NOT EXISTS repair_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, round INTEGER NOT NULL, parent_source TEXT NOT NULL, candidate_source TEXT NOT NULL, diagnosis_json TEXT NOT NULL, intent_json TEXT NOT NULL, normalized_ast_difference TEXT NOT NULL, UNIQUE(execution_id, round));
         CREATE TABLE IF NOT EXISTS memory_entries (entry_id TEXT PRIMARY KEY, entry_json TEXT NOT NULL);
@@ -1019,10 +1056,22 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS execution_failures (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, execution_id TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS execution_replacements (id INTEGER PRIMARY KEY, experiment_id TEXT NOT NULL, failed_execution_id TEXT NOT NULL, replacement_execution_id TEXT NOT NULL, UNIQUE(experiment_id, failed_execution_id, replacement_execution_id));
         CREATE TABLE IF NOT EXISTS matrix_arms (experiment_id TEXT PRIMARY KEY, state TEXT NOT NULL, error_class TEXT, error_detail TEXT);
+        CREATE TABLE IF NOT EXISTS matrix_cost_summaries (matrix_id TEXT PRIMARY KEY, summary_json TEXT NOT NULL);
         """)
         replacement_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(execution_replacements)")
         }
+        request_record_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(model_request_records)")
+        }
+        if "cost_usd" not in request_record_columns:
+            connection.execute(
+                "ALTER TABLE model_request_records ADD COLUMN cost_usd REAL NOT NULL DEFAULT 0"
+            )
+        if "cost_state" not in request_record_columns:
+            connection.execute(
+                "ALTER TABLE model_request_records ADD COLUMN cost_state TEXT NOT NULL DEFAULT 'unavailable'"
+            )
         if "failed_execution_id" not in replacement_columns:
             connection.execute("ALTER TABLE execution_replacements RENAME TO execution_replacements_v1")
             connection.execute(
@@ -1088,6 +1137,25 @@ _MATRIX_ARM_STATES = frozenset(
         "blocked-by-budget",
     }
 )
+
+
+def _upgrade_model_request_record_costs(records: dict[str, object]) -> dict[str, object]:
+    request_records = records.get("model_request_records")
+    if not isinstance(request_records, list):
+        return records
+    upgraded = []
+    for record in request_records:
+        if not isinstance(record, dict):
+            upgraded.append(record)
+            continue
+        upgraded.append(
+            {
+                **record,
+                "cost_usd": record.get("cost_usd", 0.0),
+                "cost_state": record.get("cost_state", "unavailable"),
+            }
+        )
+    return {**records, "model_request_records": upgraded}
 
 
 def _bundle_checksum(payload: dict[str, object]) -> str:

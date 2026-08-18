@@ -150,6 +150,26 @@ _Avoid_: Program budget, iteration limit
 The separately tracked limits on model requests and consumed tokens; every submitted request counts even if its response is unusable.
 _Avoid_: Retry budget, LLM budget
 
+**Cost Budget**:
+The USD cap shared by one Matrix Run. It tracks Settled Cost, Cost Reservations, and Unknown Usage separately; it is not an OpenAI account-credit balance.
+_Avoid_: Model Budget, account credit
+
+**Cost Reservation**:
+The maximum priced request amount committed before API submission. It blocks a request only when the Matrix Run Cost Budget cannot cover its worst-case token limits.
+_Avoid_: Settled Cost, actual charge
+
+**Settled Cost**:
+The model-priced amount calculated from API-reported input, cached-input, and output token usage after a response is received.
+_Avoid_: Cost Reservation, estimated cost
+
+**Unknown Usage**:
+A Cost Reservation retained when a request may have reached the API but no usage data was received. It remains committed to the Cost Budget until manual reconciliation.
+_Avoid_: Settled Cost, released reservation
+
+**Matrix Run Cost Budget**:
+One Cost Budget shared across every Matrix Arm in a `matrix run`; individual arm costs remain attributable within its report.
+_Avoid_: per-arm budget, OpenAI credit
+
 **Request Token Limit**:
 A role-specific hard limit on serialized input or generated output, calibrated before held-out evaluation from normal pilot behavior and fixed in the Experiment Manifest.
 _Avoid_: Model context window, Model Budget

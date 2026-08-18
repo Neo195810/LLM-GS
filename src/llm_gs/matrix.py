@@ -105,6 +105,7 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
             arm_states[state] += 1
         else:
             unreported += 1
+    cost = _cost_summary(records)
     return {
         "arms": len(records),
         "arm_reports": records,
@@ -113,6 +114,7 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
         "arm_states": arm_states,
         "exclusions": {"count": 0, "arms": []},
         "failure_classes": failure_classes,
+        "cost": cost,
     }
 
 
@@ -147,3 +149,29 @@ def _arm_state(record: dict[str, object]) -> str:
     if isinstance(state, str):
         return state
     return "completed" if record.get("protocol") in {"Frozen", "Online"} else "unregistered"
+
+
+def _cost_summary(records: Iterable[dict[str, object]]) -> dict[str, float | int | None]:
+    totals: dict[str, float | int | None] = {
+        "cap_usd": None,
+        "reserved_usd": 0.0,
+        "settled_usd": 0.0,
+        "unknown_usd": 0.0,
+        "remaining_usd": None,
+        "input_tokens": 0,
+        "cached_tokens": 0,
+        "output_tokens": 0,
+    }
+    for record in records:
+        cost = record.get("cost")
+        if not isinstance(cost, dict):
+            continue
+        for field in ("reserved_usd", "settled_usd", "unknown_usd"):
+            value = cost.get(field)
+            if isinstance(value, (float, int)):
+                totals[field] = float(totals[field]) + float(value)
+        for field in ("input_tokens", "cached_tokens", "output_tokens"):
+            value = cost.get(field)
+            if isinstance(value, int):
+                totals[field] = int(totals[field]) + value
+    return totals

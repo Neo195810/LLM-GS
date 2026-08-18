@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,7 +12,7 @@ from llm_gs import cli
 from llm_gs.contracts import AblationMatrixSpecification, CandidateProgram
 from llm_gs.execution import FakeOpenAIClient
 from llm_gs.matrix import build_matrix_manifests, matrix_report
-from llm_gs.proposer import ModelOutputFailure
+from llm_gs.proposer import CostBudget, ModelOutputFailure, OpenAIProposer
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -201,6 +202,82 @@ max_repair_cycles: 1
         assert running_line.endswith("-> running (attempt 1/3)")
         assert completed_line.startswith(f"[{index}/48] ")
         assert completed_line.endswith("-> completed")
+
+
+def test_live_matrix_uses_one_shared_cost_budget_and_reports_reconciliation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specification = tmp_path / "matrix.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+matrix_version: 1
+display_name: priced-matrix
+seed_suite:
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    class Responses:
+        def create(self, **kwargs: object) -> object:
+            prompt = str(kwargs["input"])
+            source = (
+                "DEF run m( left m)"
+                if "DoorKey" in prompt or "RedBlueDoor" in prompt
+                else "DEF run m( turnLeft m)"
+            )
+            return SimpleNamespace(
+                output_text=json.dumps({"source": source}),
+                usage=SimpleNamespace(
+                    input_tokens=10,
+                    output_tokens=5,
+                    input_tokens_details=SimpleNamespace(cached_tokens=2),
+                ),
+                status="completed",
+            )
+
+    budgets: list[CostBudget] = []
+
+    def model_client(
+        args: object, total_cost_budget: CostBudget | None = None
+    ) -> OpenAIProposer:
+        _ = args
+        assert total_cost_budget is not None
+        budgets.append(total_cost_budget)
+        return OpenAIProposer(Responses(), total_cost_budget=total_cost_budget, max_cost_usd=1)
+
+    monkeypatch.setattr(cli, "_model_client", model_client)
+    args = cli._parser().parse_args(
+        [
+            "matrix", "run", str(specification), "--workspace", str(workspace),
+            "--enable-live-openai", "--max-cost-usd", "1", "--max-total-cost-usd", "7",
+        ]
+    )
+
+    matrix = args.handler(args)
+
+    assert len(budgets) == 48
+    assert len({id(budget) for budget in budgets}) == 1
+    assert matrix["arm_states"]["completed"] == 48
+    cost = matrix["cost"]
+    assert cost["cap_usd"] == 7.0
+    assert cost["reserved_usd"] == 0.0
+    assert cost["unknown_usd"] == 0.0
+    assert cost["settled_usd"] == pytest.approx(cost["input_tokens"] / 10 * 0.000_008)
+    assert cost["remaining_usd"] == pytest.approx(7 - cost["settled_usd"])
+    assert cost["cached_tokens"] == cost["input_tokens"] / 5
+    assert cost["output_tokens"] == cost["input_tokens"] / 2
+    arm_settled = sum(arm["cost"]["settled_usd"] for arm in matrix["arm_reports"])
+    assert arm_settled == pytest.approx(cost["settled_usd"])
+
+    report_args = cli._parser().parse_args(
+        ["matrix", "report", str(specification), "--workspace", str(workspace)]
+    )
+    assert report_args.handler(report_args)["cost"] == cost
 
 
 @pytest.mark.parametrize(

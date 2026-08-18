@@ -23,7 +23,9 @@ from llm_gs.proposer import (
     CostBudget,
     InvalidOutputArtifact,
     ModelOutputFailure,
+    ModelPricing,
     OpenAIProposer,
+    RequestNotSubmittedError,
 )
 from llm_gs.reflection import RepairCycle
 from llm_gs.storage import WorkspaceStore, _bundle_checksum
@@ -798,12 +800,93 @@ def test_openai_proposer_blocks_input_before_sending_a_request() -> None:
 
 
 def test_openai_proposer_enforces_shared_total_cost_cap() -> None:
-    budget = CostBudget(0.01)
+    budget = CostBudget(0.005)
     responses = FakeResponses(['{"source":"DEF run m( turnLeft m)"}'])
 
     with pytest.raises(ModelOutputFailure, match="total cost cap"):
         OpenAIProposer(responses, total_cost_budget=budget).propose("make a program")
     assert responses.calls == []
+
+
+def test_openai_proposer_settles_actual_usage_with_independent_cached_pricing() -> None:
+    budget = CostBudget(0.006)
+    pricing = ModelPricing(0.000_000_2, 0.000_000_1, 0.000_001_2)
+    proposer = OpenAIProposer(
+        FakeResponses(['{"source":"DEF run m( turnLeft m)"}'], input_tokens=10, output_tokens=5),
+        total_cost_budget=budget,
+        pricing=pricing,
+    )
+
+    proposer.propose("make a program")
+
+    assert proposer.records[0].cost_usd == pytest.approx(0.000_007_8)
+    assert budget.summary() == {
+        "cap_usd": 0.006,
+        "reserved_usd": 0.0,
+        "settled_usd": pytest.approx(0.000_007_8),
+        "unknown_usd": 0.0,
+        "remaining_usd": pytest.approx(0.005_992_2),
+        "input_tokens": 10,
+        "cached_tokens": 2,
+        "output_tokens": 5,
+    }
+
+
+def test_openai_proposer_keeps_unknown_reservation_when_response_has_no_usage() -> None:
+    class MissingUsageResponses:
+        def create(self, **kwargs: object) -> object:
+            _ = kwargs
+            return SimpleNamespace(
+                output_text='{"source":"DEF run m( turnLeft m)"}', usage=None, status="completed"
+            )
+
+    budget = CostBudget(0.01)
+    proposer = OpenAIProposer(MissingUsageResponses(), total_cost_budget=budget)
+
+    proposer.propose("make a program")
+
+    assert proposer.records[0].cost_state == "unknown"
+    assert budget.summary()["unknown_usd"] == pytest.approx(0.005_734_4)
+
+
+def test_openai_proposer_releases_reservation_only_when_transport_confirms_no_submission() -> None:
+    class UnsentResponses:
+        def create(self, **kwargs: object) -> object:
+            _ = kwargs
+            raise RequestNotSubmittedError("not sent")
+
+    budget = CostBudget(0.01)
+    proposer = OpenAIProposer(UnsentResponses(), total_cost_budget=budget)
+
+    with pytest.raises(RequestNotSubmittedError, match="not sent"):
+        proposer.propose("make a program")
+
+    assert proposer.records == []
+    assert budget.summary()["remaining_usd"] == 0.01
+
+
+def test_openai_proposer_marks_invalid_usage_as_unknown() -> None:
+    class InvalidUsageResponses:
+        def create(self, **kwargs: object) -> object:
+            _ = kwargs
+            return SimpleNamespace(
+                output_text='{"source":"DEF run m( turnLeft m)"}',
+                usage=SimpleNamespace(
+                    input_tokens=1,
+                    output_tokens=1,
+                    input_tokens_details=SimpleNamespace(cached_tokens=2),
+                ),
+                status="completed",
+            )
+
+    budget = CostBudget(0.01)
+    proposer = OpenAIProposer(InvalidUsageResponses(), total_cost_budget=budget)
+
+    with pytest.raises(ModelOutputFailure, match="invalid usage"):
+        proposer.propose("make a program")
+
+    assert proposer.records[0].cost_state == "unknown"
+    assert budget.summary()["unknown_usd"] == pytest.approx(0.005_734_4)
 
 
 @pytest.mark.parametrize(

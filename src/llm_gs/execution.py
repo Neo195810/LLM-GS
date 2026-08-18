@@ -160,6 +160,9 @@ def _with_invalid_output_observation(
         return request()
     finally:
         observer(None)
+        records = getattr(model, "records", None)
+        if isinstance(records, list):
+            store.save_model_request_records(execution_id, records)
 
 
 class OfflineEchoEvaluator:

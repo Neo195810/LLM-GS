@@ -23,13 +23,21 @@ from llm_gs.execution import (
     execute_resumable,
 )
 from llm_gs.manifest import (
+    canonical_json,
     experiment_id,
     load_ablation_matrix_specification,
     load_specification,
     resolve_manifest,
 )
 from llm_gs.matrix import build_matrix_manifests, matrix_report
-from llm_gs.proposer import CostBudget, ModelOutputFailure, OpenAIProposer
+from llm_gs.proposer import (
+    MODEL_NAME,
+    MODEL_PRICING,
+    CostBudget,
+    ModelOutputFailure,
+    ModelPricing,
+    OpenAIProposer,
+)
 from llm_gs.storage import WorkspaceStore
 from llm_gs.textworld_release_gate import evaluate_release_gate, evidence_from_dict
 
@@ -218,10 +226,8 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
         reports.append(store.reporting_view(resolved_experiment_id))
     output = matrix_report(reports)
     if total_cost_budget is not None:
-        output["cost"] = {
-            "cap_usd": total_cost_budget.max_cost_usd,
-            "used_usd": total_cost_budget.used_cost_usd,
-        }
+        output["cost"] = total_cost_budget.summary()
+        store.save_matrix_cost_summary(_matrix_cost_key(manifests), output["cost"])
     return output
 
 
@@ -234,7 +240,15 @@ def _matrix_report(args: argparse.Namespace) -> dict[str, object]:
     for manifest in manifests:
         resolved_experiment_id = experiment_id(manifest)
         reports.append(store.reporting_view(resolved_experiment_id))
-    return matrix_report(reports)
+    output = matrix_report(reports)
+    cost = store.matrix_cost_summary(_matrix_cost_key(manifests))
+    if cost is not None:
+        output["cost"] = cost
+    return output
+
+
+def _matrix_cost_key(manifests: tuple[ExperimentManifest, ...]) -> str:
+    return canonical_json([experiment_id(manifest) for manifest in manifests])
 
 
 def _matrix_arm_failure(error: Exception) -> tuple[str, str]:
@@ -293,6 +307,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--stop-after", type=int)
     run.add_argument("--enable-live-openai", action="store_true")
     run.add_argument("--max-cost-usd", type=float)
+    _add_pricing_arguments(run)
     run.set_defaults(handler=_run)
 
     resume = commands.add_parser("resume")
@@ -300,6 +315,7 @@ def _parser() -> argparse.ArgumentParser:
     resume.add_argument("--experiment-id", required=True)
     resume.add_argument("--enable-live-openai", action="store_true")
     resume.add_argument("--max-cost-usd", type=float)
+    _add_pricing_arguments(resume)
     resume.set_defaults(handler=_resume)
 
     report = commands.add_parser("report")
@@ -329,6 +345,7 @@ def _parser() -> argparse.ArgumentParser:
     matrix_run.add_argument("--enable-live-openai", action="store_true")
     matrix_run.add_argument("--max-cost-usd", type=float)
     matrix_run.add_argument("--max-total-cost-usd", type=float)
+    _add_pricing_arguments(matrix_run)
     matrix_run.set_defaults(handler=_matrix_run)
     matrix_report_command = matrix_commands.add_parser("report")
     matrix_report_command.add_argument("specification", type=Path)
@@ -347,6 +364,7 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--experiment-id", required=True)
     evaluate.add_argument("--enable-live-openai", action="store_true")
     evaluate.add_argument("--max-cost-usd", type=float)
+    _add_pricing_arguments(evaluate)
     evaluate.set_defaults(handler=_resume)
 
     inspect = commands.add_parser("inspect")
@@ -377,8 +395,45 @@ def _model_client(
     if args.max_cost_usd is None or args.max_cost_usd <= 0:
         raise ValueError("live OpenAI requires a positive --max-cost-usd")
     return OpenAIProposer(
-        max_cost_usd=args.max_cost_usd, total_cost_budget=total_cost_budget
+        max_cost_usd=args.max_cost_usd,
+        total_cost_budget=total_cost_budget,
+        pricing=_pricing_from_args(args),
     )
+
+
+def _add_pricing_arguments(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--input-price-usd-per-token", type=float)
+    command.add_argument("--cached-input-price-usd-per-token", type=float)
+    command.add_argument("--output-price-usd-per-token", type=float)
+
+
+def _pricing_from_args(args: argparse.Namespace) -> ModelPricing | None:
+    values = (
+        getattr(args, "input_price_usd_per_token", None),
+        getattr(args, "cached_input_price_usd_per_token", None),
+        getattr(args, "output_price_usd_per_token", None),
+    )
+    if all(value is None for value in values):
+        return None
+    default = MODEL_PRICING[MODEL_NAME]
+    pricing = ModelPricing(
+        input_usd_per_token=(
+            default.input_usd_per_token if values[0] is None else values[0]
+        ),
+        cached_input_usd_per_token=(
+            default.cached_input_usd_per_token if values[1] is None else values[1]
+        ),
+        output_usd_per_token=(
+            default.output_usd_per_token if values[2] is None else values[2]
+        ),
+    )
+    if (
+        pricing.input_usd_per_token <= 0
+        or pricing.cached_input_usd_per_token < 0
+        or pricing.output_usd_per_token <= 0
+    ):
+        raise ValueError("token prices must be positive, except cached input may be zero")
+    return pricing
 
 
 def _fail(message: str) -> NoReturn:
