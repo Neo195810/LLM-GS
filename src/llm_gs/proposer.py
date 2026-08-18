@@ -178,6 +178,7 @@ class OpenAIProposer:
         max_cost_usd: float = 1.0,
         total_cost_budget: CostBudget | None = None,
         pricing: ModelPricing | None = None,
+        model_name: str = MODEL_NAME,
     ) -> None:
         self._client: ResponsesClient = (
             client if client is not None else cast(ResponsesClient, OpenAI().responses)
@@ -186,7 +187,8 @@ class OpenAIProposer:
         self._output_token_limit = output_token_limit
         self._max_cost_usd = max_cost_usd
         self._total_cost_budget = total_cost_budget
-        self._pricing = pricing if pricing is not None else MODEL_PRICING[MODEL_NAME]
+        self._model_name = model_name
+        self._pricing = pricing if pricing is not None else MODEL_PRICING[model_name]
         self.records: list[ModelRequestRecord] = []
         self._invalid_output_observer: Callable[[InvalidOutputArtifact], None] | None = None
 
@@ -206,7 +208,7 @@ class OpenAIProposer:
             reservation = self._reserve_request_cost()
             try:
                 response = self._client.create(
-                    model=MODEL_NAME,
+                    model=self._model_name,
                     reasoning={"effort": REASONING_EFFORT},
                     input=request_prompt,
                     max_output_tokens=self._output_token_limit,

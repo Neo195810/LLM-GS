@@ -73,6 +73,18 @@ def test_openai_proposer_uses_pinned_structured_responses_request() -> None:
     assert proposer.records[0].cached_tokens == 2
 
 
+def test_openai_proposer_uses_configured_model_name() -> None:
+    responses = FakeResponses(['{"source":"DEF run m( turnLeft m)"}'])
+
+    OpenAIProposer(
+        responses,
+        model_name="test-model",
+        pricing=ModelPricing(0.000_001, 0.0, 0.000_002),
+    ).propose("make a program")
+
+    assert responses.calls[0]["model"] == "test-model"
+
+
 def test_openai_proposer_corrects_invalid_output_at_most_twice() -> None:
     responses = FakeResponses(
         ["not json", '{"source":"not dsl"}', '{"source":"DEF run m( turnLeft m)"}']

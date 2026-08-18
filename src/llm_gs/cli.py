@@ -313,6 +313,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--stop-after", type=int)
     run.add_argument("--enable-live-openai", action="store_true")
     run.add_argument("--max-cost-usd", type=float)
+    _add_model_argument(run)
     _add_pricing_arguments(run)
     run.set_defaults(handler=_run)
 
@@ -321,6 +322,7 @@ def _parser() -> argparse.ArgumentParser:
     resume.add_argument("--experiment-id", required=True)
     resume.add_argument("--enable-live-openai", action="store_true")
     resume.add_argument("--max-cost-usd", type=float)
+    _add_model_argument(resume)
     _add_pricing_arguments(resume)
     resume.set_defaults(handler=_resume)
 
@@ -351,6 +353,7 @@ def _parser() -> argparse.ArgumentParser:
     matrix_run.add_argument("--enable-live-openai", action="store_true")
     matrix_run.add_argument("--max-cost-usd", type=float)
     matrix_run.add_argument("--max-total-cost-usd", type=float)
+    _add_model_argument(matrix_run)
     _add_pricing_arguments(matrix_run)
     matrix_run.set_defaults(handler=_matrix_run)
     matrix_report_command = matrix_commands.add_parser("report")
@@ -370,6 +373,7 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--experiment-id", required=True)
     evaluate.add_argument("--enable-live-openai", action="store_true")
     evaluate.add_argument("--max-cost-usd", type=float)
+    _add_model_argument(evaluate)
     _add_pricing_arguments(evaluate)
     evaluate.set_defaults(handler=_resume)
 
@@ -404,7 +408,12 @@ def _model_client(
         max_cost_usd=args.max_cost_usd,
         total_cost_budget=total_cost_budget,
         pricing=_pricing_from_args(args),
+        model_name=args.model,
     )
+
+
+def _add_model_argument(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--model", default=MODEL_NAME)
 
 
 def _add_pricing_arguments(command: argparse.ArgumentParser) -> None:
@@ -419,20 +428,36 @@ def _pricing_from_args(args: argparse.Namespace) -> ModelPricing | None:
         getattr(args, "cached_input_price_usd_per_token", None),
         getattr(args, "output_price_usd_per_token", None),
     )
+    model_name = getattr(args, "model", MODEL_NAME)
+    default = MODEL_PRICING.get(model_name)
     if all(value is None for value in values):
-        return None
-    default = MODEL_PRICING[MODEL_NAME]
-    pricing = ModelPricing(
-        input_usd_per_token=(
-            default.input_usd_per_token if values[0] is None else values[0]
-        ),
-        cached_input_usd_per_token=(
-            default.cached_input_usd_per_token if values[1] is None else values[1]
-        ),
-        output_usd_per_token=(
-            default.output_usd_per_token if values[2] is None else values[2]
-        ),
-    )
+        if default is not None:
+            return None
+        raise ValueError(
+            "unknown model requires all three --*-price-usd-per-token options"
+        )
+    if default is None:
+        if values[0] is None or values[1] is None or values[2] is None:
+            raise ValueError(
+                "unknown model requires all three --*-price-usd-per-token options"
+            )
+        pricing = ModelPricing(
+            input_usd_per_token=values[0],
+            cached_input_usd_per_token=values[1],
+            output_usd_per_token=values[2],
+        )
+    else:
+        pricing = ModelPricing(
+            input_usd_per_token=(
+                default.input_usd_per_token if values[0] is None else values[0]
+            ),
+            cached_input_usd_per_token=(
+                default.cached_input_usd_per_token if values[1] is None else values[1]
+            ),
+            output_usd_per_token=(
+                default.output_usd_per_token if values[2] is None else values[2]
+            ),
+        )
     if (
         pricing.input_usd_per_token <= 0
         or pricing.cached_input_usd_per_token < 0

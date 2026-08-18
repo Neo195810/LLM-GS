@@ -262,9 +262,11 @@ max_repair_cycles: 1
         [
             "matrix", "run", str(specification), "--workspace", str(workspace),
             "--enable-live-openai", "--max-cost-usd", "1", "--max-total-cost-usd", "7",
+            "--model", "test-model",
         ]
     )
 
+    assert args.model == "test-model"
     matrix = args.handler(args)
 
     assert len(budgets) == 48
