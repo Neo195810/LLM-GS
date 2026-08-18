@@ -10,7 +10,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import NoReturn
 
-from openai import APIError
+from openai import APIError, APIStatusError
 from pydantic import BaseModel
 
 from llm_gs.contracts import ExperimentManifest, ExperimentReport
@@ -44,17 +44,22 @@ from llm_gs.storage import WorkspaceStore
 from llm_gs.textworld_release_gate import evaluate_release_gate, evidence_from_dict
 
 
+class ModelConfigurationError(ValueError):
+    """A model choice or request capability cannot be retried successfully."""
+
+
 def _validate(args: argparse.Namespace) -> dict[str, object]:
     manifest = resolve_manifest(load_specification(args.specification))
     return {"experiment_id": experiment_id(manifest), "manifest": manifest}
 
 
 def _run(args: argparse.Namespace) -> dict[str, object]:
+    model = _model_client(args)
     manifest = resolve_manifest(load_specification(args.specification))
     resolved_experiment_id = experiment_id(manifest)
     store = WorkspaceStore(args.workspace)
     report, status = _execute_with_failure_recording(
-        manifest, resolved_experiment_id, store, args, args.stop_after
+        manifest, resolved_experiment_id, store, args, args.stop_after, model
     )
     return {
         "execution_id": report.execution_id
@@ -74,6 +79,9 @@ def _execute_with_failure_recording(
     model: FakeOpenAIClient | OpenAIProposer | None = None,
 ) -> tuple[ExperimentReport | None, str]:
     try:
+        records = getattr(model, "records", None)
+        if isinstance(records, list):
+            records.clear()
         report, status = execute_resumable(
             manifest,
             experiment_id,
@@ -101,6 +109,24 @@ def _execute_with_failure_recording(
             str(error),
         )
         raise ValueError(f"model output failure: {error}") from error
+    except APIStatusError as error:
+        if error.status_code in {400, 403, 404}:
+            store.record_execution_failure(
+                experiment_id,
+                store.active_execution_id(experiment_id),
+                "model_configuration",
+                str(error),
+            )
+            raise ModelConfigurationError(
+                f"model configuration error: {error}"
+            ) from error
+        store.record_execution_failure(
+            experiment_id,
+            store.active_execution_id(experiment_id),
+            "infrastructure",
+            str(error),
+        )
+        raise ValueError(f"infrastructure failure: {error}") from error
     except (APIError, OSError, sqlite3.Error, TimeoutError) as error:
         store.record_execution_failure(
             experiment_id,
@@ -113,9 +139,12 @@ def _execute_with_failure_recording(
 
 
 def _resume(args: argparse.Namespace) -> dict[str, object]:
+    model = _model_client(args)
     store = WorkspaceStore(args.workspace)
     manifest = store.manifest(args.experiment_id)
-    report, status = _execute_with_failure_recording(manifest, args.experiment_id, store, args)
+    report, status = _execute_with_failure_recording(
+        manifest, args.experiment_id, store, args, model=model
+    )
     return {
         "execution_id": report.execution_id if report else "",
         "experiment_id": args.experiment_id,
@@ -152,13 +181,14 @@ def _matrix_validate(args: argparse.Namespace) -> dict[str, object]:
 
 def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
     manifests = build_matrix_manifests(load_ablation_matrix_specification(args.specification))
-    store = WorkspaceStore(args.workspace)
-    reports = []
     total_cost_budget = (
         CostBudget(args.max_total_cost_usd)
         if args.enable_live_openai and args.max_total_cost_usd is not None
         else None
     )
+    model = _model_client(args, total_cost_budget=total_cost_budget)
+    store = WorkspaceStore(args.workspace)
+    reports = []
     for manifest in manifests:
         store.register_matrix_arm(manifest, experiment_id(manifest))
     total = len(manifests)
@@ -178,7 +208,7 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
                     resolved_experiment_id,
                     store,
                     args,
-                    model=_model_client(args, total_cost_budget=total_cost_budget),
+                    model=model,
                 )
                 if report is None:
                     raise ValueError("matrix arm did not produce a completed report")
@@ -195,6 +225,8 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
                 )
                 break
             except Exception as error:
+                if isinstance(error, ModelConfigurationError):
+                    raise
                 state, error_class = _matrix_arm_failure(error)
                 failed_execution = store.active_execution_id(resolved_experiment_id)
                 if error_class == "execution":

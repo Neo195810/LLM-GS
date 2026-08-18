@@ -3,10 +3,13 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from unittest import mock
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from openai import APIStatusError
 
 from llm_gs import cli
 from llm_gs.contracts import AblationMatrixSpecification, CandidateProgram
@@ -211,6 +214,147 @@ max_repair_cycles: 1
         assert completed_line.endswith("-> completed")
 
 
+def test_matrix_cli_rejects_unknown_model_without_prices_before_workspace_write(
+    tmp_path: Path,
+) -> None:
+    specification = tmp_path / "matrix.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+matrix_version: 1
+display_name: missing-model-prices
+seed_suite:
+  version: 1
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+
+    result = _run_cli(
+        "matrix",
+        "run",
+        str(specification),
+        "--workspace",
+        str(workspace),
+        "--enable-live-openai",
+        "--max-cost-usd",
+        "1",
+        "--model",
+        "test-model",
+    )
+
+    assert result.returncode == 2
+    assert "unknown model requires all three" in result.stderr
+    assert not workspace.exists()
+
+
+def test_unknown_model_with_all_prices_builds_a_live_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    args = cli._parser().parse_args(
+        [
+            "matrix",
+            "run",
+            str(tmp_path / "matrix.yaml"),
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--enable-live-openai",
+            "--max-cost-usd",
+            "1",
+            "--model",
+            "test-model",
+            "--input-price-usd-per-token",
+            "0.000001",
+            "--cached-input-price-usd-per-token",
+            "0",
+            "--output-price-usd-per-token",
+            "0.000002",
+        ]
+    )
+
+    captured: dict[str, object] = {}
+
+    def build_client(**kwargs: object) -> FakeOpenAIClient:
+        captured.update(kwargs)
+        return FakeOpenAIClient()
+
+    monkeypatch.setattr(cli, "OpenAIProposer", build_client)
+
+    client = cli._model_client(args)
+
+    assert isinstance(client, FakeOpenAIClient)
+    assert captured["model_name"] == "test-model"
+
+
+@pytest.mark.parametrize("status_code", [400, 403, 404])
+def test_model_configuration_status_error_is_not_retriable(
+    monkeypatch: pytest.MonkeyPatch, status_code: int
+) -> None:
+    error = APIStatusError(
+        "model request rejected",
+        response=httpx.Response(
+            status_code, request=httpx.Request("POST", "https://api.openai.com/v1/responses")
+        ),
+        body=None,
+    )
+    store = mock.Mock()
+    monkeypatch.setattr(
+        cli,
+        "execute_resumable",
+        lambda *args, **kwargs: (_ for _ in ()).throw(error),
+    )
+
+    with pytest.raises(cli.ModelConfigurationError, match="model configuration error"):
+        cli._execute_with_failure_recording(
+            SimpleNamespace(task={"name": "CleanHouse"}),
+            "experiment",
+            store,
+            SimpleNamespace(),
+            model=FakeOpenAIClient(),
+        )
+
+    store.record_execution_failure.assert_called_once()
+
+
+def test_matrix_stops_after_model_configuration_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    specification = tmp_path / "matrix.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+matrix_version: 1
+display_name: model-configuration-error
+seed_suite:
+  memory_training: [1]
+  development: [2]
+  held_out: [3]
+max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+    calls = 0
+
+    def execute(*args: object, **kwargs: object) -> tuple[None, str]:
+        nonlocal calls
+        calls += 1
+        raise cli.ModelConfigurationError("model configuration error: rejected")
+
+    monkeypatch.setattr(cli, "_execute_with_failure_recording", execute)
+    args = cli._parser().parse_args(
+        ["matrix", "run", str(specification), "--workspace", str(workspace)]
+    )
+
+    with pytest.raises(cli.ModelConfigurationError, match="model configuration error"):
+        args.handler(args)
+
+    assert calls == 1
+    assert not (workspace / "matrix-report.json").exists()
+
+
 def test_live_matrix_uses_one_shared_cost_budget_and_reports_reconciliation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -269,7 +413,7 @@ max_repair_cycles: 1
     assert args.model == "test-model"
     matrix = args.handler(args)
 
-    assert len(budgets) == 48
+    assert len(budgets) == 1
     assert len({id(budget) for budget in budgets}) == 1
     assert matrix["arm_states"]["completed"] == 48
     cost = matrix["cost"]
