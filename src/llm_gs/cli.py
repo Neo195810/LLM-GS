@@ -5,7 +5,9 @@ import json
 import sqlite3
 import sys
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import NoReturn
 
 from openai import APIError
@@ -226,8 +228,12 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
         reports.append(store.reporting_view(resolved_experiment_id))
     output = matrix_report(reports)
     if total_cost_budget is not None:
-        output["cost"] = total_cost_budget.summary()
-        store.save_matrix_cost_summary(_matrix_cost_key(manifests), output["cost"])
+        cost_summary: dict[str, object] = {
+            key: value for key, value in total_cost_budget.summary().items()
+        }
+        output["cost"] = cost_summary
+        store.save_matrix_cost_summary(_matrix_cost_key(manifests), cost_summary)
+    _write_matrix_report(args.workspace, output)
     return output
 
 
@@ -441,6 +447,34 @@ def _fail(message: str) -> NoReturn:
     raise SystemExit(2)
 
 
+def _json_output(output: object) -> str:
+    return json.dumps(_serialize(output), sort_keys=True, indent=2)
+
+
+def _write_matrix_report(workspace: Path, output: dict[str, object]) -> None:
+    """Atomically persist the aggregate Matrix Report beside its Attempt Store."""
+    report_path = workspace / "matrix-report.json"
+    temporary_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=workspace,
+            prefix=".matrix-report.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+            temporary_file.write(_json_output(output))
+            temporary_file.write("\n")
+        temporary_path.replace(report_path)
+    except OSError as error:
+        if temporary_path is not None:
+            with suppress(OSError):
+                temporary_path.unlink(missing_ok=True)
+        raise ValueError(f"could not write Matrix Report to {report_path}: {error}") from error
+
+
 def _serialize(output: object) -> object:
     if isinstance(output, BaseModel):
         return _serialize(output.model_dump(mode="json"))
@@ -458,7 +492,7 @@ def main() -> None:
         output = handler(args)
     except ValueError as error:
         _fail(str(error))
-    print(json.dumps(_serialize(output), sort_keys=True, indent=2))
+    print(_json_output(output))
 
 
 if __name__ == "__main__":

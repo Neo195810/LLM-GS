@@ -189,6 +189,13 @@ max_repair_cycles: 1
         "infrastructure-failed": 0,
         "blocked-by-budget": 0,
     }
+    persisted_report = workspace / "matrix-report.json"
+    on_demand_report = _run_cli(
+        "matrix", "report", str(specification), "--workspace", str(workspace)
+    )
+    assert persisted_report.read_text(encoding="utf-8") == run.stdout
+    assert on_demand_report.returncode == 0, on_demand_report.stderr
+    assert persisted_report.read_text(encoding="utf-8") == on_demand_report.stdout
 
     progress_lines = [line for line in run.stderr.splitlines() if line]
     running_lines = [line for line in progress_lines if "-> running" in line]
@@ -362,6 +369,25 @@ max_repair_cycles: 1
         str(failure) in arm["arm_error"]["detail"]
         for arm in matrix["arm_reports"]
     )
+    assert (workspace / "matrix-report.json").read_text(encoding="utf-8") == (
+        cli._json_output(matrix) + "\n"
+    )
+
+
+def test_matrix_run_reports_output_write_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    failure = OSError("disk full")
+    monkeypatch.setattr(Path, "replace", lambda *args: (_ for _ in ()).throw(failure))
+
+    with pytest.raises(
+        ValueError, match="could not write Matrix Report to .*matrix-report.json: disk full"
+    ):
+        cli._write_matrix_report(workspace, {"arms": 0})
+
+    assert not list(workspace.glob(".matrix-report.*.tmp"))
 
 
 def test_matrix_run_retries_infrastructure_with_new_execution(

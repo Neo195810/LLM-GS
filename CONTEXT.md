@@ -202,6 +202,10 @@ _Avoid_: Experiment, Work Unit
 The durable state of a Matrix Arm: pending, running, completed, model-output-failed, infrastructure-failed, or blocked-by-budget. Completed means its Execution reached an experiment result; it does not imply policy success.
 _Avoid_: Missing, pass/fail
 
+**Matrix Report**:
+The aggregate report of every Matrix Arm for one resolved Ablation Matrix, including completed and terminally failed arms.
+_Avoid_: Console output, result file
+
 **Correction Feedback**:
 The bounded, structured description supplied to a self-contained model correction or repair request: relevant prior output, validation or evaluation evidence, and the protected Task and DSL contract. It does not rely on implicit API conversation state.
 _Avoid_: Conversation history, raw error log
