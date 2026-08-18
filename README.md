@@ -55,7 +55,7 @@ The `uv run llm-gs` CLI exposes:
 | `import --workspace <dir> --bundle <file>` | Import an export bundle into another workspace |
 | `textworld promote --evidence <file>` | Check formal TextWorld release-gate evidence before promoting the pilot to a benchmark |
 
-Live OpenAI calls require `--enable-live-openai` plus a positive `--max-cost-usd`; without it every command runs offline against a fake client. Token-price overrides are available as `--input-price-usd-per-token`, `--cached-input-price-usd-per-token`, and `--output-price-usd-per-token`; `matrix run --max-total-cost-usd` shares one USD cap across all arms. Full command semantics, delivery slices, and verification gates are in [`docs/V2-DESIGN.md`](docs/V2-DESIGN.md).
+Live OpenAI calls require `--enable-live-openai` plus a positive `--max-cost-usd`; without it every command runs offline against a fake client. Token-price overrides use the pricing-table convention of USD per million tokens: `--input-price-usd-per-million-token`, `--cached-input-price-usd-per-million-token`, and `--output-price-usd-per-million-token`; `matrix run --max-total-cost-usd` shares one USD cap across all arms. Full command semantics, delivery slices, and verification gates are in [`docs/V2-DESIGN.md`](docs/V2-DESIGN.md).
 
 ### Experiment Specification example
 

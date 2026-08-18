@@ -449,16 +449,16 @@ def _add_model_argument(command: argparse.ArgumentParser) -> None:
 
 
 def _add_pricing_arguments(command: argparse.ArgumentParser) -> None:
-    command.add_argument("--input-price-usd-per-token", type=float)
-    command.add_argument("--cached-input-price-usd-per-token", type=float)
-    command.add_argument("--output-price-usd-per-token", type=float)
+    command.add_argument("--input-price-usd-per-million-token", type=float)
+    command.add_argument("--cached-input-price-usd-per-million-token", type=float)
+    command.add_argument("--output-price-usd-per-million-token", type=float)
 
 
 def _pricing_from_args(args: argparse.Namespace) -> ModelPricing | None:
     values = (
-        getattr(args, "input_price_usd_per_token", None),
-        getattr(args, "cached_input_price_usd_per_token", None),
-        getattr(args, "output_price_usd_per_token", None),
+        getattr(args, "input_price_usd_per_million_token", None),
+        getattr(args, "cached_input_price_usd_per_million_token", None),
+        getattr(args, "output_price_usd_per_million_token", None),
     )
     model_name = getattr(args, "model", MODEL_NAME)
     default = MODEL_PRICING.get(model_name)
@@ -466,28 +466,34 @@ def _pricing_from_args(args: argparse.Namespace) -> ModelPricing | None:
         if default is not None:
             return None
         raise ValueError(
-            "unknown model requires all three --*-price-usd-per-token options"
+            "unknown model requires all three --*-price-usd-per-million-token options"
         )
     if default is None:
         if values[0] is None or values[1] is None or values[2] is None:
             raise ValueError(
-                "unknown model requires all three --*-price-usd-per-token options"
+                "unknown model requires all three --*-price-usd-per-million-token options"
             )
         pricing = ModelPricing(
-            input_usd_per_token=values[0],
-            cached_input_usd_per_token=values[1],
-            output_usd_per_token=values[2],
+            input_usd_per_token=values[0] / 1_000_000,
+            cached_input_usd_per_token=values[1] / 1_000_000,
+            output_usd_per_token=values[2] / 1_000_000,
         )
     else:
         pricing = ModelPricing(
             input_usd_per_token=(
-                default.input_usd_per_token if values[0] is None else values[0]
+                default.input_usd_per_token
+                if values[0] is None
+                else values[0] / 1_000_000
             ),
             cached_input_usd_per_token=(
-                default.cached_input_usd_per_token if values[1] is None else values[1]
+                default.cached_input_usd_per_token
+                if values[1] is None
+                else values[1] / 1_000_000
             ),
             output_usd_per_token=(
-                default.output_usd_per_token if values[2] is None else values[2]
+                default.output_usd_per_token
+                if values[2] is None
+                else values[2] / 1_000_000
             ),
         )
     if (

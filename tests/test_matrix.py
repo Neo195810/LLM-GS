@@ -266,12 +266,12 @@ def test_unknown_model_with_all_prices_builds_a_live_client(
             "1",
             "--model",
             "test-model",
-            "--input-price-usd-per-token",
-            "0.000001",
-            "--cached-input-price-usd-per-token",
+            "--input-price-usd-per-million-token",
+            "1",
+            "--cached-input-price-usd-per-million-token",
             "0",
-            "--output-price-usd-per-token",
-            "0.000002",
+            "--output-price-usd-per-million-token",
+            "2",
         ]
     )
 
@@ -287,6 +287,11 @@ def test_unknown_model_with_all_prices_builds_a_live_client(
 
     assert isinstance(client, FakeOpenAIClient)
     assert captured["model_name"] == "test-model"
+    pricing = captured["pricing"]
+    assert pricing is not None
+    assert pricing.input_usd_per_token == 0.000_001
+    assert pricing.cached_input_usd_per_token == 0
+    assert pricing.output_usd_per_token == 0.000_002
 
 
 @pytest.mark.parametrize("status_code", [400, 403, 404])
