@@ -183,6 +183,20 @@ def test_repeated_invalid_output_changes_correction_feedback() -> None:
     assert "Repeated invalid output: yes." in second
 
 
+def test_repeated_invalid_output_recovers_after_warning() -> None:
+    invalid = '{"source":"DEF run m( REPEAT R=20 r( move r) m)"}'
+    valid = '{"source":"DEF run m( turnLeft m)"}'
+    responses = FakeResponses([invalid, invalid, valid])
+
+    candidate = OpenAIProposer(responses).propose("Solve CleanHouse")
+
+    assert candidate.source == "DEF run m( turnLeft m)"
+    assert candidate.model_requests == 3
+    second = str(responses.calls[2]["input"])
+    assert "Correction ordinal: 2 of 2." in second
+    assert "Repeated invalid output: yes." in second
+
+
 def test_minigrid_valid_control_flow_remains_accepted() -> None:
     proposer_module._validate_dsl(
         "DEF run m( IF c( and c( front_is_clear c) c( is_carrying_object c) c) "

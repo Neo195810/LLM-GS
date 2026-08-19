@@ -235,7 +235,9 @@ class OpenAIProposer:
                 else:
                     return CandidateProgram(source=source, model_requests=attempt)
             candidate = _response_candidate(response)
-            fingerprint = sha256(_normalize_source(candidate).encode("utf-8")).hexdigest()
+            fingerprint = sha256(
+                _normalize_source(_response_candidate_raw(response)).encode("utf-8")
+            ).hexdigest()
             repeated_output = fingerprint in invalid_fingerprints
             invalid_fingerprints.add(fingerprint)
             correction_prompt = (
@@ -418,7 +420,7 @@ def _proposal_source(response: object) -> str:
     return _normalize_source(source)
 
 
-def _response_candidate(response: object) -> str:
+def _response_candidate_raw(response: object) -> str:
     output_text = getattr(response, "output_text", "")
     text = str(output_text)
     try:
@@ -427,7 +429,11 @@ def _response_candidate(response: object) -> str:
         payload = None
     if isinstance(payload, dict) and isinstance(payload.get("source"), str):
         text = payload["source"]
-    return _bounded_feedback(text, limit=2000)
+    return text
+
+
+def _response_candidate(response: object) -> str:
+    return _bounded_feedback(_response_candidate_raw(response), limit=2000)
 
 
 def _code_fence_source(text: str) -> str | None:
@@ -507,6 +513,11 @@ def _correction_prompt(
         else GENERIC_DSL_CONTRACT
     )
     error_class = validation_error.stage
+    repeated_feedback = (
+        "Repeated invalid output: yes. Return a structurally different complete replacement.\n"
+        if repeated_output
+        else "Repeated invalid output: no.\n"
+    )
     feedback = (
         "You are receiving an independent correction request. Do not rely on "
         "earlier API messages. Return only JSON matching the proposal schema.\n"
@@ -515,16 +526,8 @@ def _correction_prompt(
         f"Validation error ({error_class}): "
         f"{_bounded_feedback(str(validation_error), limit=1000)}\n"
         f"Correction ordinal: {correction_ordinal} of {CORRECTION_ATTEMPTS}.\n"
+        f"{repeated_feedback}"
         "Produce a complete replacement source; do not describe the correction."
-    )
-    repeated_feedback = (
-        "Repeated invalid output: yes. Return a structurally different complete replacement.\n"
-        if repeated_output
-        else "Repeated invalid output: no.\n"
-    )
-    feedback = feedback.replace(
-        "Produce a complete replacement source",
-        repeated_feedback + "Produce a complete replacement source",
     )
     return _bounded_feedback(feedback)
 
