@@ -1,8 +1,76 @@
 from __future__ import annotations
-from abc import ABC
+
 import copy
+from abc import ABC
 
 from . import dsl_nodes
+
+
+class DSLParseError(ValueError):
+    """Actionable syntax error for externally supplied DSL source."""
+
+    def __init__(
+        self,
+        construct: str,
+        offset: int,
+        expected: str,
+        actual: str | None,
+        tokens: list[str],
+    ) -> None:
+        self.construct = construct
+        self.offset = offset
+        self.expected = expected
+        self.actual = actual
+        start = max(0, offset - 3)
+        end = min(len(tokens), offset + 4)
+        self.context = " ".join(tokens[start:end]) or "<empty>"
+        self.token_window = self.context
+        received = "end of input" if actual is None else f"`{actual}`"
+        message = (
+            f"DSL parse error in {construct} at token {offset}: expected {expected}; "
+            f"actual {received}; context `{self.context}`"
+        )
+        if expected == "known DSL symbol" and actual is not None:
+            message = f"Unrecognized token: {actual}. {message}"
+        super().__init__(message)
+
+
+def _parse_error(
+    construct: str, offset: int, expected: str, tokens: list[str]
+) -> DSLParseError:
+    return DSLParseError(
+        construct, offset, expected, tokens[offset] if offset < len(tokens) else None, tokens
+    )
+
+
+_OPEN_TO_CLOSE = {
+    "m(": "m)", "c(": "c)", "w(": "w)", "i(": "i)",
+    "e(": "e)", "r(": "r)", "h(": "h)",
+}
+_CLOSE_TOKENS = set(_OPEN_TO_CLOSE.values())
+
+
+def _matching_close(tokens: list[str], start: int) -> int:
+    opener = tokens[start]
+    expected = _OPEN_TO_CLOSE[opener]
+    depth = 0
+    for offset in range(start, len(tokens)):
+        if tokens[offset] == opener:
+            depth += 1
+        elif tokens[offset] == expected:
+            depth -= 1
+            if depth == 0:
+                return offset
+    raise AssertionError("tokens were balanced before matching delimiters")
+
+
+def token_is_repeat_count(token: str) -> bool:
+    if not token.startswith("R="):
+        return False
+    try:
+        return 0 <= int(token[2:]) <= 19
+    except ValueError:
+        return False
 
 def _find_close_token(token_list: list[str], character: str, start_index: int = 0) -> int:
     open_token = character + '('
@@ -312,9 +380,94 @@ class BaseDSL(ABC):
     
     # The following methods should not be overridden even if using a different formatting logic
     def parse_str_to_node(self, prog_str: str) -> dsl_nodes.BaseNode:
-        prog_str_list = prog_str.split(' ')
-        return self.parse_str_list_to_node(prog_str_list)
-    
+        tokens = prog_str.split()
+        self._validate_external_tokens(tokens)
+        try:
+            return self.parse_str_list_to_node(tokens)
+        except DSLParseError:
+            raise
+        except (AssertionError, IndexError, KeyError, TypeError, ValueError) as error:
+            raise DSLParseError(
+                "program", 0, "valid DSL structure", None, tokens
+            ) from error
+
+    def _validate_external_tokens(self, tokens: list[str]) -> None:
+        if not tokens:
+            raise _parse_error("program wrapper", 0, "`DEF`", tokens)
+        if tokens[0] != "DEF":
+            raise _parse_error("program wrapper", 0, "`DEF`", tokens)
+        for offset, expected in ((1, "`run`"), (2, "`m(`")):
+            if offset >= len(tokens) or tokens[offset] != expected.strip("`"):
+                raise _parse_error("program wrapper", offset, expected, tokens)
+        if len(tokens) == 3:
+            raise _parse_error("program wrapper", 3, "a statement", tokens)
+
+        self._validate_dialect_tokens(tokens)
+
+        stack: list[tuple[str, int]] = []
+        for offset, token in enumerate(tokens):
+            if token in _OPEN_TO_CLOSE:
+                stack.append((token, offset))
+                continue
+            if token in _CLOSE_TOKENS:
+                if not stack:
+                    raise _parse_error("delimiter", offset, "opening delimiter", tokens)
+                opener, _ = stack.pop()
+                expected = _OPEN_TO_CLOSE[opener]
+                if token != expected:
+                    raise _parse_error("delimiter", offset, f"`{expected}`", tokens)
+
+        if stack:
+            opener, offset = stack[-1]
+            raise DSLParseError(
+                "delimiter", len(tokens), f"`{_OPEN_TO_CLOSE[opener]}`", None, tokens
+            )
+        if tokens[-1] != "m)":
+            raise _parse_error("program wrapper", len(tokens) - 1, "final `m)`", tokens)
+
+        valid_else_offsets: set[int] = set()
+        for offset, token in enumerate(tokens):
+            if token in {"IF", "IFELSE", "WHILE", "not", "and", "or"}:
+                if offset + 1 >= len(tokens) or tokens[offset + 1] != "c(":
+                    raise _parse_error(token, offset + 1, "`c(`", tokens)
+                c_close = _matching_close(tokens, offset + 1)
+                if token in {"IF", "IFELSE"}:
+                    if c_close + 1 >= len(tokens) or tokens[c_close + 1] != "i(":
+                        raise _parse_error(token, c_close + 1, "`i(`", tokens)
+                    i_close = _matching_close(tokens, c_close + 1)
+                    if token == "IFELSE":
+                        if i_close + 1 >= len(tokens) or tokens[i_close + 1] != "ELSE":
+                            raise _parse_error("IFELSE", i_close + 1, "`ELSE`", tokens)
+                        valid_else_offsets.add(i_close + 1)
+                        if i_close + 2 >= len(tokens) or tokens[i_close + 2] != "e(":
+                            raise _parse_error("ELSE", i_close + 2, "`e(`", tokens)
+                elif token == "WHILE":
+                    if c_close + 1 >= len(tokens) or tokens[c_close + 1] != "w(":
+                        raise _parse_error("WHILE", c_close + 1, "`w(`", tokens)
+            elif token == "REPEAT":
+                if offset + 1 >= len(tokens) or not token_is_repeat_count(tokens[offset + 1]):
+                    raise _parse_error("REPEAT", offset + 1, "`R=<0-19>`", tokens)
+                if offset + 2 >= len(tokens) or tokens[offset + 2] != "r(":
+                    raise _parse_error("REPEAT", offset + 2, "`r(`", tokens)
+            elif token == "ELSE":
+                if offset not in valid_else_offsets:
+                    raise _parse_error("statement", offset, "a DSL statement", tokens)
+                if offset + 1 >= len(tokens) or tokens[offset + 1] != "e(":
+                    raise _parse_error("ELSE", offset + 1, "`e(`", tokens)
+        known = self._known_external_tokens()
+        for offset, token in enumerate(tokens):
+            if token.startswith("R=") and not token_is_repeat_count(token):
+                raise _parse_error("REPEAT", offset, "`R=<0-19>`", tokens)
+            if token not in known:
+                raise DSLParseError(
+                    "program", offset, "known DSL symbol", token, tokens
+                )
+
+    def _validate_dialect_tokens(self, tokens: list[str]) -> None:
+        _ = tokens
+
+    def _known_external_tokens(self) -> set[str]:
+        return set(self.tokens_list)
     def parse_node_to_int(self, node: dsl_nodes.BaseNode) -> list[int]:
         prog_str = self.parse_node_to_str(node)
         return self.parse_str_to_int(prog_str)

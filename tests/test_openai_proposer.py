@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -29,6 +31,8 @@ from llm_gs.proposer import (
 )
 from llm_gs.reflection import RepairCycle
 from llm_gs.storage import WorkspaceStore, _bundle_checksum
+from prog_policies.base.dsl import DSLParseError
+from prog_policies.minigrid.dsl import MinigridDSL
 
 
 class FakeResponses:
@@ -101,6 +105,117 @@ def test_openai_proposer_corrects_invalid_output_at_most_twice() -> None:
     assert "DEF run m(" in correction
     assert "Allowed actions:" in correction
     assert "previous_response_id" not in responses.calls[1]
+
+
+@pytest.mark.parametrize(
+    ("source", "task_name", "construct", "expected", "actual"),
+    [
+        ("DEF run x( move m)", "CleanHouse", "program wrapper", "`m(`", "x("),
+        (
+            "DEF run m( IFELSE c( frontIsClear c) i( move i) e( turnLeft e) m)",
+            "CleanHouse",
+            "IFELSE",
+            "`ELSE`",
+            "e(",
+        ),
+        (
+            "DEF run m( REPEAT R=20 r( move r) m)",
+            "CleanHouse",
+            "REPEAT",
+            "`R=<0-19>`",
+            "R=20",
+        ),
+        (
+            "DEF run m( IF c( front_object_type red h) c) i( forward i) m)",
+            "DoorKey",
+            "front_object_type",
+            "`h(`",
+            "red",
+        ),
+        ("DEF run m( mystery m)", "CleanHouse", "program", "known DSL symbol", "mystery"),
+    ],
+)
+def test_dsl_validation_errors_are_actionable(
+    source: str, task_name: str, construct: str, expected: str, actual: str
+) -> None:
+    with pytest.raises(DSLParseError) as raised:
+        proposer_module._validate_dsl(source, task_name)
+
+    error = raised.value
+    assert error.construct == construct
+    assert error.expected == expected
+    assert error.actual == actual
+    assert error.offset >= 0
+    assert error.token_window
+
+
+def test_openai_proposer_includes_bounded_dsl_diagnostic_in_correction_feedback() -> None:
+    responses = FakeResponses(
+        [
+            '{"source":"DEF run m( IFELSE c( frontIsClear c) i( move i) e( turnLeft e) m)"}',
+            '{"source":"DEF run m( turnLeft m)"}',
+        ]
+    )
+
+    candidate = OpenAIProposer(responses).propose("Solve CleanHouse")
+
+    correction = str(responses.calls[1]["input"])
+    assert candidate.model_requests == 2
+    assert "DSL parse error in IFELSE" in correction
+    assert "expected `ELSE`; actual `e(`" in correction
+    assert "Correction ordinal: 1 of 2." in correction
+    assert len(correction) <= 8000
+
+
+def test_repeated_invalid_output_changes_correction_feedback() -> None:
+    invalid = '{"source":"DEF run m( REPEAT R=20 r( move r) m)"}'
+    responses = FakeResponses([invalid, invalid, invalid])
+
+    with pytest.raises(ModelOutputFailure, match="schema or DSL"):
+        OpenAIProposer(responses).propose("Solve CleanHouse")
+
+    first = str(responses.calls[1]["input"])
+    second = str(responses.calls[2]["input"])
+    assert first != second
+    assert "Correction ordinal: 1 of 2." in first
+    assert "Repeated invalid output: no." in first
+    assert "Correction ordinal: 2 of 2." in second
+    assert "Repeated invalid output: yes." in second
+
+
+def test_minigrid_valid_control_flow_remains_accepted() -> None:
+    proposer_module._validate_dsl(
+        "DEF run m( IF c( and c( front_is_clear c) c( is_carrying_object c) c) "
+        "i( forward i) m)",
+        task_name="DoorKey",
+    )
+
+
+def test_minigrid_malformed_feature_expression_is_rejected_with_assertions_disabled() -> None:
+    source = "DEF run m( IF c( front_object_type h( red h) forward c) i( forward i) m)"
+    with pytest.raises(DSLParseError, match="front_object_type"):
+        MinigridDSL().parse_str_to_node(source)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-O",
+            "-c",
+            "from prog_policies.minigrid.dsl import MinigridDSL\n"
+            "from prog_policies.base.dsl import DSLParseError\n"
+            f"source = {source!r}\n"
+            "try:\n"
+            "    MinigridDSL().parse_str_to_node(source)\n"
+            "except DSLParseError:\n"
+            "    pass\n"
+            "else:\n"
+            "    raise SystemExit(1)\n",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_openai_proposer_observes_redacted_invalid_outputs_before_correction() -> None:

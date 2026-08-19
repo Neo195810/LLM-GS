@@ -1,6 +1,6 @@
 from typing import Union
 
-from prog_policies.base import BaseDSL, dsl_nodes
+from prog_policies.base import BaseDSL, DSLParseError, dsl_nodes
 from prog_policies.base.dsl import _find_close_token
 
 from .minigrid_node import MinigridColorFeatureNode, MinigridObjectFeatureNode
@@ -28,6 +28,33 @@ class MinigridDSL(BaseDSL):
             dsl_nodes.BoolFeature("is_carrying_object"),
         ] + [dsl_nodes.ConstInt(i) for i in range(20)]
         super().__init__(nodes_list)
+
+    def _validate_dialect_tokens(self, tokens: list[str]) -> None:
+        for offset, token in enumerate(tokens):
+            if token not in {"front_object_type", "front_object_color"}:
+                continue
+            actual = tokens[offset + 1] if offset + 1 < len(tokens) else None
+            if actual != "h(":
+                raise DSLParseError(token, offset + 1, "`h(`", actual, tokens)
+            close_offset = offset + 3
+            close = tokens[close_offset] if close_offset < len(tokens) else None
+            if close != "h)":
+                raise DSLParseError(
+                    token,
+                    close_offset,
+                    "one feature value followed by `h)`",
+                    close,
+                    tokens,
+                )
+            following = tokens[close_offset + 1] if close_offset + 1 < len(tokens) else None
+            if following != "c)":
+                raise DSLParseError(token, close_offset + 1, "`c)`", following, tokens)
+
+    def _known_external_tokens(self) -> set[str]:
+        return set(self.tokens_list) | {
+            "WHILE", "c(", "c)", "w(", "w)", "IF", "i(", "i)",
+            "IFELSE", "ELSE", "e(", "e)", "not", "and", "or",
+        }
 
     @property
     def prod_rules(self):

@@ -821,7 +821,7 @@ class WorkspaceStore:
             )
             execution_ids = [str(row["execution_id"]) for row in executions]
             records = {
-                "executions": executions,
+                "executions": [_public_execution(row) for row in executions],
                 "work_units": _records_for_executions(connection, "work_units", execution_ids),
                 "program_attempts": _records_for_executions(connection, "program_attempts", execution_ids),
                 "episode_evaluations": _records_for_executions(connection, "episode_evaluations", execution_ids),
@@ -1214,6 +1214,20 @@ def _public_invalid_output_artifacts(rows: Sequence[object]) -> list[dict[str, o
         )
         public_rows.append(public_row)
     return public_rows
+
+
+def _public_execution(row: dict[str, object]) -> dict[str, object]:
+    public_row = dict(row)
+    report_json = public_row.get("report_json")
+    if not isinstance(report_json, str):
+        return public_row
+    try:
+        report = json.loads(report_json)
+    except json.JSONDecodeError:
+        return public_row
+    if isinstance(report, dict):
+        public_row["report_json"] = canonical_json(_public_report(report))
+    return public_row
 
 
 def _query_records(

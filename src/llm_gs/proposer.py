@@ -5,6 +5,7 @@ import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Protocol, cast
 
 from openai import OpenAI
@@ -204,6 +205,7 @@ class OpenAIProposer:
         request_prompt = _bounded_feedback(prompt)
         if _token_estimate(request_prompt) > self._input_token_limit:
             raise ModelOutputFailure("request input exceeds the configured token budget")
+        invalid_fingerprints: set[str] = set()
         for attempt in range(1, CORRECTION_ATTEMPTS + 2):
             reservation = self._reserve_request_cost()
             try:
@@ -232,10 +234,20 @@ class OpenAIProposer:
                     validation_error = ProposalValidationError("dsl", str(error))
                 else:
                     return CandidateProgram(source=source, model_requests=attempt)
+            candidate = _response_candidate(response)
+            fingerprint = sha256(_normalize_source(candidate).encode("utf-8")).hexdigest()
+            repeated_output = fingerprint in invalid_fingerprints
+            invalid_fingerprints.add(fingerprint)
             correction_prompt = (
                 None
                 if attempt > CORRECTION_ATTEMPTS
-                else _correction_prompt(prompt, _response_candidate(response), validation_error)
+                else _correction_prompt(
+                    prompt,
+                    candidate,
+                    validation_error,
+                    correction_ordinal=attempt,
+                    repeated_output=repeated_output,
+                )
             )
             self._observe_invalid_output(
                 response, attempt, validation_error, correction_prompt, phase
@@ -481,7 +493,12 @@ def _estimated_cost_usd(
 
 
 def _correction_prompt(
-    original_prompt: str, candidate: str, validation_error: ProposalValidationError
+    original_prompt: str,
+    candidate: str,
+    validation_error: ProposalValidationError,
+    *,
+    correction_ordinal: int,
+    repeated_output: bool,
 ) -> str:
     task_name = _task_name_from_prompt(original_prompt)
     contract = (
@@ -497,7 +514,17 @@ def _correction_prompt(
         f"Candidate program: {_bounded_feedback(candidate, limit=2000)}\n"
         f"Validation error ({error_class}): "
         f"{_bounded_feedback(str(validation_error), limit=1000)}\n"
+        f"Correction ordinal: {correction_ordinal} of {CORRECTION_ATTEMPTS}.\n"
         "Produce a complete replacement source; do not describe the correction."
+    )
+    repeated_feedback = (
+        "Repeated invalid output: yes. Return a structurally different complete replacement.\n"
+        if repeated_output
+        else "Repeated invalid output: no.\n"
+    )
+    feedback = feedback.replace(
+        "Produce a complete replacement source",
+        repeated_feedback + "Produce a complete replacement source",
     )
     return _bounded_feedback(feedback)
 
