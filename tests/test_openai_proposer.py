@@ -32,6 +32,7 @@ from llm_gs.proposer import (
 from llm_gs.reflection import RepairCycle
 from llm_gs.storage import WorkspaceStore, _bundle_checksum
 from prog_policies.base.dsl import DSLParseError
+from prog_policies.karel.dsl import KarelDSL
 from prog_policies.minigrid.dsl import MinigridDSL
 
 
@@ -203,6 +204,61 @@ def test_minigrid_valid_control_flow_remains_accepted() -> None:
         "i( forward i) m)",
         task_name="DoorKey",
     )
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "DEF run m( IF c( front_object_type h( red h) c) i( forward i) m)",
+        "DEF run m( IF c( not c( front_object_color h( lava h) c) c) i( forward i) m)",
+        (
+            "DEF run m( IF c( and c( front_object_type h( red h) c) "
+            "c( front_is_clear c) c) i( forward i) m)"
+        ),
+    ],
+)
+def test_minigrid_multitoken_feature_as_condition_remains_accepted(source: str) -> None:
+    proposer_module._validate_dsl(source, task_name="DoorKey")
+
+
+def test_nested_boolean_expression_rejects_stranded_trailing_token() -> None:
+    source = (
+        "DEF run m( IF c( not c( frontIsClear c) frontIsClear c) i( move i) m)"
+    )
+    with pytest.raises(DSLParseError) as raised:
+        KarelDSL().parse_str_to_node(source)
+
+    error = raised.value
+    assert error.construct == "not"
+    assert error.expected == "`c)`"
+    assert error.actual == "frontIsClear"
+
+
+def test_nested_boolean_expression_rejected_with_assertions_disabled() -> None:
+    source = "DEF run m( IF c( not c( frontIsClear c) frontIsClear c) i( move i) m)"
+    with pytest.raises(DSLParseError):
+        KarelDSL().parse_str_to_node(source)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-O",
+            "-c",
+            "from prog_policies.karel.dsl import KarelDSL\n"
+            "from prog_policies.base.dsl import DSLParseError\n"
+            f"source = {source!r}\n"
+            "try:\n"
+            "    KarelDSL().parse_str_to_node(source)\n"
+            "except DSLParseError:\n"
+            "    pass\n"
+            "else:\n"
+            "    raise SystemExit(1)\n",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_minigrid_malformed_feature_expression_is_rejected_with_assertions_disabled() -> None:

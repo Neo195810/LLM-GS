@@ -2,7 +2,7 @@ from __future__ import annotations
 import torch
 from torch.autograd import Variable
 
-from ..base.dsl import dsl_nodes, BaseDSL
+from ..base.dsl import dsl_nodes, BaseDSL, DSLParseError
 from leaps.pretrain.models import ProgramVAE
 from leaps.rl.envs import make_vec_envs
 from leaps.karel_env.dsl import get_DSL
@@ -101,7 +101,7 @@ class LatentSpace(BaseSearchSpace):
                 latent = torch.randn(self.hidden_size, generator=self.torch_rng, device=self.torch_device)
                 prog = self._decode(latent) # Check if it's a valid program
                 break
-            except (AssertionError, IndexError): # In case of invalid program, try again
+            except (AssertionError, IndexError, DSLParseError): # Invalid program, try again
                 continue
         return latent, prog
     
@@ -129,7 +129,7 @@ class LatentSpace(BaseSearchSpace):
                     )
                     prog = self._decode(neighbor) # Check if it's a valid program
                     break
-                except (AssertionError, IndexError): # In case of invalid program, try again
+                except (AssertionError, IndexError, DSLParseError): # Invalid program, try again
                     n_tries += 1
                     continue
             if n_tries >= 50: 

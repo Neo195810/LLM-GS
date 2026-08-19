@@ -4,13 +4,17 @@
 
 **Blocked by:** 01 — 讓 DSL Validation Error 可直接修正
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] `prog_policies/search_space/latent_space.py` 的 `initialize_individual()` 與 `get_neighbors()` 對 `_decode()` 的例外處理，改為同時捕捉 `DSLParseError`（連同既有的 `AssertionError`、`IndexError`），使隨機取樣到的 malformed token 序列照原設計靜默重新取樣，而不是讓例外向上傳播。
-- [ ] `prog_policies/base/dsl.py` 的 `_validate_external_tokens` 對 `not`/`and`/`or` 巢狀條件式，補上「巢狀 `c(...)` 的結束位置需與外層期望的結束位置對齊」的檢查，使多餘的 trailing token（例如 `not c( frontIsClear c) frontIsClear c)`）在這一層就被拒絕，不再依賴 `parse_str_list_to_node` 裡的 `assert prog_str_list[-1] == 'c)'` 兜底。
-- [ ] 在 `python -O`（assertions 關閉）下重新執行同一組 malformed 巢狀條件式，仍必須得到 `DSLParseError`，不得落入未捕捉的裸 `Exception`。
-- [ ] 新增回歸測試：(a) 對 `LatentSpaceSearchSpace`（或對應 search-space 類別）以會 decode 出 malformed token 序列的種子/latent 向量驅動 `initialize_individual`/`get_neighbors`，斷言不拋出未捕捉例外而是重新取樣；(b) 對本 ticket 描述的巢狀 boolean 表達式，分別在一般模式與 `python -O` 子行程下驗證兩者都拋出 `DSLParseError`（可比照 `tests/test_openai_proposer.py` 既有的 `-O` 子行程驗證手法）。
-- [ ] 不更動 DSL 語法本身、不擴大既有 correction/token 上限、不改寫歷史 Invalid-output Artifacts。
+- [x] `prog_policies/search_space/latent_space.py` 的 `initialize_individual()` 與 `get_neighbors()` 對 `_decode()` 的例外處理，改為同時捕捉 `DSLParseError`（連同既有的 `AssertionError`、`IndexError`），使隨機取樣到的 malformed token 序列照原設計靜默重新取樣，而不是讓例外向上傳播。
+- [x] `prog_policies/base/dsl.py` 的 `_validate_external_tokens` 對 `not`/`and`/`or` 巢狀條件式，補上「巢狀 `c(...)` 的結束位置需與外層期望的結束位置對齊」的檢查，使多餘的 trailing token（例如 `not c( frontIsClear c) frontIsClear c)`）在這一層就被拒絕，不再依賴 `parse_str_list_to_node` 裡的 `assert prog_str_list[-1] == 'c)'` 兜底。新增 `_validate_boolean_expression` 遞迴驗證每個 `not`/`and`/`or` 子表達式的結束位置與外層期望對齊；同時把 `parse_str_list_to_node` 最後 fallback 的裸 `raise Exception(...)` 改成 `raise ValueError(...)`，作為額外防線納入既有的 `except (..., ValueError)` 範圍。
+- [x] 在 `python -O`（assertions 關閉）下重新執行同一組 malformed 巢狀條件式，仍必須得到 `DSLParseError`，不得落入未捕捉的裸 `Exception`。
+- [x] 新增回歸測試：(a) `tests/test_latent_space.py` 用不執行 LEAPS 模型載入的 bare `LatentSpace`（monkeypatch `_decode`）驅動 `initialize_individual`/`get_neighbors`，斷言 `DSLParseError` 被重新取樣邏輯吸收而非向上傳播（本機環境無 `torch`，模組以 `pytest.importorskip` 優雅 skip，程式碼路徑已由型別與邏輯覆核）；(b) `tests/test_openai_proposer.py` 新增兩則測試，對本 ticket 描述的巢狀 boolean 表達式分別在一般模式與 `python -O` 子行程下驗證都拋出 `DSLParseError`，比照既有 MiniGrid `-O` 子行程驗證手法。
+- [x] 不更動 DSL 語法本身、不擴大既有 correction/token 上限、不改寫歷史 Invalid-output Artifacts。
+
+## Code review 追加修正
+
+初版 `_validate_boolean_expression` 的 leaf 分支假設「非 not/and/or 的 boolean expression 一定只有一個 token」，導致 MiniGrid 的多 token feature（`front_object_type h( <color> h)`、`front_object_color h( <object> h)`）作為條件時（無論在 IF/WHILE 頂層或巢狀於 not/and/or 底下）被誤判為 invalid，回歸破壞既有合法程式。已修正為：leaf 若後接 `h(`，改用既有的 `_matching_close` 找到對應 `h)`，要求該範圍剛好落在期望的結束位置。已補 3 則 `test_minigrid_multitoken_feature_as_condition_remains_accepted` 參數化測試涵蓋頂層、`not` 巢狀、`and` 巢狀三種情境。
 
 ## 背景
 

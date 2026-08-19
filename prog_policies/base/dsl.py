@@ -64,6 +64,50 @@ def _matching_close(tokens: list[str], start: int) -> int:
     raise AssertionError("tokens were balanced before matching delimiters")
 
 
+def _validate_boolean_expression(tokens: list[str], start: int, end: int) -> None:
+    """Validate that tokens[start:end] is exactly one complete boolean expression.
+
+    Structural delimiter balancing alone accepts a trailing token stranded
+    between a nested `not`/`and`/`or` expression's own close and the
+    enclosing condition's close (e.g. `not c( x c) x c)`); this walks the
+    boolean grammar explicitly so that span is required to line up.
+    """
+    if start >= end:
+        raise DSLParseError(
+            "boolean expression", start, "a boolean expression",
+            tokens[start] if start < len(tokens) else None, tokens,
+        )
+    token = tokens[start]
+    if token in {"not", "and", "or"}:
+        if start + 1 >= end or tokens[start + 1] != "c(":
+            raise _parse_error(token, start + 1, "`c(`", tokens)
+        c1_close = _matching_close(tokens, start + 1)
+        if c1_close >= end:
+            raise _parse_error(token, end, "`c)`", tokens)
+        _validate_boolean_expression(tokens, start + 2, c1_close)
+        if token == "not":
+            next_offset = c1_close + 1
+        else:
+            if c1_close + 1 >= end or tokens[c1_close + 1] != "c(":
+                raise _parse_error(token, c1_close + 1, "`c(`", tokens)
+            c2_close = _matching_close(tokens, c1_close + 1)
+            if c2_close >= end:
+                raise _parse_error(token, end, "`c)`", tokens)
+            _validate_boolean_expression(tokens, c1_close + 2, c2_close)
+            next_offset = c2_close + 1
+        if next_offset != end:
+            raise _parse_error(token, next_offset, "`c)`", tokens)
+        return
+    if end - start == 1:
+        return
+    if start + 1 < end and tokens[start + 1] == "h(":
+        h_close = _matching_close(tokens, start + 1)
+        if h_close + 1 == end:
+            return
+        raise _parse_error(token, h_close + 1, "`c)`", tokens)
+    raise _parse_error("boolean expression", start + 1, "`c)`", tokens)
+
+
 def token_is_repeat_count(token: str) -> bool:
     if not token.startswith("R="):
         return False
@@ -376,7 +420,7 @@ class BaseDSL(ABC):
         elif prog_str_list[0] in ['True', 'False']:
             return dsl_nodes.ConstBool(prog_str_list[0] == 'True')
         else:
-            raise Exception(f'Unrecognized token: {prog_str_list[0]}.')
+            raise ValueError(f'Unrecognized token: {prog_str_list[0]}.')
     
     # The following methods should not be overridden even if using a different formatting logic
     def parse_str_to_node(self, prog_str: str) -> dsl_nodes.BaseNode:
@@ -427,10 +471,11 @@ class BaseDSL(ABC):
 
         valid_else_offsets: set[int] = set()
         for offset, token in enumerate(tokens):
-            if token in {"IF", "IFELSE", "WHILE", "not", "and", "or"}:
+            if token in {"IF", "IFELSE", "WHILE"}:
                 if offset + 1 >= len(tokens) or tokens[offset + 1] != "c(":
                     raise _parse_error(token, offset + 1, "`c(`", tokens)
                 c_close = _matching_close(tokens, offset + 1)
+                _validate_boolean_expression(tokens, offset + 2, c_close)
                 if token in {"IF", "IFELSE"}:
                     if c_close + 1 >= len(tokens) or tokens[c_close + 1] != "i(":
                         raise _parse_error(token, c_close + 1, "`i(`", tokens)
