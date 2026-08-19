@@ -147,6 +147,7 @@ max_repair_cycles: 1
         "pending": 48,
         "running": 0,
         "completed": 0,
+        "development-gated": 0,
         "model-output-failed": 0,
         "infrastructure-failed": 0,
         "blocked-by-budget": 0,
@@ -181,16 +182,21 @@ max_repair_cycles: 1
     matrix = json.loads(run.stdout)
     assert matrix["arms"] == 48
     assert len(matrix["arm_reports"]) == 48
-    assert matrix["protocols"]["Frozen"]["arms"] == 48
+    assert matrix["protocols"]["Frozen"]["arms"] == 0
     assert matrix["protocols"]["Online"]["arms"] == 0
     assert matrix["missingness"] == {"incomplete_executions": 0, "unreported_arms": 0}
     assert matrix["arm_states"] == {
         "pending": 0,
         "running": 0,
-        "completed": 48,
+        "completed": 0,
+        "development-gated": 48,
         "model-output-failed": 0,
         "infrastructure-failed": 0,
         "blocked-by-budget": 0,
+    }
+    assert matrix["development_gated"] == {
+        "count": 48,
+        "reasons": {"development_admission_failed": 48},
     }
     persisted_report = workspace / "matrix-report.json"
     on_demand_report = _run_cli(
@@ -202,16 +208,16 @@ max_repair_cycles: 1
 
     progress_lines = [line for line in run.stderr.splitlines() if line]
     running_lines = [line for line in progress_lines if "-> running" in line]
-    completed_lines = [line for line in progress_lines if "-> completed" in line]
+    gated_lines = [line for line in progress_lines if "-> development-gated" in line]
     assert len(running_lines) == 48
-    assert len(completed_lines) == 48
-    for index, (running_line, completed_line) in enumerate(
-        zip(running_lines, completed_lines, strict=True), start=1
+    assert len(gated_lines) == 48
+    for index, (running_line, gated_line) in enumerate(
+        zip(running_lines, gated_lines, strict=True), start=1
     ):
         assert running_line.startswith(f"[{index}/48] ")
         assert running_line.endswith("-> running (attempt 1/3)")
-        assert completed_line.startswith(f"[{index}/48] ")
-        assert completed_line.endswith("-> completed")
+        assert gated_line.startswith(f"[{index}/48] ")
+        assert gated_line.endswith("-> development-gated")
 
 
 def test_matrix_cli_rejects_unknown_model_without_prices_before_workspace_write(
@@ -552,7 +558,8 @@ max_repair_cycles: 1
 
     assert len(budgets) == 1
     assert len({id(budget) for budget in budgets}) == 1
-    assert matrix["arm_states"]["completed"] == 48
+    assert matrix["arm_states"]["development-gated"] == 48
+    assert matrix["protocols"]["Frozen"]["arms"] == 0
     cost = matrix["cost"]
     assert cost["cap_usd"] == 7.0
     assert cost["reserved_usd"] == 0.0
@@ -642,6 +649,7 @@ max_repair_cycles: 1
         "pending": 0,
         "running": 0,
         "completed": 0,
+        "development-gated": 0,
         "model-output-failed": 48 if expected_state == "model-output-failed" else 0,
         "infrastructure-failed": 48 if expected_state == "infrastructure-failed" else 0,
         "blocked-by-budget": 48 if expected_state == "blocked-by-budget" else 0,
@@ -835,8 +843,8 @@ max_repair_cycles: 1
         "model_output": 0,
         "replacements": 3,
     }
-    assert arm["arm_state"] == "completed"
-    assert recovered["protocols"]["Frozen"]["arms"] == 1
+    assert arm["arm_state"] == "development-gated"
+    assert recovered["protocols"]["Frozen"]["arms"] == 0
     assert recovered["protocols"]["Online"]["arms"] == 0
 
 

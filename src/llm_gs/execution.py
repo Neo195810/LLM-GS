@@ -62,6 +62,10 @@ class Repairer(Protocol):
     def repair(self, prompt: str) -> CandidateProgram: ...
 
 
+_KAREL_AND_MINIGRID_MAX_CALLS = 10
+_TEXTWORLD_MAX_ACTIONS = 3
+
+
 class FakeOpenAIClient:
     def propose(self, prompt: str) -> CandidateProgram:
         if prompt.startswith(("Repair ", "Reflect on evidence then repair ")):
@@ -176,7 +180,7 @@ class OfflineEchoEvaluator:
 class CleanHouseEvaluator:
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
         adapter = V1Adapter()
-        limits = V1ExecutionLimits(max_calls=10)
+        limits = V1ExecutionLimits(max_calls=_KAREL_AND_MINIGRID_MAX_CALLS)
         adapter.assert_equivalent("CleanHouse", candidate.source, task_seed, limits)
         attempt = adapter.evaluate_attempt("CleanHouse", candidate.source, task_seed, limits)
         return EpisodeResult(
@@ -192,7 +196,7 @@ class CleanHouseEvaluator:
 class FourCornersEvaluator:
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
         adapter = V1Adapter()
-        limits = V1ExecutionLimits(max_calls=10)
+        limits = V1ExecutionLimits(max_calls=_KAREL_AND_MINIGRID_MAX_CALLS)
         adapter.assert_equivalent("FourCorners", candidate.source, task_seed, limits)
         attempt = adapter.evaluate_attempt("FourCorners", candidate.source, task_seed, limits)
         return EpisodeResult(
@@ -209,7 +213,7 @@ class DoorKeyEvaluator:
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
         _validate_dsl(candidate.source, task_name="DoorKey")
         return MiniGridDoorKeyAdapter().evaluate(
-            candidate, task_seed, DoorKeyLimits(max_calls=10)
+            candidate, task_seed, DoorKeyLimits(max_calls=_KAREL_AND_MINIGRID_MAX_CALLS)
         )
 
 
@@ -217,7 +221,7 @@ class RedBlueDoorEvaluator:
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
         _validate_dsl(candidate.source, task_name="RedBlueDoor")
         return RedBlueDoorAdapter().evaluate(
-            candidate, task_seed, RedBlueDoorLimits(max_calls=10)
+            candidate, task_seed, RedBlueDoorLimits(max_calls=_KAREL_AND_MINIGRID_MAX_CALLS)
         )
 
 
@@ -225,7 +229,7 @@ class TextWorldPilotEvaluator:
     def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
         _validate_dsl(candidate.source, task_name="TextWorldPilot")
         return TextWorldPilotAdapter().evaluate(
-            candidate, task_seed, TextWorldPilotLimits(max_actions=3)
+            candidate, task_seed, TextWorldPilotLimits(max_actions=_TEXTWORLD_MAX_ACTIONS)
         )
 
 
@@ -307,7 +311,11 @@ def _execute_frozen_memory_protocol(
     store.preregister_paired_protocol(manifest)
     store.preregister_frozen_manifest(manifest, experiment_id)
     if store.has_completed_execution(experiment_id):
-        return store.latest_report(experiment_id), "completed"
+        report = store.latest_report(experiment_id)
+        admission = report.audit.get("candidate_admission")
+        if isinstance(admission, dict) and admission.get("admitted_candidate_count") == 0:
+            return report, "development-gated"
+        return report, "completed"
 
     execution_id = store.next_execution_id(experiment_id)
     task_name = str(manifest.task["name"])
@@ -446,19 +454,56 @@ def _execute_frozen_memory_protocol(
             total_repair_attempts += 1
             seen_ast_hashes.add(_normalized_ast_hash(current_candidate.source, task_name))
 
+    admitted_candidates = [
+        (candidate, results)
+        for candidate, results in candidates
+        if _candidate_is_admitted(results)
+    ]
+    total_episode_evaluations = (
+        sum(len(results) for _, results in candidates) + len(training_results)
+    )
+    audit = store.execution_audit(execution_id)
+    audit["memory_protocol"] = str(manifest.memory_snapshot.get("protocol", "none"))
+    audit["effective_execution_limit"] = _effective_execution_limit(task_name)
+    if not admitted_candidates:
+        admission = _candidate_admission_audit(candidates)
+        audit["candidate_admission"] = admission
+        audit["frozen_memory_protocol"] = {
+            "memory_snapshot_id": store.memory_snapshot_id(execution_id),
+            "primary_metric": {"name": "held_out_success_rate", "value": None},
+            "secondary_metrics": {
+                "development_candidate_count": len(candidates),
+                "episode_evaluations": total_episode_evaluations,
+                "model_requests": store.model_requests(execution_id),
+                "population_size": population_size,
+                "total_repair_attempts": total_repair_attempts,
+            },
+            "seed_suite": suite,
+            "selection": {
+                "held_out_evaluations": 0,
+                "selected_before_held_out": False,
+                "reason": admission["reason"],
+            },
+        }
+        report = _report_from_results(
+            experiment_id,
+            execution_id,
+            [],
+            store.model_requests(execution_id),
+            candidate_programs=len(candidates),
+            audit=audit,
+        ).model_copy(update={"episode_evaluations": total_episode_evaluations})
+        store.save(manifest, report)
+        return report, "development-gated"
+
     selected_candidate, selection = _select_final_candidate(
-        candidates, manifest.search_strategy, task_name
+        admitted_candidates, manifest.search_strategy, task_name
     )
     held_out_results = _evaluate_candidate(
         store, execution_id, selected_candidate, suite["held_out"], evaluator
     )
-    audit = store.execution_audit(execution_id)
-    audit["memory_protocol"] = str(manifest.memory_snapshot.get("protocol", "none"))
-    total_episode_evaluations = (
-        sum(len(results) for _, results in candidates)
-        + len(training_results)
-        + len(held_out_results)
-    )
+    audit["candidate_admission"] = _candidate_admission_audit(candidates)
+    total_episode_evaluations += len(held_out_results)
     audit["frozen_memory_protocol"] = {
         "memory_snapshot_id": store.memory_snapshot_id(execution_id),
         "primary_metric": {
@@ -537,6 +582,50 @@ def _select_final_candidate(
     )
     selected_index, provenance = resolve_search_strategy(configuration).select(scored_candidates)
     return candidates[selected_index][0], provenance
+
+
+def _candidate_is_admitted(results: list[EpisodeResult]) -> bool:
+    return bool(results) and all(
+        result.outcome != "policy_crash" for result in results
+    ) and sum(result.normalized_progress for result in results) / len(results) > 0
+
+
+def _candidate_admission_audit(
+    candidates: list[tuple[CandidateProgram, list[EpisodeResult]]],
+) -> dict[str, object]:
+    summaries: list[dict[str, object]] = []
+    for _, results in candidates:
+        outcomes: dict[str, int] = {}
+        for result in results:
+            outcomes[result.outcome] = outcomes.get(result.outcome, 0) + 1
+        summaries.append(
+            {
+                "outcomes": outcomes,
+                "mean_normalized_progress": (
+                    sum(result.normalized_progress for result in results) / len(results)
+                    if results
+                    else 0.0
+                ),
+                "admitted": _candidate_is_admitted(results),
+            }
+        )
+    admitted_count = sum(bool(summary["admitted"]) for summary in summaries)
+    return {
+        "criterion": (
+            "all_development_results_non_policy_crash_and_"
+            "mean_normalized_progress_gt_zero"
+        ),
+        "candidate_count": len(candidates),
+        "admitted_candidate_count": admitted_count,
+        "candidates": summaries,
+        "reason": "development_admission_failed" if admitted_count == 0 else None,
+    }
+
+
+def _effective_execution_limit(task_name: str) -> dict[str, int]:
+    if task_name == "TextWorldPilot":
+        return {"max_actions": _TEXTWORLD_MAX_ACTIONS}
+    return {"max_calls": _KAREL_AND_MINIGRID_MAX_CALLS}
 
 
 def _success_rate(results: list[EpisodeResult]) -> float:

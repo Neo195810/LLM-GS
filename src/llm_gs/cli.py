@@ -240,7 +240,7 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
             )
             store.set_matrix_arm_state(resolved_experiment_id, "running")
             try:
-                report, _ = _execute_with_failure_recording(
+                report, status = _execute_with_failure_recording(
                     manifest,
                     resolved_experiment_id,
                     store,
@@ -255,9 +255,9 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
                         previous_failed_execution,
                         report.execution_id,
                     )
-                store.set_matrix_arm_state(resolved_experiment_id, "completed")
+                store.set_matrix_arm_state(resolved_experiment_id, status)
                 print(
-                    f"[{index}/{total}] {resolved_experiment_id} -> completed",
+                    f"[{index}/{total}] {resolved_experiment_id} -> {status}",
                     file=sys.stderr,
                 )
                 break

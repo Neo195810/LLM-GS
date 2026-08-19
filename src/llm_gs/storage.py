@@ -1132,6 +1132,7 @@ _MATRIX_ARM_STATES = frozenset(
         "pending",
         "running",
         "completed",
+        "development-gated",
         "model-output-failed",
         "infrastructure-failed",
         "blocked-by-budget",

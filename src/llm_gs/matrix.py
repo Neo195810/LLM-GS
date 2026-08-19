@@ -84,10 +84,12 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
     failure_classes = {"budget": 0, "infrastructure": 0, "model_output": 0, "replacements": 0}
     incomplete = 0
     unreported = 0
+    development_gated_reasons: dict[str, int] = {}
     arm_states = {
         "pending": 0,
         "running": 0,
         "completed": 0,
+        "development-gated": 0,
         "model-output-failed": 0,
         "infrastructure-failed": 0,
         "blocked-by-budget": 0,
@@ -101,6 +103,15 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
             for key in failure_classes:
                 failure_classes[key] += int(failures.get(key, 0))
         state = _arm_state(record)
+        if state == "development-gated":
+            audit = record.get("audit")
+            admission = audit.get("candidate_admission") if isinstance(audit, dict) else None
+            reason = (
+                admission.get("reason")
+                if isinstance(admission, dict) and isinstance(admission.get("reason"), str)
+                else "unknown"
+            )
+            development_gated_reasons[reason] = development_gated_reasons.get(reason, 0) + 1
         if state in arm_states:
             arm_states[state] += 1
         else:
@@ -112,6 +123,10 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
         "protocols": protocols,
         "missingness": {"incomplete_executions": incomplete, "unreported_arms": unreported},
         "arm_states": arm_states,
+        "development_gated": {
+            "count": arm_states["development-gated"],
+            "reasons": development_gated_reasons,
+        },
         "exclusions": {"count": 0, "arms": []},
         "failure_classes": failure_classes,
         "cost": cost,

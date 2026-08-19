@@ -688,14 +688,16 @@ failure_strategy:
         "version": 1,
     }
     assert protocol["memory_snapshot_id"].startswith("snapshot_")
-    assert protocol["selection"]["selected_before_held_out"] is True
-    assert protocol["selection"]["held_out_evaluations"] == 1
+    assert protocol["selection"]["selected_before_held_out"] is False
+    assert protocol["selection"]["held_out_evaluations"] == 0
+    assert protocol["selection"]["reason"] == "development_admission_failed"
     assert protocol["primary_metric"] == {
         "name": "held_out_success_rate",
-        "value": 0.0,
+        "value": None,
     }
-    assert report["outcomes"] == {"partial_completion": 1}
-    assert report["episode_evaluations"] == 4
+    assert report["outcomes"] == {}
+    assert report["episode_evaluations"] == 3
+    assert report["audit"]["candidate_admission"]["admitted_candidate_count"] == 0
 
 
 def test_frozen_memory_cem_records_candidate_selection_provenance(tmp_path: Path) -> None:
@@ -744,15 +746,10 @@ failure_strategy:
         ).stdout
     )
 
-    selection = report["audit"]["frozen_memory_protocol"]["selection"]
-    assert selection["strategy"] == "cem"
-    assert selection["version"] == "v1"
-    assert selection["configured_population_size"] == 2
-    assert selection["configured_elite_count"] == 1
-    # Each of the 2 population members independently runs its own repair
-    # cycle (max_repair_cycles: 1), so the flattened population is 4.
-    assert selection["observed_population_size"] == 4
-    assert len(selection["elite_candidates"]) == 1
+    admission = report["audit"]["candidate_admission"]
+    assert admission["candidate_count"] == 4
+    assert admission["admitted_candidate_count"] == 0
+    assert admission["reason"] == "development_admission_failed"
 
 
 def test_frozen_memory_cebs_records_candidate_selection_provenance(tmp_path: Path) -> None:
@@ -801,15 +798,10 @@ failure_strategy:
         ).stdout
     )
 
-    selection = report["audit"]["frozen_memory_protocol"]["selection"]
-    assert selection["strategy"] == "cebs"
-    assert selection["version"] == "v1"
-    assert selection["configured_population_size"] == 2
-    assert selection["configured_elite_count"] == 1
-    # Each of the 2 population members independently runs its own repair
-    # cycle (max_repair_cycles: 1), so the flattened population is 4.
-    assert selection["observed_population_size"] == 4
-    assert len(selection["elite_candidates"]) == 1
+    admission = report["audit"]["candidate_admission"]
+    assert admission["candidate_count"] == 4
+    assert admission["admitted_candidate_count"] == 0
+    assert admission["reason"] == "development_admission_failed"
 
 
 @pytest.mark.parametrize("task_name", ["CleanHouse", "FourCorners", "DoorKey", "RedBlueDoor"])
@@ -852,7 +844,12 @@ failure_strategy:
         ).stdout
     )
 
-    assert report["audit"]["frozen_memory_protocol"]["selection"]["strategy"] == "cebs"
+    assert report["audit"]["candidate_admission"]["admitted_candidate_count"] == 0
+    assert report["audit"]["frozen_memory_protocol"]["selection"] == {
+        "held_out_evaluations": 0,
+        "selected_before_held_out": False,
+        "reason": "development_admission_failed",
+    }
 
 
 def test_cebs_failure_strategies_share_fixed_seeds_and_budgets(tmp_path: Path) -> None:

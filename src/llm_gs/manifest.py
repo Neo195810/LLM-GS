@@ -25,7 +25,8 @@ DSL_CONTROL_FLOW_PROMPT = (
     "negate conditions with not c( <condition> c). "
 )
 KAREL_DSL_PROMPT = (
-    "Return JSON with only source. Produce one deterministic {task} Karel program. "
+    "Return exactly one JSON object: {{\"source\": \"<DSL source>\"}}. "
+    "Produce one deterministic {task} Karel program. "
     "Source must use exact Karel DSL syntax: DEF run m( <statements> m). "
     + DSL_CONTROL_FLOW_PROMPT
     + "Actions: move, turnLeft, turnRight, pickMarker, putMarker. "
@@ -35,7 +36,8 @@ KAREL_DSL_PROMPT = (
     "Never output task name, pseudocode, Markdown, or Python."
 )
 MINIGRID_DSL_PROMPT = (
-    "Return JSON with only source. Produce one deterministic {task} MiniGrid program. "
+    "Return exactly one JSON object: {{\"source\": \"<DSL source>\"}}. "
+    "Produce one deterministic {task} MiniGrid program. "
     "Source must use exact MiniGrid DSL syntax: DEF run m( <statements> m). "
     + DSL_CONTROL_FLOW_PROMPT
     + "Actions: left, right, forward, pickup, drop, toggle. "
@@ -59,7 +61,8 @@ RED_BLUE_DOOR_PROMPT = MINIGRID_DSL_PROMPT.format(
     task="RedBlueDoor", goal="open the red door before opening the blue door"
 )
 TEXTWORLD_PILOT_PROMPT = (
-    "Return JSON with only source. Produce one deterministic TextWorldPilot V2 program. "
+    "Return exactly one JSON object: {\"source\": \"<DSL source>\"}. "
+    "Produce one deterministic TextWorldPilot V2 program. "
     "Use one to three semicolon-separated rules: WHEN <predicate> DO <action>. "
     "Predicates: not_has_key, has_key, chest_unlocked, chest_open. "
     "Actions: take_key, unlock_chest, open_chest. Never output natural-language "
