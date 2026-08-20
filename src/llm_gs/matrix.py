@@ -106,11 +106,9 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
         if state == "development-gated":
             audit = record.get("audit")
             admission = audit.get("candidate_admission") if isinstance(audit, dict) else None
-            reason = (
-                admission.get("reason")
-                if isinstance(admission, dict) and isinstance(admission.get("reason"), str)
-                else "unknown"
-            )
+            reason = "unknown"
+            if isinstance(admission, dict) and isinstance(admission.get("reason"), str):
+                reason = str(admission.get("reason"))
             development_gated_reasons[reason] = development_gated_reasons.get(reason, 0) + 1
         if state in arm_states:
             arm_states[state] += 1
@@ -184,9 +182,13 @@ def _cost_summary(records: Iterable[dict[str, object]]) -> dict[str, float | int
         for field in ("reserved_usd", "settled_usd", "unknown_usd"):
             value = cost.get(field)
             if isinstance(value, (float, int)):
-                totals[field] = float(totals[field]) + float(value)
+                total = totals[field]
+                if isinstance(total, (float, int)):
+                    totals[field] = float(total) + float(value)
         for field in ("input_tokens", "cached_tokens", "output_tokens"):
             value = cost.get(field)
             if isinstance(value, int):
-                totals[field] = int(totals[field]) + value
+                total = totals[field]
+                if isinstance(total, int):
+                    totals[field] = total + value
     return totals

@@ -1,6 +1,6 @@
 # Record matrix-arm recovery and self-contained correction
 
-Each preregistered Matrix Arm owns a durable lifecycle and retains immutable Execution history. Completed arms alone enter protocol-specific statistics; model-output, infrastructure, and budget failures stay explicit in missingness and failure accounting. Correction and repair requests are self-contained with bounded structured feedback rather than implicit OpenAI conversation state, so they remain auditable and reproducible while preserving the prior failed output and relevant evidence needed for repair.
+Each preregistered Matrix Arm owns a durable lifecycle and retains immutable Execution history. Completed arms alone enter protocol-specific statistics; development-gated, model-output, infrastructure, and budget outcomes stay explicit in missingness and failure accounting. A development-gated arm reached an experiment result without an admitted candidate. Correction and repair requests are self-contained with bounded structured feedback rather than implicit OpenAI conversation state, so they remain auditable and reproducible while preserving the prior failed output and relevant evidence needed for repair.
 
 ## Consequences
 

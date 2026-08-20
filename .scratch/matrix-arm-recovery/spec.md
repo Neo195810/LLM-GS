@@ -10,9 +10,11 @@ enough bounded feedback to correct invalid source reliably.
 
 Give every preregistered Matrix Arm a durable lifecycle and immutable Execution
 history. Record one of `pending`, `running`, `completed`,
-`model-output-failed`, `infrastructure-failed`, or `blocked-by-budget`, with a
-bounded diagnostic record. Later recovery creates a new Execution rather than
-mutating prior history.
+`development-gated`, `model-output-failed`, `infrastructure-failed`, or
+`blocked-by-budget`, with a bounded diagnostic record. A development-gated arm
+reached an experiment result without an admitted candidate and is excluded from
+protocol-specific statistics. Later recovery creates a new Execution rather
+than mutating prior history.
 
 LLM correction and repair requests are independent, self-contained requests.
 They receive the Candidate Program, structured validation or evaluation

@@ -207,7 +207,7 @@ One preregistered Task, Search Strategy, Failure Handling Strategy, protocol, an
 _Avoid_: Experiment, Work Unit
 
 **Matrix Arm State**:
-The durable state of a Matrix Arm: pending, running, completed, model-output-failed, infrastructure-failed, or blocked-by-budget. Completed means its Execution reached an experiment result; it does not imply policy success.
+The durable state of a Matrix Arm: pending, running, completed, development-gated, model-output-failed, infrastructure-failed, or blocked-by-budget. A development-gated arm reached an experiment result without an admitted Candidate Program and does not enter protocol-specific statistics. Completed means its Execution reached an experiment result; it does not imply policy success.
 _Avoid_: Missing, pass/fail
 
 **Matrix Report**:
