@@ -221,6 +221,11 @@ def test_minigrid_multitoken_feature_as_condition_remains_accepted(source: str) 
     proposer_module._validate_dsl(source, task_name="DoorKey")
 
 
+def test_minigrid_dsl_does_not_duplicate_the_base_parse_dispatch() -> None:
+    assert MinigridDSL.parse_str_list_to_node is not None
+    assert "parse_str_list_to_node" not in MinigridDSL.__dict__
+
+
 def test_nested_boolean_expression_rejects_stranded_trailing_token() -> None:
     source = (
         "DEF run m( IF c( not c( frontIsClear c) frontIsClear c) i( move i) m)"

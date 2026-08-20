@@ -289,6 +289,15 @@ class BaseDSL(ABC):
         
         raise Exception(f'Unknown node type: {type(node)}')
     
+    def _parse_bool_feature(self, prog_str_list: list[str]) -> tuple[dsl_nodes.BaseNode, int]:
+        """Parse the bool-feature leaf at the start of prog_str_list.
+
+        Returns the parsed node and how many leading tokens it consumed.
+        Dialects with multi-token feature arguments (e.g. `h( ... h)`)
+        override this instead of duplicating the whole parse dispatch.
+        """
+        return dsl_nodes.BoolFeature(prog_str_list[0]), 1
+
     def parse_str_list_to_node(self, prog_str_list: list[str]) -> dsl_nodes.BaseNode:
         # if len(prog_str_list) == 0:
         #     return EmptyStatement()
@@ -301,11 +310,11 @@ class BaseDSL(ABC):
             return dsl_nodes.Action(prog_str_list[0])
         
         if prog_str_list[0] in self.bool_features:
-            if len(prog_str_list) > 1:
-                s1 = dsl_nodes.BoolFeature(prog_str_list[0])
-                s2 = self.parse_str_list_to_node(prog_str_list[1:])
-                return dsl_nodes.Concatenate.new(s1, s2)
-            return dsl_nodes.BoolFeature(prog_str_list[0])
+            node, consumed = self._parse_bool_feature(prog_str_list)
+            if consumed < len(prog_str_list):
+                s2 = self.parse_str_list_to_node(prog_str_list[consumed:])
+                return dsl_nodes.Concatenate.new(node, s2)
+            return node
         
         if prog_str_list[0] in self.int_features:
             if len(prog_str_list) > 1:

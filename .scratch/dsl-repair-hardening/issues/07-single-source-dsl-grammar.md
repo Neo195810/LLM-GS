@@ -4,10 +4,12 @@
 
 **Blocked by:** 06 — unify bracket-matching helpers first so this refactor isn't juggling two parallel matching implementations while also touching grammar structure
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Each DSL construct's token shape (delimiters, arity, ordering) is defined in exactly one place that both validation and parsing consult, not duplicated.
-- [ ] `DSLParseError` behavior (constructs, offsets, expected/actual messages) for all currently-tested error cases is unchanged.
-- [ ] All currently-valid Karel and MiniGrid programs (including multi-token MiniGrid features like `front_object_type h( <color> h)`) still parse successfully.
-- [ ] Full test suite passes with no new failures beyond the pre-existing PATH-related ones; no new ruff violations introduced.
-- [ ] Add or update a test that documents the single-source property is meaningful — e.g. a construct-shape change made in only the shared definition is picked up by both validation and parsing (or, at minimum, a regression test for the ticket 05 stranded-token case still passes under the new structure).
+- [x] Each DSL construct's token shape (delimiters, arity, ordering) is defined in exactly one place that both validation and parsing consult, not duplicated.
+- [x] `DSLParseError` behavior (constructs, offsets, expected/actual messages) for all currently-tested error cases is unchanged.
+- [x] All currently-valid Karel and MiniGrid programs (including multi-token MiniGrid features like `front_object_type h( <color> h)`) still parse successfully.
+- [x] Full test suite passes with no new failures beyond the pre-existing PATH-related ones; no new ruff violations introduced.
+- [x] Add or update a test that documents the single-source property is meaningful — e.g. a construct-shape change made in only the shared definition is picked up by both validation and parsing (or, at minimum, a regression test for the ticket 05 stranded-token case still passes under the new structure).
+
+`MinigridDSL.parse_str_list_to_node` was a byte-for-byte copy of `BaseDSL.parse_str_list_to_node` — every statement/boolean construct's parse shape (`IF`, `IFELSE`, `WHILE`, `REPEAT`, `not`/`and`/`or`, `DEF`) was duplicated wholesale, differing only in the bool-feature leaf case (MiniGrid's `h( ... h)` multi-token features). Introduced a `_parse_bool_feature(prog_str_list) -> (node, consumed)` hook on `BaseDSL` that the base leaf case uses and that `MinigridDSL` overrides for `front_object_type`/`front_object_color`; deleted MiniGrid's entire duplicate override so it now inherits `parse_str_list_to_node` from `BaseDSL` unchanged. `_matching_close` import in `minigrid/dsl.py` removed as it's now unused there. Added `test_minigrid_dsl_does_not_duplicate_the_base_parse_dispatch` to `tests/test_openai_proposer.py` asserting `MinigridDSL` no longer defines its own `parse_str_list_to_node`.
