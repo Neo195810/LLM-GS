@@ -1,7 +1,7 @@
 from typing import Union
 
 from prog_policies.base import BaseDSL, DSLParseError, dsl_nodes
-from prog_policies.base.dsl import _find_close_token
+from prog_policies.base.dsl import _matching_close
 
 from .minigrid_node import MinigridColorFeatureNode, MinigridObjectFeatureNode
 
@@ -271,8 +271,8 @@ class MinigridDSL(BaseDSL):
             return dsl_nodes.Program.new(m)
 
         elif prog_str_list[0] == "IF":
-            c_end = _find_close_token(prog_str_list, "c", 1)
-            i_end = _find_close_token(prog_str_list, "i", c_end + 1)
+            c_end = _matching_close(prog_str_list, 1)
+            i_end = _matching_close(prog_str_list, c_end + 1)
             c = self.parse_str_list_to_node(prog_str_list[2:c_end])
             i = self.parse_str_list_to_node(prog_str_list[c_end + 2 : i_end])
             if i_end == len(prog_str_list) - 1:
@@ -283,10 +283,10 @@ class MinigridDSL(BaseDSL):
                     self.parse_str_list_to_node(prog_str_list[i_end + 1 :]),
                 )
         elif prog_str_list[0] == "IFELSE":
-            c_end = _find_close_token(prog_str_list, "c", 1)
-            i_end = _find_close_token(prog_str_list, "i", c_end + 1)
+            c_end = _matching_close(prog_str_list, 1)
+            i_end = _matching_close(prog_str_list, c_end + 1)
             assert prog_str_list[i_end + 1] == "ELSE", "Invalid program"
-            e_end = _find_close_token(prog_str_list, "e", i_end + 2)
+            e_end = _matching_close(prog_str_list, i_end + 2)
             c = self.parse_str_list_to_node(prog_str_list[2:c_end])
             i = self.parse_str_list_to_node(prog_str_list[c_end + 2 : i_end])
             e = self.parse_str_list_to_node(prog_str_list[i_end + 3 : e_end])
@@ -298,8 +298,8 @@ class MinigridDSL(BaseDSL):
                     self.parse_str_list_to_node(prog_str_list[e_end + 1 :]),
                 )
         elif prog_str_list[0] == "WHILE":
-            c_end = _find_close_token(prog_str_list, "c", 1)
-            w_end = _find_close_token(prog_str_list, "w", c_end + 1)
+            c_end = _matching_close(prog_str_list, 1)
+            w_end = _matching_close(prog_str_list, c_end + 1)
             c = self.parse_str_list_to_node(prog_str_list[2:c_end])
             w = self.parse_str_list_to_node(prog_str_list[c_end + 2 : w_end])
             if w_end == len(prog_str_list) - 1:
@@ -311,7 +311,7 @@ class MinigridDSL(BaseDSL):
                 )
         elif prog_str_list[0] == "REPEAT":
             n = self.parse_str_list_to_node([prog_str_list[1]])
-            r_end = _find_close_token(prog_str_list, "r", 2)
+            r_end = _matching_close(prog_str_list, 2)
             r = self.parse_str_list_to_node(prog_str_list[3:r_end])
             if r_end == len(prog_str_list) - 1:
                 return dsl_nodes.Repeat.new(n, r)
@@ -327,14 +327,14 @@ class MinigridDSL(BaseDSL):
             c = self.parse_str_list_to_node(prog_str_list[2:-1])
             return dsl_nodes.Not.new(c)
         elif prog_str_list[0] == "and":
-            c1_end = _find_close_token(prog_str_list, "c", 1)
+            c1_end = _matching_close(prog_str_list, 1)
             assert prog_str_list[c1_end + 1] == "c(", "Invalid program"
             assert prog_str_list[-1] == "c)", "Invalid program"
             c1 = self.parse_str_list_to_node(prog_str_list[2:c1_end])
             c2 = self.parse_str_list_to_node(prog_str_list[c1_end + 2 : -1])
             return dsl_nodes.And.new(c1, c2)
         elif prog_str_list[0] == "or":
-            c1_end = _find_close_token(prog_str_list, "c", 1)
+            c1_end = _matching_close(prog_str_list, 1)
             assert prog_str_list[c1_end + 1] == "c(", "Invalid program"
             assert prog_str_list[-1] == "c)", "Invalid program"
             c1 = self.parse_str_list_to_node(prog_str_list[2:c1_end])

@@ -116,20 +116,6 @@ def token_is_repeat_count(token: str) -> bool:
     except ValueError:
         return False
 
-def _find_close_token(token_list: list[str], character: str, start_index: int = 0) -> int:
-    open_token = character + '('
-    close_token = character + ')'
-    assert token_list[start_index] == open_token, 'Invalid program'
-    parentheses = 1
-    for i, t in enumerate(token_list[start_index+1:]):
-        if t == open_token:
-            parentheses += 1
-        elif t == close_token:
-            parentheses -= 1
-        if parentheses == 0:
-            return i + 1 + start_index
-    raise Exception('Invalid program')
-
 class BaseDSL(ABC):
 
     def __init__(self, nodes_list: list[dsl_nodes.BaseNode] = None):
@@ -343,8 +329,8 @@ class BaseDSL(ABC):
             return dsl_nodes.Program.new(m)
         
         elif prog_str_list[0] == 'IF':
-            c_end = _find_close_token(prog_str_list, 'c', 1)
-            i_end = _find_close_token(prog_str_list, 'i', c_end+1)
+            c_end = _matching_close(prog_str_list, 1)
+            i_end = _matching_close(prog_str_list, c_end+1)
             c = self.parse_str_list_to_node(prog_str_list[2:c_end])
             i = self.parse_str_list_to_node(prog_str_list[c_end+2:i_end])
             if i_end == len(prog_str_list) - 1: 
@@ -355,10 +341,10 @@ class BaseDSL(ABC):
                     self.parse_str_list_to_node(prog_str_list[i_end+1:])
                 )
         elif prog_str_list[0] == 'IFELSE':
-            c_end = _find_close_token(prog_str_list, 'c', 1)
-            i_end = _find_close_token(prog_str_list, 'i', c_end+1)
+            c_end = _matching_close(prog_str_list, 1)
+            i_end = _matching_close(prog_str_list, c_end+1)
             assert prog_str_list[i_end+1] == 'ELSE', 'Invalid program'
-            e_end = _find_close_token(prog_str_list, 'e', i_end+2)
+            e_end = _matching_close(prog_str_list, i_end+2)
             c = self.parse_str_list_to_node(prog_str_list[2:c_end])
             i = self.parse_str_list_to_node(prog_str_list[c_end+2:i_end])
             e = self.parse_str_list_to_node(prog_str_list[i_end+3:e_end])
@@ -370,8 +356,8 @@ class BaseDSL(ABC):
                     self.parse_str_list_to_node(prog_str_list[e_end+1:])
                 )
         elif prog_str_list[0] == 'WHILE':
-            c_end = _find_close_token(prog_str_list, 'c', 1)
-            w_end = _find_close_token(prog_str_list, 'w', c_end+1)
+            c_end = _matching_close(prog_str_list, 1)
+            w_end = _matching_close(prog_str_list, c_end+1)
             c = self.parse_str_list_to_node(prog_str_list[2:c_end])
             w = self.parse_str_list_to_node(prog_str_list[c_end+2:w_end])
             if w_end == len(prog_str_list) - 1: 
@@ -383,7 +369,7 @@ class BaseDSL(ABC):
                 )
         elif prog_str_list[0] == 'REPEAT':
             n = self.parse_str_list_to_node([prog_str_list[1]])
-            r_end = _find_close_token(prog_str_list, 'r', 2)
+            r_end = _matching_close(prog_str_list, 2)
             r = self.parse_str_list_to_node(prog_str_list[3:r_end])
             if r_end == len(prog_str_list) - 1: 
                 return dsl_nodes.Repeat.new(n, r)
@@ -399,14 +385,14 @@ class BaseDSL(ABC):
             c = self.parse_str_list_to_node(prog_str_list[2:-1])
             return dsl_nodes.Not.new(c)
         elif prog_str_list[0] == 'and':
-            c1_end = _find_close_token(prog_str_list, 'c', 1)
+            c1_end = _matching_close(prog_str_list, 1)
             assert prog_str_list[c1_end+1] == 'c(', 'Invalid program'
             assert prog_str_list[-1] == 'c)', 'Invalid program'
             c1 = self.parse_str_list_to_node(prog_str_list[2:c1_end])
             c2 = self.parse_str_list_to_node(prog_str_list[c1_end+2:-1])
             return dsl_nodes.And.new(c1, c2)
         elif prog_str_list[0] == 'or':
-            c1_end = _find_close_token(prog_str_list, 'c', 1)
+            c1_end = _matching_close(prog_str_list, 1)
             assert prog_str_list[c1_end+1] == 'c(', 'Invalid program'
             assert prog_str_list[-1] == 'c)', 'Invalid program'
             c1 = self.parse_str_list_to_node(prog_str_list[2:c1_end])
