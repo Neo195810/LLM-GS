@@ -9,11 +9,14 @@ whitespace, but never guesses or rewrites program logic.
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** complete
 
-- [ ] Proposal and repair paths make at most two correction requests after the
+- [x] Proposal and repair paths make at most two correction requests after the
   first invalid output, then record model-output failure.
-- [ ] Feedback preserves the relevant contract and is bounded with deterministic
+- [x] Feedback preserves the relevant contract and is bounded with deterministic
   trimming and redaction.
-- [ ] Tests prove that retries are self-contained and do not use implicit API
+- [x] Tests prove that retries are self-contained and do not use implicit API
   conversation linkage.
+
+**Verified:** `uv run pytest tests/test_openai_proposer.py -q` (61 passed),
+`uv run mypy src/llm_gs/proposer.py`, and focused Ruff checks.

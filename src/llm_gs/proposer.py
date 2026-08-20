@@ -214,7 +214,13 @@ class OpenAIProposer:
     def propose(self, prompt: str) -> CandidateProgram:
         return self._propose(prompt, phase="initial")
 
-    def _propose(self, prompt: str, *, phase: str) -> CandidateProgram:
+    def _propose(
+        self,
+        prompt: str,
+        *,
+        phase: str,
+        evaluation_evidence: str | None = None,
+    ) -> CandidateProgram:
         request_prompt = _bounded_feedback(prompt)
         if _token_estimate(request_prompt) > self._input_token_limit:
             raise ModelOutputFailure("request input exceeds the configured token budget")
@@ -267,6 +273,7 @@ class OpenAIProposer:
                     validation_error,
                     correction_ordinal=attempt,
                     repeated_output=repeated_output,
+                    evaluation_evidence=evaluation_evidence,
                 )
             )
             self._observe_invalid_output(
@@ -290,6 +297,7 @@ class OpenAIProposer:
             f"{task_prompt_for_repair(task_name)}\n"
             "Repair context (bounded evaluation evidence): " f"{bounded_context}",
             phase="repair",
+            evaluation_evidence=bounded_context,
         )
 
     def _reserve_request_cost(self) -> float | None:
@@ -523,6 +531,7 @@ def _correction_prompt(
     *,
     correction_ordinal: int,
     repeated_output: bool,
+    evaluation_evidence: str | None,
 ) -> str:
     task_name = _task_name_from_prompt(original_prompt)
     contract = (
@@ -536,6 +545,11 @@ def _correction_prompt(
         if repeated_output
         else "Repeated invalid output: no.\n"
     )
+    evidence_feedback = (
+        f"Bounded evaluation evidence: {_bounded_feedback(evaluation_evidence, limit=2000)}\n"
+        if evaluation_evidence is not None
+        else ""
+    )
     feedback = (
         "You are receiving an independent correction request. Do not rely on "
         "earlier API messages. Return only JSON matching the proposal schema.\n"
@@ -543,6 +557,7 @@ def _correction_prompt(
         f"Candidate program: {_bounded_feedback(candidate, limit=2000)}\n"
         f"Validation error ({error_class}): "
         f"{_bounded_feedback(str(validation_error), limit=1000)}\n"
+        f"{evidence_feedback}"
         f"Correction ordinal: {correction_ordinal} of {CORRECTION_ATTEMPTS}.\n"
         f"{repeated_feedback}"
         "Produce a complete replacement source; do not describe the correction."

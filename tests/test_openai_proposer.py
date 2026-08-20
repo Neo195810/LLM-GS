@@ -1001,6 +1001,23 @@ def test_repair_feedback_includes_bounded_evaluation_evidence() -> None:
     assert "sk-secret-value" not in repair_prompt
 
 
+def test_invalid_repair_retry_keeps_evidence_in_an_independent_request() -> None:
+    responses = FakeResponses(
+        ['{"source":"not dsl"}', '{"source":"DEF run m( move m)"}']
+    )
+
+    OpenAIProposer(responses).repair(
+        "Repair CleanHouse using evidence: candidate stalled after Actions: move"
+    )
+
+    correction = str(responses.calls[1]["input"])
+    assert "Bounded evaluation evidence:" in correction
+    assert "candidate stalled after Actions: move" in correction
+    assert "Goal: collect every marker" in correction
+    assert "Candidate program: not dsl" in correction
+    assert "previous_response_id" not in responses.calls[1]
+
+
 def test_openai_proposer_observes_invalid_repair_output_before_successful_correction() -> None:
     responses = FakeResponses(
         ['{"source":"not dsl"}', '{"source":"DEF run m( move m)"}']
