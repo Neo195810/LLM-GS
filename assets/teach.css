@@ -1,0 +1,16 @@
+:root { color-scheme: light; --ink:#24313d; --muted:#657482; --paper:#fffdf8; --line:#d9e0e5; --accent:#176b87; --warm:#fff1d6; }
+* { box-sizing: border-box; }
+body { margin:0; background:#eef2f3; color:var(--ink); font: 17px/1.65 Georgia, serif; }
+main { max-width: 900px; margin: 3rem auto; padding: 0 1.25rem 4rem; }
+article { background:var(--paper); padding: clamp(1.5rem, 4vw, 3.5rem); box-shadow:0 10px 35px #26323818; }
+h1,h2,h3 { font-family: system-ui, sans-serif; line-height:1.2; color:#173746; }
+h1 { font-size: clamp(2rem, 5vw, 3.2rem); margin-top:0; }
+h2 { margin-top:2.5rem; border-bottom:1px solid var(--line); padding-bottom:.35rem; }
+.lead { font-size:1.2rem; color:var(--muted); }
+.callout { background:var(--warm); border-left:5px solid #e4a33a; padding:1rem 1.2rem; margin:1.5rem 0; }
+.formula { font:600 1.05rem/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; background:#edf6f8; padding:1rem; overflow:auto; white-space:pre-wrap; }
+code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:.9em; }
+a { color:var(--accent); }
+.mermaid { margin:1.5rem 0; overflow:auto; }
+small { color:var(--muted); }
+table { border-collapse:collapse; width:100%; } th,td { border:1px solid var(--line); padding:.55rem; text-align:left; }

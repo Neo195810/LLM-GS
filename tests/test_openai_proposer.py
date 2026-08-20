@@ -12,7 +12,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
 
+import httpx
 import pytest
+from openai import APITimeoutError
 
 from llm_gs import proposer as proposer_module
 from llm_gs.cli import _execute_with_failure_recording
@@ -79,6 +81,39 @@ def test_openai_proposer_uses_pinned_structured_responses_request() -> None:
         }
     }
     assert proposer.records[0].cached_tokens == 2
+
+
+def test_openai_proposer_retries_one_timeout_and_records_each_attempt() -> None:
+    class TimeoutThenSuccess:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def create(self, **kwargs: object) -> object:
+            _ = kwargs
+            self.calls += 1
+            if self.calls == 1:
+                raise APITimeoutError(httpx.Request("POST", "https://api.openai.com/v1/responses"))
+            return SimpleNamespace(
+                output_text='{"source":"DEF run m( turnLeft m)"}',
+                usage=SimpleNamespace(
+                    input_tokens=10,
+                    output_tokens=5,
+                    input_tokens_details=SimpleNamespace(cached_tokens=2),
+                ),
+                status="completed",
+            )
+
+    responses = TimeoutThenSuccess()
+    proposer = OpenAIProposer(responses)
+
+    candidate = proposer.propose("make a program")
+
+    assert candidate.model_requests == 2
+    assert [(record.retry_layer, record.exception_type) for record in proposer.records] == [
+        ("initial", "APITimeoutError"),
+        ("request", None),
+    ]
+    assert all(record.duration_ms >= 0 for record in proposer.records)
 
 
 def test_openai_proposer_uses_configured_model_name() -> None:
@@ -581,6 +616,13 @@ def test_reports_and_exports_expose_only_safe_invalid_output_metadata(tmp_path: 
 
     reporting = store.reporting_view(experiment_id(manifest))
     bundle = store.export_bundle(experiment_id(manifest))
+    observations = cast(dict[str, object], reporting["request_observations"])
+    assert observations["attempts"] == 2
+    assert observations["successful"] == 2
+    assert observations["timeouts"] == 0
+    assert observations["exception_types"] == {}
+    assert observations["matrix_arm_retries"] == 0
+    assert cast(dict[str, dict[str, int]], observations["retry_layers"])["initial"]["attempts"] == 2
     for public_output in (reporting, bundle):
         serialized = json.dumps(public_output, sort_keys=True)
         assert "raw-invalid-response-marker" not in serialized
@@ -1166,7 +1208,8 @@ def test_openai_proposer_releases_reservation_only_when_transport_confirms_no_su
     with pytest.raises(RequestNotSubmittedError, match="not sent"):
         proposer.propose("make a program")
 
-    assert proposer.records == []
+    assert proposer.records[0].cost_state == "not_submitted"
+    assert proposer.records[0].exception_type == "RequestNotSubmittedError"
     assert budget.summary()["remaining_usd"] == 0.01
 
 

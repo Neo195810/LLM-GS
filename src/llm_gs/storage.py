@@ -276,11 +276,17 @@ class WorkspaceStore:
             for record in records:
                 connection.execute(
                     """INSERT OR IGNORE INTO model_request_records(
-                    execution_id, attempt, input_tokens, output_tokens, cached_tokens, finish_reason,
-                    warning, cost_usd, cost_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    execution_id, attempt, correction_attempt, request_retry, retry_layer, duration_ms,
+                    exception_type, input_tokens, output_tokens, cached_tokens, finish_reason, warning,
+                    cost_usd, cost_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         execution_id,
                         record.attempt,
+                        record.correction_attempt,
+                        record.request_retry,
+                        record.retry_layer,
+                        record.duration_ms,
+                        record.exception_type,
                         record.input_tokens,
                         record.output_tokens,
                         record.cached_tokens,
@@ -719,6 +725,13 @@ class WorkspaceStore:
                 )""",
                 (experiment_id,),
             ).fetchone()
+            request_observations = connection.execute(
+                """SELECT retry_layer, duration_ms, exception_type FROM model_request_records
+                WHERE execution_id IN (
+                    SELECT execution_id FROM executions WHERE experiment_id = ?
+                ) ORDER BY execution_id, attempt""",
+                (experiment_id,),
+            ).fetchall()
         audit = report.get("audit")
         protocol = str(audit.get("memory_protocol", "none")) if isinstance(audit, dict) else "none"
         matrix_arm_state = str(matrix_arm[0]) if matrix_arm is not None else "unregistered"
@@ -731,6 +744,8 @@ class WorkspaceStore:
             }
             for row in rows
         ]
+        request_summary = _request_observation_summary(request_observations)
+        request_summary["matrix_arm_retries"] = max(0, len(executions) - 1)
         return {
             **report,
             "protocol": "Frozen" if protocol == "frozen-v1" else "Online" if protocol == "online-v1" else "None",
@@ -744,6 +759,7 @@ class WorkspaceStore:
                 "cached_tokens": int(cost_row[3]) if cost_row else 0,
                 "output_tokens": int(cost_row[4]) if cost_row else 0,
             },
+            "request_observations": request_summary,
             "executions": executions,
             "missingness": {
                 "incomplete_executions": sum(item["status"] == "running" for item in executions)
@@ -1041,7 +1057,7 @@ class WorkspaceStore:
         CREATE TABLE IF NOT EXISTS program_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, source TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS artifacts (artifact_hash TEXT PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS episode_evaluations (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, task_seed INTEGER NOT NULL, episode_json TEXT NOT NULL, artifact_hash TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, cost_usd REAL NOT NULL DEFAULT 0, cost_state TEXT NOT NULL DEFAULT 'unavailable', PRIMARY KEY (execution_id, attempt));
+        CREATE TABLE IF NOT EXISTS model_request_records (execution_id TEXT NOT NULL, attempt INTEGER NOT NULL, correction_attempt INTEGER NOT NULL DEFAULT 1, request_retry INTEGER NOT NULL DEFAULT 0, retry_layer TEXT NOT NULL DEFAULT 'initial', duration_ms INTEGER NOT NULL DEFAULT 0, exception_type TEXT, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, finish_reason TEXT, warning TEXT, cost_usd REAL NOT NULL DEFAULT 0, cost_state TEXT NOT NULL DEFAULT 'unavailable', PRIMARY KEY (execution_id, attempt));
         CREATE TABLE IF NOT EXISTS invalid_output_artifacts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, phase TEXT NOT NULL, attempt INTEGER NOT NULL, validation_stage TEXT NOT NULL, validation_error TEXT NOT NULL, finish_reason TEXT, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cached_tokens INTEGER NOT NULL, response_hash TEXT NOT NULL, response_original_length INTEGER NOT NULL, response_truncated INTEGER NOT NULL, correction_prompt_hash TEXT, correction_prompt_original_length INTEGER, correction_prompt_truncated INTEGER);
         CREATE TABLE IF NOT EXISTS repair_attempts (id INTEGER PRIMARY KEY, execution_id TEXT NOT NULL, round INTEGER NOT NULL, parent_source TEXT NOT NULL, candidate_source TEXT NOT NULL, diagnosis_json TEXT NOT NULL, intent_json TEXT NOT NULL, normalized_ast_difference TEXT NOT NULL, UNIQUE(execution_id, round));
         CREATE TABLE IF NOT EXISTS memory_entries (entry_id TEXT PRIMARY KEY, entry_json TEXT NOT NULL);
@@ -1072,6 +1088,17 @@ class WorkspaceStore:
             connection.execute(
                 "ALTER TABLE model_request_records ADD COLUMN cost_state TEXT NOT NULL DEFAULT 'unavailable'"
             )
+        for column, definition in (
+            ("correction_attempt", "INTEGER NOT NULL DEFAULT 1"),
+            ("request_retry", "INTEGER NOT NULL DEFAULT 0"),
+            ("retry_layer", "TEXT NOT NULL DEFAULT 'initial'"),
+            ("duration_ms", "INTEGER NOT NULL DEFAULT 0"),
+            ("exception_type", "TEXT"),
+        ):
+            if column not in request_record_columns:
+                connection.execute(
+                    f"ALTER TABLE model_request_records ADD COLUMN {column} {definition}"
+                )
         if "failed_execution_id" not in replacement_columns:
             connection.execute("ALTER TABLE execution_replacements RENAME TO execution_replacements_v1")
             connection.execute(
@@ -1154,9 +1181,43 @@ def _upgrade_model_request_record_costs(records: dict[str, object]) -> dict[str,
                 **record,
                 "cost_usd": record.get("cost_usd", 0.0),
                 "cost_state": record.get("cost_state", "unavailable"),
+                "correction_attempt": record.get("correction_attempt", 1),
+                "request_retry": record.get("request_retry", 0),
+                "retry_layer": record.get("retry_layer", "initial"),
+                "duration_ms": record.get("duration_ms", 0),
+                "exception_type": record.get("exception_type"),
             }
         )
     return {**records, "model_request_records": upgraded}
+
+
+def _request_observation_summary(rows: Sequence[tuple[object, ...]]) -> dict[str, object]:
+    retry_layers: dict[str, dict[str, int]] = {}
+    exception_types: dict[str, int] = {}
+    total_duration_ms = 0
+    timeout_count = 0
+    successful = 0
+    for retry_layer, duration_ms, exception_type in rows:
+        layer = str(retry_layer)
+        duration = int(duration_ms) if isinstance(duration_ms, (int, float)) else 0
+        layer_summary = retry_layers.setdefault(layer, {"attempts": 0, "duration_ms": 0})
+        layer_summary["attempts"] += 1
+        layer_summary["duration_ms"] += duration
+        total_duration_ms += duration
+        if isinstance(exception_type, str):
+            exception_types[exception_type] = exception_types.get(exception_type, 0) + 1
+            if exception_type == "APITimeoutError":
+                timeout_count += 1
+        else:
+            successful += 1
+    return {
+        "attempts": len(rows),
+        "successful": successful,
+        "duration_ms": total_duration_ms,
+        "timeouts": timeout_count,
+        "exception_types": exception_types,
+        "retry_layers": retry_layers,
+    }
 
 
 def _bundle_checksum(payload: dict[str, object]) -> str:

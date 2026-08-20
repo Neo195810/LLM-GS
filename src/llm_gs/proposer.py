@@ -6,9 +6,10 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
+from time import perf_counter
 from typing import Protocol, cast
 
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from llm_gs.contracts import CandidateProgram
 from prog_policies.karel.dsl import KarelDSL
@@ -35,6 +36,8 @@ PROPOSAL_SCHEMA = {
     },
 }
 CORRECTION_ATTEMPTS = 2
+REQUEST_TIMEOUT_SECONDS = 60.0
+REQUEST_RETRY_ATTEMPTS = 1
 FEEDBACK_LIMIT = 8000
 INVALID_OUTPUT_CONTENT_LIMIT = 64 * 1024
 GENERIC_DSL_CONTRACT = (
@@ -154,6 +157,11 @@ class CostBudget:
 @dataclass(frozen=True)
 class ModelRequestRecord:
     attempt: int
+    correction_attempt: int
+    request_retry: int
+    retry_layer: str
+    duration_ms: int
+    exception_type: str | None
     input_tokens: int
     output_tokens: int
     cached_tokens: int
@@ -195,7 +203,12 @@ class OpenAIProposer:
         model_name: str = MODEL_NAME,
     ) -> None:
         self._client: ResponsesClient = (
-            client if client is not None else cast(ResponsesClient, OpenAI().responses)
+            client
+            if client is not None
+            else cast(
+                ResponsesClient,
+                OpenAI(timeout=REQUEST_TIMEOUT_SECONDS, max_retries=0).responses,
+            )
         )
         self._input_token_limit = input_token_limit
         self._output_token_limit = output_token_limit
@@ -225,23 +238,9 @@ class OpenAIProposer:
         if _token_estimate(request_prompt) > self._input_token_limit:
             raise ModelOutputFailure("request input exceeds the configured token budget")
         invalid_fingerprints: set[str] = set()
+        request_count_before = len(self.records)
         for attempt in range(1, CORRECTION_ATTEMPTS + 2):
-            reservation = self._reserve_request_cost()
-            try:
-                response = self._client.create(
-                    model=self._model_name,
-                    reasoning={"effort": REASONING_EFFORT},
-                    input=request_prompt,
-                    max_output_tokens=self._output_token_limit,
-                    text={"format": {"type": "json_schema", **PROPOSAL_SCHEMA}},
-                )
-            except RequestNotSubmittedError:
-                self._release_reservation(reservation)
-                raise
-            except Exception:
-                self._record_unknown_request(attempt, reservation)
-                raise
-            self._record_usage(response, attempt, reservation)
+            response = self._create_with_request_retry(request_prompt, attempt)
             if getattr(response, "status", None) == "incomplete":
                 validation_error = ProposalValidationError(
                     "schema", INCOMPLETE_RESPONSE_DIAGNOSTIC
@@ -257,7 +256,10 @@ class OpenAIProposer:
                     except Exception as error:
                         validation_error = ProposalValidationError("dsl", str(error))
                     else:
-                        return CandidateProgram(source=source, model_requests=attempt)
+                        return CandidateProgram(
+                            source=source,
+                            model_requests=len(self.records) - request_count_before,
+                        )
             candidate = _response_candidate(response)
             fingerprint = sha256(
                 _normalize_source(_response_candidate_raw(response)).encode("utf-8")
@@ -309,10 +311,70 @@ class OpenAIProposer:
             )
         )
 
-    def _record_usage(self, response: object, attempt: int, reservation: float | None) -> None:
+    def _create_with_request_retry(self, request_prompt: str, correction_attempt: int) -> object:
+        last_error: Exception | None = None
+        for request_retry in range(REQUEST_RETRY_ATTEMPTS + 1):
+            reservation = self._reserve_request_cost()
+            started_at = perf_counter()
+            try:
+                response = self._client.create(
+                    model=self._model_name,
+                    reasoning={"effort": REASONING_EFFORT},
+                    input=request_prompt,
+                    max_output_tokens=self._output_token_limit,
+                    text={"format": {"type": "json_schema", **PROPOSAL_SCHEMA}},
+                )
+            except RequestNotSubmittedError as error:
+                self._release_reservation(reservation)
+                self._record_request_failure(
+                    correction_attempt,
+                    request_retry,
+                    perf_counter() - started_at,
+                    error,
+                    cost_state="not_submitted",
+                )
+                raise
+            except Exception as error:
+                self._record_unknown_request(
+                    correction_attempt,
+                    reservation,
+                    duration_seconds=perf_counter() - started_at,
+                    exception_type=type(error).__name__,
+                    request_retry=request_retry,
+                )
+                if request_retry < REQUEST_RETRY_ATTEMPTS and _is_retryable_provider_failure(error):
+                    last_error = error
+                    continue
+                raise
+            self._record_usage(
+                response,
+                correction_attempt,
+                reservation,
+                duration_seconds=perf_counter() - started_at,
+                request_retry=request_retry,
+            )
+            return response
+        assert last_error is not None
+        raise last_error
+
+    def _record_usage(
+        self,
+        response: object,
+        correction_attempt: int,
+        reservation: float | None,
+        *,
+        duration_seconds: float,
+        request_retry: int,
+    ) -> None:
         usage = getattr(response, "usage", None)
         if usage is None:
-            self._record_unknown_request(attempt, reservation, getattr(response, "status", None))
+            self._record_unknown_request(
+                correction_attempt,
+                reservation,
+                getattr(response, "status", None),
+                duration_seconds=duration_seconds,
+                request_retry=request_retry,
+            )
             return
         try:
             input_tokens = int(usage.input_tokens)
@@ -324,7 +386,13 @@ class OpenAIProposer:
             if cached_tokens > input_tokens:
                 raise ValueError("model response reports more cached than input tokens")
         except (AttributeError, TypeError, ValueError) as error:
-            self._record_unknown_request(attempt, reservation, getattr(response, "status", None))
+            self._record_unknown_request(
+                correction_attempt,
+                reservation,
+                getattr(response, "status", None),
+                duration_seconds=duration_seconds,
+                request_retry=request_retry,
+            )
             raise ModelOutputFailure("model response contains invalid usage") from error
         used_tokens = input_tokens + output_tokens
         cost_usd = _estimated_cost_usd(
@@ -340,6 +408,11 @@ class OpenAIProposer:
         self.records.append(
             ModelRequestRecord(
                 attempt=self._next_record_attempt(),
+                correction_attempt=correction_attempt,
+                request_retry=request_retry,
+                retry_layer="request" if request_retry else "initial",
+                duration_ms=round(duration_seconds * 1000),
+                exception_type=None,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 cached_tokens=cached_tokens,
@@ -355,7 +428,14 @@ class OpenAIProposer:
             raise ModelOutputFailure("model request exceeds the configured cost cap")
 
     def _record_unknown_request(
-        self, attempt: int, reservation: float | None, finish_reason: object = None
+        self,
+        correction_attempt: int,
+        reservation: float | None,
+        finish_reason: object = None,
+        *,
+        duration_seconds: float,
+        exception_type: str | None = None,
+        request_retry: int,
     ) -> None:
         cost_usd = reservation or 0.0
         if reservation is not None:
@@ -364,6 +444,11 @@ class OpenAIProposer:
         self.records.append(
             ModelRequestRecord(
                 attempt=self._next_record_attempt(),
+                correction_attempt=correction_attempt,
+                request_retry=request_retry,
+                retry_layer="request" if request_retry else "initial",
+                duration_ms=round(duration_seconds * 1000),
+                exception_type=exception_type,
                 input_tokens=0,
                 output_tokens=0,
                 cached_tokens=0,
@@ -371,6 +456,33 @@ class OpenAIProposer:
                 warning=None,
                 cost_usd=cost_usd,
                 cost_state="unknown",
+            )
+        )
+
+    def _record_request_failure(
+        self,
+        correction_attempt: int,
+        request_retry: int,
+        duration_seconds: float,
+        error: Exception,
+        *,
+        cost_state: str,
+    ) -> None:
+        self.records.append(
+            ModelRequestRecord(
+                attempt=self._next_record_attempt(),
+                correction_attempt=correction_attempt,
+                request_retry=request_retry,
+                retry_layer="request" if request_retry else "initial",
+                duration_ms=round(duration_seconds * 1000),
+                exception_type=type(error).__name__,
+                input_tokens=0,
+                output_tokens=0,
+                cached_tokens=0,
+                finish_reason=None,
+                warning=None,
+                cost_usd=0.0,
+                cost_state=cost_state,
             )
         )
 
@@ -522,6 +634,14 @@ def _estimated_cost_usd(
         + cached_tokens * pricing.cached_input_usd_per_token
         + output_tokens * pricing.output_usd_per_token
     )
+
+
+def _is_retryable_provider_failure(error: Exception) -> bool:
+    if isinstance(error, (APITimeoutError, APIConnectionError)):
+        return True
+    if not isinstance(error, APIStatusError):
+        return False
+    return error.status_code in {408, 429} or error.status_code >= 500
 
 
 def _correction_prompt(

@@ -176,10 +176,11 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             + len(seed_suite.development) * candidate_budget
             + len(seed_suite.held_out)
         )
-    # OpenAIProposer permits up to three schema/DSL correction requests for
-    # every candidate, so the request budget must include that bounded retry.
+    # OpenAIProposer permits three schema/DSL correction requests per candidate,
+    # each with one observable provider retry, so every submitted request remains
+    # inside the fixed Model Budget.
     model_request_budget = (
-        candidate_budget * 3
+        candidate_budget * 3 * 2
         if is_karel_task or is_minigrid_task or is_textworld_task
         else candidate_budget
     )

@@ -182,6 +182,18 @@ _Avoid_: per-arm budget, OpenAI credit
 A role-specific hard limit on serialized input or generated output, calibrated before held-out evaluation from normal pilot behavior and fixed in the Experiment Manifest.
 _Avoid_: Model context window, Model Budget
 
+**Model Request Attempt**:
+One timed call to the model provider for a proposal, correction, reflection, or repair. It has a 60-second timeout and records its duration, terminal result or exception type, and retry layer.
+_Avoid_: Model Request, Infrastructure Retry, Repair Cycle
+
+**Request Retry**:
+One bounded repeat of the same Model Request Attempt after a timeout or a retryable provider failure. A request has at most two attempts total before it becomes an Infrastructure Failure.
+_Avoid_: Infrastructure Retry, Correction, Repair Cycle
+
+**Retry Layer**:
+The scope at which work is repeated: a Request Retry repeats only one Model Request Attempt, while an Infrastructure Retry may repeat a wider Matrix Arm operation. Both layers remain separately observable.
+_Avoid_: Correction, Repair Cycle
+
 **Context Trimming**:
 The deterministic, versioned removal of optional Memory Entries or Evaluation Evidence when a serialized request reaches its Request Token Limit.
 _Avoid_: Summarization, truncation

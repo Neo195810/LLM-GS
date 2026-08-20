@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>看懂 matrix run 的 LLM request 放大</title><link rel="stylesheet" href="../assets/teach.css">
+<script type="module">import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'; mermaid.initialize({startOnLoad:true,theme:'neutral'});</script></head>
+<body><main><article>
+<p><small>LLM-GS · Lesson 0001 · 約 5 分鐘</small></p>
+<h1>為什麼 <code>matrix run</code> 會變慢？</h1>
+<p class="lead">把它想成「48 個實驗 arm 排隊，每個 arm 又可能找多個候選、修理失敗候選，而每次找候選還可能重問模型」。</p>
+<h2>先記住一句話</h2>
+<div class="callout"><strong>慢，不是因為一個迴圈失控；是因為多個有限的迴圈相乘。</strong><br>矩陣數量 × 候選數量 × 修復輪次 × 單次回覆校正次數。</div>
+<h2>圖一：整個 matrix run</h2>
+<div class="mermaid">flowchart TD
+  A[讀取 matrix YAML] --> B[建立 arms]
+  B --> C[1 replicate × 4 tasks × 3 search × 4 failure = 48 arms]
+  C --> D{逐一執行 arm}
+  D --> E[建立 memory-training candidate]
+  E --> F[產生 development candidates]
+  F --> G{候選失敗？}
+  G -- 否 --> H[選出 candidate]
+  G -- 是 --> I[regenerate 或 repair]
+  I --> J{最多 max_repair_cycles=1}
+  J -- 再試 --> F
+  J -- 結束 --> H
+  H --> K[held-out evaluation：本地 evaluator]
+  K --> D
+  D --> L[輸出 matrix report]</div>
+<p>注意：held-out evaluation 本身不是 LLM 呼叫；真正昂貴的是 E、F、I。</p>
+<h2>圖二：一個候選就可能再放大</h2>
+<div class="mermaid">flowchart LR
+  A[要求模型產生程式] --> B{JSON / DSL 合法？}
+  B -- 是 --> C[候選完成：1 request]
+  B -- 否 --> D[建立 correction prompt]
+  D --> E[再問模型]
+  E --> F{仍不合法？}
+  F -- 否 --> C
+  F -- 是 --> G[最後一次 correction]
+  G --> H[最多總共 3 requests]
+  C --> I{development 失敗？}
+  I -- 是 --> J[repair / regenerate]
+  J --> A</div>
+<p>所以「一個候選」不是固定 1 次模型回覆，而是最多 3 次；如果評估失敗，還會再開一個候選流程。</p>
+<h2>用目前設定算數字</h2>
+<p>目前 YAML 是 1 個 replicate、每個 arm 有 1 個 memory-training seed、1 個 development seed、1 個 held-out seed，且 <code>max_repair_cycles: 1</code>。</p>
+<div class="formula">single_candidate：population 1
+候選／修復上限 = 1 × (1 + 1) = 2
+模型 request 上限 = 2 × 3 = 6 / arm
+
+cem、cebs：population 4
+候選／修復上限 = 4 × (1 + 1) = 8
+模型 request 上限 = 8 × 3 = 24 / arm
+
+總上限 = 16 × 6 + 32 × 24 = 864 requests</div>
+<p>這是上限，不是每次必然達到；但它解釋了為何一次完整矩陣會很慢。</p>
+<h2>練習：找出哪一層在放大</h2>
+<p>假設只跑一個 <code>cem + reflect</code> arm，population=4，且每個候選第一次都輸出非法 DSL，第二次才成功。</p>
+<ol><li>每個候選需要幾次模型 request？</li><li>四個候選一共幾次？</li><li>若其中一個候選評估失敗，再做一次 repair，且 repair 也需要兩次回覆，總數是多少？</li></ol>
+<details><summary>查看答案</summary><p>1. 每個候選 2 次。2. 4×2=8 次。3. 8+2=10 次。這還沒算其他 arm。</p></details>
+<h2>回到程式碼時看哪裡</h2>
+<ul><li><a href="../src/llm_gs/matrix.py#L20">matrix.py:20</a>：arm 的笛卡兒積。</li><li><a href="../src/llm_gs/cli.py#L229">cli.py:229</a>：arm 順序執行。</li><li><a href="../src/llm_gs/execution.py#L357">execution.py:357</a>：population candidates。</li><li><a href="../src/llm_gs/execution.py#L420">execution.py:420</a>：失敗後 repair／regenerate。</li><li><a href="../src/llm_gs/proposer.py#L228">proposer.py:228</a>：單次候選最多 3 次 request。</li></ul>
+<p><small>Mermaid 的 flowchart 由節點與箭頭組成；可參考 <a href="https://mermaid.js.org/syntax/flowchart">Mermaid 官方 Flowchart Syntax</a>。哪個箭頭或數字仍不清楚，直接問我，我們可以只放大那一段。</small></p>
+<p><a href="../reference/matrix-run-llm-request-cheatsheet.html">→ 開啟一頁速查表</a></p>
+</article></main></body></html>

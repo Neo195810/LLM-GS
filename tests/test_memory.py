@@ -287,8 +287,8 @@ def test_resolve_manifest_scales_budgets_with_population_size() -> None:
     # population_size == 1 stays byte-identical to the pre-population-search
     # baseline: candidate_budget == 1 + repair_rounds.
     assert single_candidate.budgets["episode_evaluations"] == 2 * 3
-    assert single_candidate.budgets["model_requests"] == 3 * 3
+    assert single_candidate.budgets["model_requests"] == 3 * 3 * 2
 
     # population_size > 1 scales candidate_budget by population_size.
     assert population.budgets["episode_evaluations"] == 2 * (4 * 3)
-    assert population.budgets["model_requests"] == (4 * 3) * 3
+    assert population.budgets["model_requests"] == (4 * 3) * 3 * 2

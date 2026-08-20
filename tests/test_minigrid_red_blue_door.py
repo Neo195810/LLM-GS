@@ -120,7 +120,7 @@ failure_strategy:
     assert validation["manifest"]["budgets"] == {
         "episode_evaluations": 2,
         "input_tokens": 4096,
-        "model_requests": 6,
+        "model_requests": 12,
         "output_tokens": 4096,
     }
     evidence = report["evaluation_evidence"][0]["evidence"]

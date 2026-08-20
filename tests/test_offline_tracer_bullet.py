@@ -338,7 +338,7 @@ failure_strategy:
     expected_budgets = {
         "episode_evaluations": 2,
         "input_tokens": 4096,
-        "model_requests": 6,
+        "model_requests": 12,
         "output_tokens": 4096,
     }
     expected_search_strategy = {
@@ -458,7 +458,7 @@ failure_strategy:
 
     manifest = json.loads(run_cli("validate", str(specification)).stdout)["manifest"]
 
-    assert manifest["budgets"]["model_requests"] == 9
+    assert manifest["budgets"]["model_requests"] == 18
 
 
 def test_reflect_strategy_honors_a_zero_repair_limit(tmp_path: Path) -> None:
