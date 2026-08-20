@@ -90,7 +90,7 @@ def test_minigrid_dsl_uses_normalized_ast_features_and_validation() -> None:
 
 
 def test_door_key_rejects_karel_only_dsl_before_execution() -> None:
-    with pytest.raises(Exception, match="Unrecognized token"):
+    with pytest.raises(Exception, match="Unrecognized DSL symbol"):
         _validate_dsl("DEF run m( turnLeft m)", task_name="DoorKey")
 
 

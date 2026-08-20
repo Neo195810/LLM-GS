@@ -31,7 +31,7 @@ class DSLParseError(ValueError):
             f"actual {received}; context `{self.context}`"
         )
         if expected == "known DSL symbol" and actual is not None:
-            message = f"Unrecognized token: {actual}. {message}"
+            message = f"Unrecognized DSL symbol `{actual}`. {message}"
         super().__init__(message)
 
 

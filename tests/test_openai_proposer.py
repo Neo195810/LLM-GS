@@ -323,6 +323,56 @@ def test_openai_proposer_observes_redacted_invalid_outputs_before_correction() -
     assert "sk-prompt-secret" not in artifact.correction_prompt
 
 
+@pytest.mark.parametrize(
+    ("source", "evidence"),
+    [
+        ("DEF run m( w) m)", "actual `w)`"),
+        ("DEF run m( ELSE m)", "actual `ELSE`"),
+    ],
+)
+def test_invalid_output_keeps_safe_dsl_symbols_while_redacting_credentials(
+    source: str, evidence: str
+) -> None:
+    responses = FakeResponses(
+        [
+            json.dumps({"source": source}),
+            '{"source":"DEF run m( turnLeft m)"}',
+        ]
+    )
+    observed: list[InvalidOutputArtifact] = []
+    proposer = OpenAIProposer(responses)
+    proposer.set_invalid_output_observer(observed.append)
+
+    candidate = proposer.propose("Solve CleanHouse with token: private-credential-value")
+
+    assert candidate.model_requests == 2
+    artifact = observed[0]
+    assert evidence in artifact.validation_error
+    assert artifact.correction_prompt is not None
+    assert evidence in artifact.correction_prompt
+
+
+def test_invalid_output_redacts_token_credential_from_artifact_fields() -> None:
+    credential = "private-credential-value"
+    responses = FakeResponses(
+        [
+            json.dumps({"source": f"not dsl token: {credential}"}),
+            '{"source":"DEF run m( turnLeft m)"}',
+        ]
+    )
+    observed: list[InvalidOutputArtifact] = []
+    proposer = OpenAIProposer(responses)
+    proposer.set_invalid_output_observer(observed.append)
+
+    proposer.propose("Solve CleanHouse")
+
+    artifact = observed[0]
+    assert credential not in artifact.response
+    assert credential not in artifact.validation_error
+    assert artifact.correction_prompt is not None
+    assert credential not in artifact.correction_prompt
+
+
 def test_invalid_output_keeps_full_redacted_validation_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
