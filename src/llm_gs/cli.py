@@ -231,6 +231,9 @@ def _matrix_run(args: argparse.Namespace) -> dict[str, object]:
     total = len(manifests)
     for index, manifest in enumerate(manifests, start=1):
         resolved_experiment_id = experiment_id(manifest)
+        if store.has_completed_execution(resolved_experiment_id):
+            reports.append(store.reporting_view(resolved_experiment_id))
+            continue
         previous_failed_execution = store.latest_failed_execution_id(resolved_experiment_id)
         for infrastructure_retry in range(3):
             attempt = infrastructure_retry + 1

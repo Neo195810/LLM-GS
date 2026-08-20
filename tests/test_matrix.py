@@ -776,6 +776,11 @@ max_repair_cycles: 1
     assert arm["failure_classes"]["infrastructure"] == 3
     assert arm["failure_classes"]["replacements"] == 3
 
+    rerun = args.handler(args)
+
+    assert attempts == 4
+    assert rerun["arm_reports"][0]["executions"] == arm["executions"]
+
 
 def test_matrix_run_recovers_with_fake_client_without_erasing_history(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -9,11 +9,14 @@ invocations can recover it, while cost exhaustion remains explicitly
 
 **Blocked by:** 01 — Record observable Matrix Arm states.
 
-**Status:** ready-for-agent
+**Status:** complete
 
-- [ ] Re-running a recoverable arm creates a new Execution and preserves all
+- [x] Re-running a recoverable arm creates a new Execution and preserves all
   older Execution records.
-- [ ] Infrastructure retries and terminal failures are durable and bounded;
+- [x] Infrastructure retries and terminal failures are durable and bounded;
   model-output failures are not retried as infrastructure failures.
-- [ ] CLI-level fake-client tests verify resume behavior, state/error reporting,
+- [x] CLI-level fake-client tests verify resume behavior, state/error reporting,
   and protocol-separated aggregation.
+
+**Verified:** `uv run pytest tests/test_matrix.py -q` (23 passed),
+`uv run mypy src/llm_gs`, and `uv run ruff check src/llm_gs tests`.
