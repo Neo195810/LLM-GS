@@ -16,15 +16,22 @@ from prog_policies.minigrid.dsl import MinigridDSL
 
 MODEL_NAME = "gpt-5.6-luna"
 REASONING_EFFORT = "medium"
-PROPOSAL_SCHEMA_VERSION = 1
+PROPOSAL_SCHEMA_VERSION = 2
+PROPOSAL_SOURCE_CHAR_LIMIT = 2000
 PROPOSAL_SCHEMA = {
-    "name": "candidate_program_v1",
+    "name": "candidate_program_v2",
     "strict": True,
     "schema": {
         "type": "object",
         "additionalProperties": False,
         "required": ["source"],
-        "properties": {"source": {"type": "string", "minLength": 1}},
+        "properties": {
+            "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": PROPOSAL_SOURCE_CHAR_LIMIT,
+            }
+        },
     },
 }
 CORRECTION_ATTEMPTS = 2
@@ -34,8 +41,14 @@ GENERIC_DSL_CONTRACT = (
     "Task name is unspecified. Return JSON with only source. Use exact DSL syntax "
     "DEF run m( <statements> m), and use only actions valid for the identified "
     "task. Allowed actions: move, turnLeft, turnRight, pickMarker, putMarker, "
-    "left, right, forward, pickup, drop, toggle. Never output pseudocode, "
-    "Markdown, or Python."
+    "left, right, forward, pickup, drop, toggle. Source must be no more than "
+    "2,000 characters. Never output pseudocode, Markdown, or Python."
+)
+INCOMPLETE_RESPONSE_DIAGNOSTIC = (
+    "response was incomplete (provider status: incomplete). Return one complete "
+    "JSON object matching the proposal schema: shorten the source to well under "
+    "2,000 characters and reduce control-flow nesting depth so the full response "
+    "fits in the output-token budget."
 )
 _SECRET_PATTERNS = (
     re.compile(r"(?i)\b(sk-)[A-Za-z0-9_-]+"),
@@ -223,17 +236,22 @@ class OpenAIProposer:
                 self._record_unknown_request(attempt, reservation)
                 raise
             self._record_usage(response, attempt, reservation)
-            try:
-                source = _proposal_source(response)
-            except (AssertionError, KeyError, TypeError, ValueError) as error:
-                validation_error = ProposalValidationError("schema", str(error))
+            if getattr(response, "status", None) == "incomplete":
+                validation_error = ProposalValidationError(
+                    "schema", INCOMPLETE_RESPONSE_DIAGNOSTIC
+                )
             else:
                 try:
-                    _validate_dsl(source, _task_name_from_prompt(prompt))
-                except Exception as error:
-                    validation_error = ProposalValidationError("dsl", str(error))
+                    source = _proposal_source(response)
+                except (AssertionError, KeyError, TypeError, ValueError) as error:
+                    validation_error = ProposalValidationError("schema", str(error))
                 else:
-                    return CandidateProgram(source=source, model_requests=attempt)
+                    try:
+                        _validate_dsl(source, _task_name_from_prompt(prompt))
+                    except Exception as error:
+                        validation_error = ProposalValidationError("dsl", str(error))
+                    else:
+                        return CandidateProgram(source=source, model_requests=attempt)
             candidate = _response_candidate(response)
             fingerprint = sha256(
                 _normalize_source(_response_candidate_raw(response)).encode("utf-8")

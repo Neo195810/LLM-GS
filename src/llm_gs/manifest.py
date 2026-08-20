@@ -15,6 +15,7 @@ from llm_gs.contracts import (
     ExperimentSpecification,
 )
 from llm_gs.memory import RETRIEVER_ORDER, RETRIEVER_VERSION, RETRIEVER_WEIGHTS
+from llm_gs.proposer import PROPOSAL_SCHEMA_VERSION
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
 DSL_CONTROL_FLOW_PROMPT = (
@@ -23,6 +24,21 @@ DSL_CONTROL_FLOW_PROMPT = (
     "IF c( <condition> c) i( <statements> i); "
     "IFELSE c( <condition> c) i( <statements> i) ELSE e( <statements> e); "
     "negate conditions with not c( <condition> c). "
+)
+SOURCE_LIMIT_PROMPT = "Source must be no more than 2,000 characters. "
+KAREL_SOURCE_LIMIT_PROMPT = (
+    SOURCE_LIMIT_PROMPT
+    + "Delimiter checklist: every m(/w(/r(/i(/e(/c( has a matching close of the "
+    "same letter; close every WHILE/IF/IFELSE/REPEAT block before ending. "
+    "Example valid nested control: DEF run m( WHILE c( frontIsClear c) w( "
+    "IF c( markersPresent c) i( pickMarker i) move w) m). "
+)
+MINIGRID_SOURCE_LIMIT_PROMPT = (
+    SOURCE_LIMIT_PROMPT
+    + "Delimiter checklist: every m(/w(/r(/i(/e(/c(/h( has a matching close of "
+    "the same letter; close every WHILE/IF/IFELSE/REPEAT block before ending. "
+    "Example valid nested control: DEF run m( WHILE c( front_is_clear c) w( "
+    "IF c( is_carrying_object c) i( toggle i) forward w) m). "
 )
 KAREL_DSL_PROMPT = (
     "Return exactly one JSON object: {{\"source\": \"<DSL source>\"}}. "
@@ -33,7 +49,8 @@ KAREL_DSL_PROMPT = (
     "Conditions: frontIsClear, leftIsClear, rightIsClear, markersPresent, noMarkersPresent. "
     "Goal: {goal}. "
     "Example valid source: DEF run m( move turnLeft m). "
-    "Never output task name, pseudocode, Markdown, or Python."
+    + KAREL_SOURCE_LIMIT_PROMPT
+    + "Never output task name, pseudocode, Markdown, or Python."
 )
 MINIGRID_DSL_PROMPT = (
     "Return exactly one JSON object: {{\"source\": \"<DSL source>\"}}. "
@@ -41,12 +58,14 @@ MINIGRID_DSL_PROMPT = (
     "Source must use exact MiniGrid DSL syntax: DEF run m( <statements> m). "
     + DSL_CONTROL_FLOW_PROMPT
     + "Actions: left, right, forward, pickup, drop, toggle. "
-    "Conditions: front_is_clear, is_carrying_object, front_object_type h( red h), "
-    "front_object_type h( blue h), front_object_color h( lava h), "
-    "front_object_color h( door h), front_object_color h( ball h), "
-    "front_object_color h( box h). Goal: {goal}. "
+    "Conditions: front_is_clear, is_carrying_object, front_object_type h( lava h) "
+    "(object type domain: lava, door, ball, box), front_object_type h( door h), "
+    "front_object_type h( ball h), front_object_type h( box h), "
+    "front_object_color h( red h) (object color domain: red, blue), "
+    "front_object_color h( blue h). Goal: {goal}. "
     "Example valid source: DEF run m( forward left m). "
-    "Never output task name, pseudocode, Markdown, or Python."
+    + MINIGRID_SOURCE_LIMIT_PROMPT
+    + "Never output task name, pseudocode, Markdown, or Python."
 )
 CLEAN_HOUSE_PROMPT = KAREL_DSL_PROMPT.format(
     task="CleanHouse", goal="collect every marker"
@@ -65,8 +84,8 @@ TEXTWORLD_PILOT_PROMPT = (
     "Produce one deterministic TextWorldPilot V2 program. "
     "Use one to three semicolon-separated rules: WHEN <predicate> DO <action>. "
     "Predicates: not_has_key, has_key, chest_unlocked, chest_open. "
-    "Actions: take_key, unlock_chest, open_chest. Never output natural-language "
-    "commands, pseudocode, Markdown, or Python."
+    "Actions: take_key, unlock_chest, open_chest. " + SOURCE_LIMIT_PROMPT
+    + "Never output natural-language commands, pseudocode, Markdown, or Python."
 )
 FINAL_CANDIDATE_SELECTION_RULE = (
     "attempt_outcome,success_proportion,mean_normalized_progress,"
@@ -200,6 +219,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "prompt_sha256": sha256_bytes(
                 task_prompt(task_name).encode("utf-8")
             ).removeprefix("sha256:"),
+            "proposal_schema_version": f"v{PROPOSAL_SCHEMA_VERSION}",
             **(
                 {"outcome_classifier": f"{task_name.lower()}-v1"}
                 if is_karel_task or is_minigrid_task or is_textworld_task

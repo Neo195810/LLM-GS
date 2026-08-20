@@ -992,6 +992,7 @@ def test_experiment_identity_ignores_aliases_but_captures_resolved_components(
     assert first["manifest"]["contracts"] == {
         "parser": "offline-dsl-v1",
         "prompt_sha256": "7f056e1279d0ff8b61e3e30dd2f5fa1faa118287044bca3082d99c8d3b478e29",
+        "proposal_schema_version": "v2",
     }
     assert first["manifest"]["memory_snapshot"] == {
         "id": "none",

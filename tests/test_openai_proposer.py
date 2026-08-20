@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -65,13 +66,15 @@ def test_openai_proposer_uses_pinned_structured_responses_request() -> None:
     assert responses.calls[0]["text"] == {
         "format": {
             "type": "json_schema",
-            "name": "candidate_program_v1",
+            "name": "candidate_program_v2",
             "strict": True,
             "schema": {
                 "type": "object",
                 "additionalProperties": False,
                 "required": ["source"],
-                "properties": {"source": {"type": "string", "minLength": 1}},
+                "properties": {
+                    "source": {"type": "string", "minLength": 1, "maxLength": 2000}
+                },
             },
         }
     }
@@ -339,6 +342,39 @@ def test_invalid_output_keeps_full_redacted_validation_error(
 
     assert proposer.propose("Solve CleanHouse").source == "valid"
     assert observed[0].validation_error == "parser failure sk-[REDACTED] " + "x" * 1_500
+
+
+def test_openai_proposer_treats_incomplete_status_as_dedicated_schema_diagnostic() -> None:
+    class IncompleteThenCompleteResponses:
+        def __init__(self) -> None:
+            self._outputs = ['{"source":"DEF run m( move', '{"source":"DEF run m( move m)"}']
+            self._statuses = ["incomplete", "completed"]
+            self.calls: list[dict[str, object]] = []
+            self._usage = SimpleNamespace(
+                input_tokens=10,
+                output_tokens=5,
+                input_tokens_details=SimpleNamespace(cached_tokens=0),
+            )
+
+        def create(self, **kwargs: object) -> object:
+            self.calls.append(kwargs)
+            return SimpleNamespace(
+                output_text=self._outputs.pop(0),
+                usage=self._usage,
+                status=self._statuses.pop(0),
+            )
+
+    responses = IncompleteThenCompleteResponses()
+
+    candidate = OpenAIProposer(cast(proposer_module.ResponsesClient, responses)).propose(
+        "make a program"
+    )
+
+    assert candidate.source == "DEF run m( move m)"
+    correction = str(responses.calls[1]["input"])
+    assert "Validation error (schema):" in correction
+    assert "incomplete" in correction
+    assert "2,000 characters" in correction
 
 
 def test_openai_proposer_observes_every_terminal_invalid_output_with_empty_response() -> None:
@@ -1097,7 +1133,11 @@ def test_openai_proposer_marks_invalid_usage_as_unknown() -> None:
         ("CleanHouse", "collect every marker", "markersPresent"),
         ("FourCorners", "four corner cells and nowhere else", "putMarker"),
         ("DoorKey", "pick up the key, unlock the door, then reach the goal", "is_carrying_object"),
-        ("RedBlueDoor", "red door before opening the blue door", "front_object_type h( red h)"),
+        (
+            "RedBlueDoor",
+            "red door before opening the blue door",
+            "front_object_color h( red h)",
+        ),
     ],
 )
 def test_task_prompt_includes_goal_and_exact_dsl_contract(
@@ -1112,3 +1152,24 @@ def test_task_prompt_includes_goal_and_exact_dsl_contract(
     assert "IFELSE c(" in prompt
     assert goal in prompt
     assert task_condition in prompt
+    assert "2,000 characters" in prompt
+    assert "Delimiter checklist" in prompt
+    assert "Example valid nested control" in prompt
+
+
+@pytest.mark.parametrize(
+    ("task_name", "dsl"),
+    [
+        ("CleanHouse", KarelDSL()),
+        ("FourCorners", KarelDSL()),
+        ("DoorKey", MinigridDSL()),
+        ("RedBlueDoor", MinigridDSL()),
+    ],
+)
+def test_task_prompt_nested_control_example_parses_with_local_parser(
+    task_name: str, dsl: KarelDSL | MinigridDSL
+) -> None:
+    prompt = task_prompt(task_name)
+    match = re.search(r"Example valid nested control: (DEF run m\([^.]*\))\. ", prompt)
+    assert match is not None
+    dsl.parse_str_to_node(match.group(1))  # type: ignore[no-untyped-call]
