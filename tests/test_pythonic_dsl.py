@@ -8,6 +8,7 @@ import pytest
 from llm_gs.contracts import ExperimentSpecification
 from llm_gs.manifest import experiment_id, resolve_manifest, task_prompt
 from llm_gs.proposer import (
+    ModelOutputFailure,
     OpenAIProposer,
     lower_pythonic_dsl,
     normalize_dsl_backup,
@@ -150,17 +151,18 @@ def test_invalid_pythonic_source_admits_valid_backup() -> None:
 
 
 @pytest.mark.parametrize(
-    ("backup", "expected"),
+    ("backup", "task_name", "expected"),
     [
-        ("```\nDEF run m( move m)\n```", "DEF run m( move m)"),
-        (" DEF   run m(  move()  m) ", "DEF run m( move m)"),
-        ("DEF run m( move", "DEF run m( move m)"),
+        ("```\nDEF run m( move m)\n```", "CleanHouse", "DEF run m( move m)"),
+        (" DEF   run m(  move()  m) ", "CleanHouse", "DEF run m( move m)"),
+        ("DEF run m( move", "CleanHouse", "DEF run m( move m)"),
+        ("DEF run m( forward() m)", "DoorKey", "DEF run m( forward m)"),
     ],
 )
 def test_normalize_dsl_backup_admits_only_documented_formatting(
-    backup: str, expected: str
+    backup: str, task_name: str, expected: str
 ) -> None:
-    assert normalize_dsl_backup(backup, "CleanHouse") == expected
+    assert normalize_dsl_backup(backup, task_name) == expected
 
 
 @pytest.mark.parametrize(
@@ -216,6 +218,46 @@ def test_pythonic_correction_includes_pair_and_dual_admission_diagnostics() -> N
     assert "DSL backup:" in correction
     assert "Python admission error:" in correction
     assert "Backup DSL admission error:" in correction
+
+
+def test_pythonic_repetition_uses_normalized_complete_proposal_pair() -> None:
+    first = json.dumps(
+        {
+            "python_source": "def run():\n    import os\n",
+            "dsl_backup": "```\nDEF run m( move() mystery m)\n```",
+        }
+    )
+    normalized = json.dumps(
+        {
+            "python_source": "def run(): import os",
+            "dsl_backup": "DEF run m( move mystery m)",
+        }
+    )
+
+    class _RepeatedResponses(_Responses):
+        def __init__(self) -> None:
+            super().__init__(first)
+            self.outputs = [first, normalized, normalized]
+
+        def create(self, **kwargs: object) -> object:
+            self.calls.append(kwargs)
+            self.output = self.outputs.pop(0)
+            return SimpleNamespace(
+                output_text=self.output,
+                usage=SimpleNamespace(
+                    input_tokens=1,
+                    output_tokens=1,
+                    input_tokens_details=SimpleNamespace(cached_tokens=0),
+                ),
+                status="completed",
+            )
+
+    responses = _RepeatedResponses()
+
+    with pytest.raises(ModelOutputFailure, match="schema or DSL validation"):
+        OpenAIProposer(responses).propose(task_prompt("CleanHouse"))
+
+    assert "Repeated invalid output: yes." in str(responses.calls[2]["input"])
 
 
 def test_direct_dsl_contract_is_preserved_for_textworld_and_offline() -> None:

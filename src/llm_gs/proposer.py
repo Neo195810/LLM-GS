@@ -714,9 +714,7 @@ def _payload_string(payload: dict[object, object], key: str) -> str:
 
 def normalize_dsl_backup(source: str, task_name: str) -> str:
     """Admit only unambiguous formatting repairs before validating a Backup DSL."""
-    unfenced = _code_fence_source(source)
-    normalized = _normalize_source(unfenced if unfenced is not None else source)
-    normalized = _ZERO_ARGUMENT_DSL_ACTION_PATTERN.sub(r"\1", normalized)
+    normalized = _normalize_dsl_backup_formatting(source)
     try:
         _validate_dsl(normalized, task_name)
     except Exception as initial_error:
@@ -734,6 +732,12 @@ def normalize_dsl_backup(source: str, task_name: str) -> str:
                 f"{closure_error}"
             ) from closure_error
     return normalized
+
+
+def _normalize_dsl_backup_formatting(source: str) -> str:
+    unfenced = _code_fence_source(source)
+    normalized = _normalize_source(unfenced if unfenced is not None else source)
+    return _ZERO_ARGUMENT_DSL_ACTION_PATTERN.sub(r"\1", normalized)
 
 
 def _only_missing_top_level_closure(source: str) -> bool:
@@ -954,12 +958,19 @@ def _invalid_output_fingerprint(response: object) -> str:
         raw = json.dumps(
             {
                 "python_source": _normalize_source(payload["python_source"]),
-                "dsl_backup": _normalize_source(payload["dsl_backup"]),
+                "dsl_backup": _normalized_backup_fingerprint(payload["dsl_backup"]),
             },
             sort_keys=True,
             separators=(",", ":"),
         )
     return sha256(_normalize_source(raw).encode("utf-8")).hexdigest()
+
+
+def _normalized_backup_fingerprint(source: str) -> str:
+    normalized = _normalize_dsl_backup_formatting(source)
+    if _only_missing_top_level_closure(normalized):
+        return f"{normalized} m)"
+    return normalized
 
 
 def _safe_progress_detail(error: ProposalValidationError) -> str:
