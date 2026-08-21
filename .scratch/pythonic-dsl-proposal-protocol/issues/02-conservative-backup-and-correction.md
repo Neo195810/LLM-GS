@@ -6,9 +6,9 @@ bounded, self-contained diagnostics for both representations.
 
 **Blocked by:** 01 — Add Pythonic proposal admission.
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Backup DSL is evaluated only after Python admission fails, and an admitted Python result always wins.
-- [ ] Only code-fence, token-whitespace, zero-argument action-parenthesis, and uniquely provable top-level closure normalization are accepted.
-- [ ] Ambiguous delimiter inference, control-flow rewriting, and fixed-repeat substitution remain Model Output Failure inputs rather than automatic repairs.
-- [ ] Corrections preserve the existing request bounds and include redacted Python, backup, and dual-path diagnostics.
+- [x] Backup DSL is evaluated only after Python admission fails, and an admitted Python result always wins.
+- [x] Only code-fence, token-whitespace, zero-argument action-parenthesis, and uniquely provable top-level closure normalization are accepted.
+- [x] Ambiguous delimiter inference, control-flow rewriting, and fixed-repeat substitution remain Model Output Failure inputs rather than automatic repairs.
+- [x] Corrections preserve the existing request bounds and include redacted Python, backup, and dual-path diagnostics.

@@ -59,6 +59,7 @@ PYTHONIC_PROPOSAL_SCHEMA = {
     },
 }
 PYTHON_TRANSLATOR_VERSION = "pythonic-dsl-translator-v1"
+BACKUP_NORMALIZER_VERSION = "conservative-backup-normalizer-v1"
 CORRECTION_ATTEMPTS = 2
 REQUEST_TIMEOUT_SECONDS = 60.0
 REQUEST_RETRY_ATTEMPTS = 1
@@ -323,9 +324,7 @@ class OpenAIProposer:
                             model_requests=len(self.records) - request_count_before,
                         )
             candidate = _response_candidate(response)
-            fingerprint = sha256(
-                _normalize_source(_response_candidate_raw(response)).encode("utf-8")
-            ).hexdigest()
+            fingerprint = _invalid_output_fingerprint(response)
             repeated_output = fingerprint in invalid_fingerprints
             invalid_fingerprints.add(fingerprint)
             correction_prompt = (
@@ -685,10 +684,19 @@ def _proposal_source(
         if not isinstance(payload, dict):
             raise ValueError("Pythonic proposal must be a JSON object")
         python_source = _payload_string(payload, "python_source")
-        _ = _payload_string(payload, "dsl_backup")
+        dsl_backup = _payload_string(payload, "dsl_backup")
         if task_name is None:
             raise ValueError("Pythonic proposal does not identify a supported task")
-        return lower_pythonic_dsl(python_source, task_name)
+        try:
+            return lower_pythonic_dsl(python_source, task_name)
+        except ValueError as python_error:
+            try:
+                return normalize_dsl_backup(dsl_backup, task_name)
+            except ValueError as backup_error:
+                raise ValueError(
+                    f"Python admission error: {python_error}; "
+                    f"Backup DSL admission error: {backup_error}"
+                ) from backup_error
     source = payload.get("source") if isinstance(payload, dict) else _code_fence_source(text)
     if not isinstance(source, str) or not source:
         raise ValueError("proposal source must be a non-empty string")
@@ -702,6 +710,43 @@ def _payload_string(payload: dict[object, object], key: str) -> str:
     if len(value) > PROPOSAL_SOURCE_CHAR_LIMIT:
         raise ValueError(f"proposal {key} exceeds {PROPOSAL_SOURCE_CHAR_LIMIT} characters")
     return value
+
+
+def normalize_dsl_backup(source: str, task_name: str) -> str:
+    """Admit only unambiguous formatting repairs before validating a Backup DSL."""
+    unfenced = _code_fence_source(source)
+    normalized = _normalize_source(unfenced if unfenced is not None else source)
+    normalized = _ZERO_ARGUMENT_DSL_ACTION_PATTERN.sub(r"\1", normalized)
+    try:
+        _validate_dsl(normalized, task_name)
+    except Exception as initial_error:
+        if not _only_missing_top_level_closure(normalized):
+            raise ValueError(
+                "Backup DSL is not valid after conservative normalization: "
+                f"{initial_error}"
+            ) from initial_error
+        normalized = f"{normalized} m)"
+        try:
+            _validate_dsl(normalized, task_name)
+        except Exception as closure_error:
+            raise ValueError(
+                "Backup DSL is not valid after top-level closure normalization: "
+                f"{closure_error}"
+            ) from closure_error
+    return normalized
+
+
+def _only_missing_top_level_closure(source: str) -> bool:
+    expected_closures: list[str] = []
+    for token in source.split():
+        closing = _DSL_DELIMITER_PAIRS.get(token)
+        if closing is not None:
+            expected_closures.append(closing)
+        elif token in _DSL_CLOSING_DELIMITERS and (
+            not expected_closures or token != expected_closures.pop()
+        ):
+            return False
+    return expected_closures == ["m)"]
 
 
 _KAREL_ACTIONS = {"move", "turnLeft", "turnRight", "pickMarker", "putMarker"}
@@ -718,6 +763,20 @@ _MINIGRID_VALUE_PREDICATES = {
     "front_object_type": {"lava", "door", "ball", "box"},
     "front_object_color": {"red", "blue"},
 }
+_ZERO_ARGUMENT_DSL_ACTIONS = _KAREL_ACTIONS | _MINIGRID_ACTIONS
+_ZERO_ARGUMENT_DSL_ACTION_PATTERN = re.compile(
+    r"\b(" + "|".join(sorted(_ZERO_ARGUMENT_DSL_ACTIONS)) + r")\s*\(\s*\)"
+)
+_DSL_DELIMITER_PAIRS = {
+    "m(": "m)",
+    "c(": "c)",
+    "i(": "i)",
+    "e(": "e)",
+    "w(": "w)",
+    "r(": "r)",
+    "h(": "h)",
+}
+_DSL_CLOSING_DELIMITERS = frozenset(_DSL_DELIMITER_PAIRS.values())
 
 
 def lower_pythonic_dsl(source: str, task_name: str) -> str:
@@ -867,13 +926,40 @@ def _response_candidate_raw(response: object) -> str:
         payload = json.loads(text)
     except json.JSONDecodeError:
         payload = None
-    if isinstance(payload, dict) and isinstance(payload.get("source"), str):
-        text = payload["source"]
+    if isinstance(payload, dict):
+        if isinstance(payload.get("source"), str):
+            text = payload["source"]
+        elif "python_source" in payload or "dsl_backup" in payload:
+            python_source = payload.get("python_source")
+            dsl_backup = payload.get("dsl_backup")
+            text = f"Python source: {python_source}\nDSL backup: {dsl_backup}"
     return text
 
 
 def _response_candidate(response: object) -> str:
     return _bounded_feedback(_response_candidate_raw(response), limit=2000)
+
+
+def _invalid_output_fingerprint(response: object) -> str:
+    raw = _response_candidate_raw(response)
+    try:
+        payload = json.loads(str(getattr(response, "output_text", "")))
+    except json.JSONDecodeError:
+        payload = None
+    if (
+        isinstance(payload, dict)
+        and isinstance(payload.get("python_source"), str)
+        and isinstance(payload.get("dsl_backup"), str)
+    ):
+        raw = json.dumps(
+            {
+                "python_source": _normalize_source(payload["python_source"]),
+                "dsl_backup": _normalize_source(payload["dsl_backup"]),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    return sha256(_normalize_source(raw).encode("utf-8")).hexdigest()
 
 
 def _safe_progress_detail(error: ProposalValidationError) -> str:

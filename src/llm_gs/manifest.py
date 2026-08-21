@@ -15,7 +15,11 @@ from llm_gs.contracts import (
     ExperimentSpecification,
 )
 from llm_gs.memory import RETRIEVER_ORDER, RETRIEVER_VERSION, RETRIEVER_WEIGHTS
-from llm_gs.proposer import PYTHON_TRANSLATOR_VERSION, proposal_contract
+from llm_gs.proposer import (
+    BACKUP_NORMALIZER_VERSION,
+    PYTHON_TRANSLATOR_VERSION,
+    proposal_contract,
+)
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
 SOURCE_LIMIT_PROMPT = "Source must be no more than 2,000 characters. "
@@ -206,7 +210,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
                 {
                     "proposal_protocol": contract.protocol,
                     "python_translator": PYTHON_TRANSLATOR_VERSION,
-                    "backup_normalizer": "not-enabled-v1",
+                    "backup_normalizer": BACKUP_NORMALIZER_VERSION,
                 }
                 if contract.protocol == "pythonic-dsl-v1"
                 else {}

@@ -291,7 +291,10 @@ def test_dsl_validation_errors_are_actionable(
 def test_openai_proposer_includes_bounded_python_diagnostic_in_correction_feedback() -> None:
     responses = FakeResponses(
         [
-            '{"python_source":"def run():\\n    pass\\n","dsl_backup":"DEF run m( move m)"}',
+            (
+                '{"python_source":"def run():\\n    pass\\n",'
+                '"dsl_backup":"DEF run m( IF c( frontIsClear c) i( move"}'
+            ),
             '{"source":"DEF run m( turnLeft m)"}',
         ]
     )
@@ -469,7 +472,12 @@ def test_invalid_output_keeps_safe_dsl_symbols_while_redacting_credentials(
 ) -> None:
     responses = FakeResponses(
         [
-            json.dumps({"python_source": source, "dsl_backup": "DEF run m( move m)"}),
+            json.dumps(
+                {
+                    "python_source": source,
+                    "dsl_backup": "DEF run m( IF c( frontIsClear c) i( move",
+                }
+            ),
             '{"source":"DEF run m( turnLeft m)"}',
         ]
     )
