@@ -494,6 +494,32 @@ def test_invalid_output_keeps_safe_dsl_symbols_while_redacting_credentials(
     assert evidence in artifact.correction_prompt
 
 
+def test_pythonic_pair_redacts_credentials_from_correction_and_artifact() -> None:
+    credential = "sk-pair-response-secret"
+    responses = FakeResponses(
+        [
+            json.dumps(
+                {
+                    "python_source": f"def run():\n    mystery()\n# {credential}\n",
+                    "dsl_backup": f"DEF run m( {credential} m)",
+                }
+            ),
+            '{"source":"DEF run m( turnLeft m)"}',
+        ]
+    )
+    observed: list[InvalidOutputArtifact] = []
+    proposer = OpenAIProposer(responses)
+    proposer.set_invalid_output_observer(observed.append)
+
+    proposer.propose("Solve CleanHouse")
+
+    artifact = observed[0]
+    assert credential not in artifact.response
+    assert credential not in artifact.validation_error
+    assert artifact.correction_prompt is not None
+    assert credential not in artifact.correction_prompt
+
+
 def test_invalid_output_redacts_token_credential_from_artifact_fields() -> None:
     credential = "private-credential-value"
     responses = FakeResponses(
