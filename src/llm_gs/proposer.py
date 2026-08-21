@@ -746,11 +746,13 @@ def lower_pythonic_dsl(source: str, task_name: str) -> str:
         raise ValueError("run must have no arguments")
     if not function.body or (len(function.body) == 1 and isinstance(function.body[0], ast.Pass)):
         raise ValueError("run must contain at least one statement")
-    body = _lower_python_statements(function.body, task_name)
+    body = _lower_python_statements(function.body, task_name, source.splitlines())
     return f"DEF run m( {body} m)"
 
 
-def _lower_python_statements(statements: list[ast.stmt], task_name: str) -> str:
+def _lower_python_statements(
+    statements: list[ast.stmt], task_name: str, source_lines: list[str]
+) -> str:
     if not statements:
         raise ValueError("Pythonic control-flow blocks must not be empty")
     lowered: list[str] = []
@@ -759,11 +761,15 @@ def _lower_python_statements(statements: list[ast.stmt], task_name: str) -> str:
             lowered.append(_lower_action(statement.value, task_name))
         elif isinstance(statement, ast.If):
             condition = _lower_predicate(statement.test, task_name)
-            then_body = _lower_python_statements(statement.body, task_name)
+            then_body = _lower_python_statements(statement.body, task_name, source_lines)
             if statement.orelse:
-                if len(statement.orelse) == 1 and isinstance(statement.orelse[0], ast.If):
+                if (
+                    len(statement.orelse) == 1
+                    and isinstance(statement.orelse[0], ast.If)
+                    and source_lines[statement.orelse[0].lineno - 1].lstrip().startswith("elif")
+                ):
                     raise ValueError("elif is not allowed")
-                else_body = _lower_python_statements(statement.orelse, task_name)
+                else_body = _lower_python_statements(statement.orelse, task_name, source_lines)
                 lowered.append(
                     f"IFELSE c( {condition} c) i( {then_body} i) ELSE e( {else_body} e)"
                 )
@@ -773,7 +779,7 @@ def _lower_python_statements(statements: list[ast.stmt], task_name: str) -> str:
             condition = _lower_predicate(statement.test, task_name)
             if statement.orelse:
                 raise ValueError("while may not have an else block")
-            body = _lower_python_statements(statement.body, task_name)
+            body = _lower_python_statements(statement.body, task_name, source_lines)
             lowered.append(
                 f"WHILE c( {condition} c) w( {body} w)"
             )
@@ -783,8 +789,9 @@ def _lower_python_statements(statements: list[ast.stmt], task_name: str) -> str:
             if not isinstance(statement.target, ast.Name) or statement.target.id != "_":
                 raise ValueError("for loop target must be _")
             repeat = _range_bound(statement.iter)
+            body = _lower_python_statements(statement.body, task_name, source_lines)
             lowered.append(
-                f"REPEAT R={repeat} r( {_lower_python_statements(statement.body, task_name)} r)"
+                f"REPEAT R={repeat} r( {body} r)"
             )
         else:
             raise ValueError(f"disallowed Python statement: {type(statement).__name__}")

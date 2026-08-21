@@ -6,9 +6,9 @@ New executions receive a distinct, reproducible Proposal Protocol and Experiment
 
 **Blocked by:** None — can start immediately.
 
-**Status:** ready-for-agent
+**Status:** completed
 
-- [ ] Karel and MiniGrid requests require a bounded Python source plus DSL backup, while TextWorldPilot and OfflineEcho preserve their current contract.
-- [ ] Valid allowlisted Python lowers to DSL accepted by the existing parser and evaluator paths for every supported Karel and MiniGrid Task.
-- [ ] Invalid Python syntax, disallowed constructs, task-invalid calls, and invalid loop bounds are rejected without creating a Candidate Program.
-- [ ] New manifests identify the Pythonic protocol and old direct-DSL manifests remain readable without migration.
+- [x] Karel and MiniGrid requests require a bounded Python source plus DSL backup, while TextWorldPilot and OfflineEcho preserve their current contract.
+- [x] Valid allowlisted Python lowers to DSL accepted by the existing parser and evaluator paths for every supported Karel and MiniGrid Task.
+- [x] Invalid Python syntax, disallowed constructs, task-invalid calls, and invalid loop bounds are rejected without creating a Candidate Program.
+- [x] New manifests identify the Pythonic protocol and old direct-DSL manifests remain readable without migration.

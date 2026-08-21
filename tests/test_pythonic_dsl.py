@@ -76,6 +76,27 @@ def run():
     MinigridDSL().parse_str_to_node(lowered)
 
 
+def test_pythonic_source_allows_nested_if_in_else_block() -> None:
+    source = """\
+def run():
+    if frontIsClear():
+        move()
+    else:
+        if markersPresent():
+            pickMarker()
+        else:
+            turnLeft()
+"""
+
+    lowered = lower_pythonic_dsl(source, "CleanHouse")
+
+    assert lowered == (
+        "DEF run m( IFELSE c( frontIsClear c) i( move i) ELSE e( "
+        "IFELSE c( markersPresent c) i( pickMarker i) ELSE e( turnLeft e) e) m)"
+    )
+    KarelDSL().parse_str_to_node(lowered)
+
+
 @pytest.mark.parametrize(
     "source",
     [
