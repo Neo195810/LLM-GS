@@ -36,11 +36,14 @@ from llm_gs.manifest import (
 )
 from llm_gs.matrix import build_matrix_manifests, matrix_report
 from llm_gs.proposer import (
+    CORRECTION_ATTEMPTS,
     MODEL_NAME,
     MODEL_PRICING,
+    REQUEST_RETRY_ATTEMPTS,
     CostBudget,
     ModelOutputFailure,
     ModelPricing,
+    ModelProgressEvent,
     OpenAIProposer,
 )
 from llm_gs.storage import WorkspaceStore
@@ -91,12 +94,19 @@ def _validate(args: argparse.Namespace) -> dict[str, object]:
 
 def _run(args: argparse.Namespace) -> dict[str, object]:
     model = _model_client(args)
+    progress_observer = getattr(model, "set_progress_observer", None)
+    if args.enable_live_openai and callable(progress_observer):
+        progress_observer(_print_model_progress)
     manifest = resolve_manifest(load_specification(args.specification))
     resolved_experiment_id = experiment_id(manifest)
     store = WorkspaceStore(args.workspace)
-    report, status = _execute_with_failure_recording(
-        manifest, resolved_experiment_id, store, args, args.stop_after, model
-    )
+    try:
+        report, status = _execute_with_failure_recording(
+            manifest, resolved_experiment_id, store, args, args.stop_after, model
+        )
+    finally:
+        if args.enable_live_openai and callable(progress_observer):
+            progress_observer(None)
     return {
         "execution_id": report.execution_id
         if report
@@ -104,6 +114,35 @@ def _run(args: argparse.Namespace) -> dict[str, object]:
         "experiment_id": resolved_experiment_id,
         "status": status,
     }
+
+
+def _print_model_progress(event: ModelProgressEvent) -> None:
+    logical_request = (
+        "initial request"
+        if event.correction_attempt == 1
+        else f"correction {event.correction_attempt - 1}/{CORRECTION_ATTEMPTS}"
+    )
+    prefix = f"[model] {event.phase} {logical_request}"
+    if event.kind == "request_started":
+        message = (
+            f"{prefix} -> requesting "
+            f"(provider attempt {event.request_retry + 1}/{REQUEST_RETRY_ATTEMPTS + 1})"
+        )
+    elif event.kind == "provider_retry":
+        message = f"{prefix} -> {event.detail}; retrying"
+    elif event.kind == "provider_failed":
+        message = f"{prefix} -> {event.detail}; request failed"
+    elif event.kind == "output_valid":
+        message = f"{prefix} -> output accepted"
+    else:
+        diagnostic = f"{event.validation_stage}: {event.detail}"
+        if event.kind == "correction_requested":
+            message = f"{prefix} -> output invalid ({diagnostic}); requesting correction"
+        elif event.kind == "validation_exhausted":
+            message = f"{prefix} -> output invalid ({diagnostic}); corrections exhausted"
+        else:
+            raise ValueError(f"unknown model progress event: {event.kind}")
+    print(message, file=sys.stderr, flush=True)
 
 
 def _execute_with_failure_recording(

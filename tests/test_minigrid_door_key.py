@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import warnings
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,16 @@ def test_door_key_adapter_matches_the_v1_minigrid_runtime() -> None:
     MiniGridDoorKeyAdapter().assert_equivalent(
         _candidate(), seed=11, limits=DoorKeyLimits(max_calls=10)
     )
+
+
+def test_door_key_condition_helpers_do_not_use_deprecated_wrapper_attributes() -> None:
+    candidate = CandidateProgram(
+        source="DEF run m( IF c( front_is_clear c) i( left i) m)"
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        MiniGridDoorKeyAdapter().evaluate(candidate, seed=11, limits=DoorKeyLimits(max_calls=10))
 
 
 def test_door_key_memory_uses_key_door_goal_initial_geometry() -> None:

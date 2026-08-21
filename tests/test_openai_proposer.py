@@ -16,6 +16,7 @@ import httpx
 import pytest
 from openai import APITimeoutError
 
+from llm_gs import cli
 from llm_gs import proposer as proposer_module
 from llm_gs.cli import _execute_with_failure_recording
 from llm_gs.contracts import CandidateProgram, EpisodeResult, ExperimentSpecification
@@ -29,6 +30,7 @@ from llm_gs.proposer import (
     InvalidOutputArtifact,
     ModelOutputFailure,
     ModelPricing,
+    ModelProgressEvent,
     OpenAIProposer,
     RequestNotSubmittedError,
 )
@@ -114,6 +116,76 @@ def test_openai_proposer_retries_one_timeout_and_records_each_attempt() -> None:
         ("request", None),
     ]
     assert all(record.duration_ms >= 0 for record in proposer.records)
+
+
+def test_openai_proposer_reports_safe_progress_through_correction() -> None:
+    events: list[ModelProgressEvent] = []
+    proposer = OpenAIProposer(
+        FakeResponses(["not json", '{"source":"DEF run m( turnLeft m)"}'])
+    )
+    proposer.set_progress_observer(events.append)
+
+    proposer.propose("make a program")
+
+    assert [(event.kind, event.correction_attempt) for event in events] == [
+        ("request_started", 1),
+        ("correction_requested", 1),
+        ("request_started", 2),
+        ("output_valid", 2),
+    ]
+    correction = events[1]
+    assert correction.validation_stage == "schema"
+    assert correction.detail == "proposal source must be a non-empty string"
+
+
+def test_live_run_writes_model_progress_to_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    specification = tmp_path / "door-key.yaml"
+    workspace = tmp_path / "workspace"
+    specification.write_text(
+        """\
+spec_version: 1
+display_name: progress
+task:
+  name: DoorKey
+seeds:
+  task: [7]
+failure_strategy:
+  name: regenerate
+  max_repair_cycles: 1
+""",
+        encoding="utf-8",
+    )
+    model = OpenAIProposer(FakeResponses(["not json", "not json", "not json"]))
+    monkeypatch.setattr(cli, "_model_client", lambda _: model)
+    args = cli._parser().parse_args(
+        [
+            "run",
+            str(specification),
+            "--workspace",
+            str(workspace),
+            "--enable-live-openai",
+            "--max-cost-usd",
+            "1",
+        ]
+    )
+
+    with pytest.raises(ValueError, match="model output failure"):
+        args.handler(args)
+
+    assert capsys.readouterr().err.splitlines() == [
+        "[model] initial initial request -> requesting (provider attempt 1/2)",
+        "[model] initial initial request -> output invalid "
+        "(schema: proposal source must be a non-empty string); requesting correction",
+        "[model] initial correction 1/2 -> requesting (provider attempt 1/2)",
+        "[model] initial correction 1/2 -> output invalid "
+        "(schema: proposal source must be a non-empty string); requesting correction",
+        "[model] initial correction 2/2 -> requesting (provider attempt 1/2)",
+        "[model] initial correction 2/2 -> output invalid "
+        "(schema: proposal source must be a non-empty string); corrections exhausted",
+    ]
+    assert model._progress_observer is None
 
 
 def test_openai_proposer_uses_configured_model_name() -> None:

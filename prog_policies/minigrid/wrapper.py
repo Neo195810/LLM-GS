@@ -264,22 +264,22 @@ class ProgramWrapper(Wrapper):
 
     def front_is_clear(self) -> bool:
         fwd_pos = self.unwrapped.front_pos
-        fwd_cell = self.grid.get(*fwd_pos)
+        fwd_cell = self.unwrapped.grid.get(*fwd_pos)
         return fwd_cell is None or fwd_cell.can_overlap()
 
     def front_object_type(self, obj_name: str) -> bool:
         fwd_pos = self.unwrapped.front_pos
-        fwd_cell = self.grid.get(*fwd_pos)
+        fwd_cell = self.unwrapped.grid.get(*fwd_pos)
         if fwd_cell is None:
             return False
         return fwd_cell.type == obj_name
 
     def front_object_color(self, color: str) -> bool:
         fwd_pos = self.unwrapped.front_pos
-        fwd_cell = self.grid.get(*fwd_pos)
+        fwd_cell = self.unwrapped.grid.get(*fwd_pos)
         if fwd_cell is None:
             return False
         return fwd_cell.color == color
 
     def is_carrying_object(self) -> bool:
-        return self.carrying is not None
+        return self.unwrapped.carrying is not None

@@ -189,6 +189,18 @@ class InvalidOutputArtifact:
     correction_prompt_truncated: bool | None
 
 
+@dataclass(frozen=True)
+class ModelProgressEvent:
+    """Safe lifecycle information for one logical model request."""
+
+    phase: str
+    correction_attempt: int
+    request_retry: int
+    kind: str
+    validation_stage: str | None = None
+    detail: str | None = None
+
+
 class OpenAIProposer:
     """Bounded, schema-constrained Responses API adapter with no secret persistence."""
 
@@ -218,11 +230,18 @@ class OpenAIProposer:
         self._pricing = pricing if pricing is not None else MODEL_PRICING[model_name]
         self.records: list[ModelRequestRecord] = []
         self._invalid_output_observer: Callable[[InvalidOutputArtifact], None] | None = None
+        self._progress_observer: Callable[[ModelProgressEvent], None] | None = None
 
     def set_invalid_output_observer(
         self, observer: Callable[[InvalidOutputArtifact], None] | None
     ) -> None:
         self._invalid_output_observer = observer
+
+    def set_progress_observer(
+        self, observer: Callable[[ModelProgressEvent], None] | None
+    ) -> None:
+        """Install an optional observer for safe request lifecycle updates."""
+        self._progress_observer = observer
 
     def propose(self, prompt: str) -> CandidateProgram:
         return self._propose(prompt, phase="initial")
@@ -240,7 +259,7 @@ class OpenAIProposer:
         invalid_fingerprints: set[str] = set()
         request_count_before = len(self.records)
         for attempt in range(1, CORRECTION_ATTEMPTS + 2):
-            response = self._create_with_request_retry(request_prompt, attempt)
+            response = self._create_with_request_retry(request_prompt, phase, attempt)
             if getattr(response, "status", None) == "incomplete":
                 validation_error = ProposalValidationError(
                     "schema", INCOMPLETE_RESPONSE_DIAGNOSTIC
@@ -256,6 +275,7 @@ class OpenAIProposer:
                     except Exception as error:
                         validation_error = ProposalValidationError("dsl", str(error))
                     else:
+                        self._emit_progress(phase, attempt, 0, "output_valid")
                         return CandidateProgram(
                             source=source,
                             model_requests=len(self.records) - request_count_before,
@@ -282,10 +302,26 @@ class OpenAIProposer:
                 response, attempt, validation_error, correction_prompt, phase
             )
             if attempt > CORRECTION_ATTEMPTS:
+                self._emit_progress(
+                    phase,
+                    attempt,
+                    0,
+                    "validation_exhausted",
+                    validation_error.stage,
+                    _safe_progress_detail(validation_error),
+                )
                 raise ModelOutputFailure(
                     "model output failed schema or DSL validation"
                 ) from validation_error
             assert correction_prompt is not None
+            self._emit_progress(
+                phase,
+                attempt,
+                0,
+                "correction_requested",
+                validation_error.stage,
+                _safe_progress_detail(validation_error),
+            )
             request_prompt = correction_prompt
         raise AssertionError("unreachable")
 
@@ -311,12 +347,15 @@ class OpenAIProposer:
             )
         )
 
-    def _create_with_request_retry(self, request_prompt: str, correction_attempt: int) -> object:
+    def _create_with_request_retry(
+        self, request_prompt: str, phase: str, correction_attempt: int
+    ) -> object:
         last_error: Exception | None = None
         for request_retry in range(REQUEST_RETRY_ATTEMPTS + 1):
             reservation = self._reserve_request_cost()
             started_at = perf_counter()
             try:
+                self._emit_progress(phase, correction_attempt, request_retry, "request_started")
                 response = self._client.create(
                     model=self._model_name,
                     reasoning={"effort": REASONING_EFFORT},
@@ -333,6 +372,13 @@ class OpenAIProposer:
                     error,
                     cost_state="not_submitted",
                 )
+                self._emit_progress(
+                    phase,
+                    correction_attempt,
+                    request_retry,
+                    "provider_failed",
+                    detail=type(error).__name__,
+                )
                 raise
             except Exception as error:
                 self._record_unknown_request(
@@ -343,8 +389,22 @@ class OpenAIProposer:
                     request_retry=request_retry,
                 )
                 if request_retry < REQUEST_RETRY_ATTEMPTS and _is_retryable_provider_failure(error):
+                    self._emit_progress(
+                        phase,
+                        correction_attempt,
+                        request_retry,
+                        "provider_retry",
+                        detail=type(error).__name__,
+                    )
                     last_error = error
                     continue
+                self._emit_progress(
+                    phase,
+                    correction_attempt,
+                    request_retry,
+                    "provider_failed",
+                    detail=type(error).__name__,
+                )
                 raise
             self._record_usage(
                 response,
@@ -356,6 +416,27 @@ class OpenAIProposer:
             return response
         assert last_error is not None
         raise last_error
+
+    def _emit_progress(
+        self,
+        phase: str,
+        correction_attempt: int,
+        request_retry: int,
+        kind: str,
+        validation_stage: str | None = None,
+        detail: str | None = None,
+    ) -> None:
+        if self._progress_observer is not None:
+            self._progress_observer(
+                ModelProgressEvent(
+                    phase=phase,
+                    correction_attempt=correction_attempt,
+                    request_retry=request_retry,
+                    kind=kind,
+                    validation_stage=validation_stage,
+                    detail=detail,
+                )
+            )
 
     def _record_usage(
         self,
@@ -572,6 +653,11 @@ def _response_candidate_raw(response: object) -> str:
 
 def _response_candidate(response: object) -> str:
     return _bounded_feedback(_response_candidate_raw(response), limit=2000)
+
+
+def _safe_progress_detail(error: ProposalValidationError) -> str:
+    """Return a single-line, redacted validation summary safe for stderr."""
+    return " ".join(_bounded_feedback(str(error), limit=300).split())
 
 
 def _code_fence_source(text: str) -> str | None:
