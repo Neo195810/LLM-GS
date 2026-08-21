@@ -511,13 +511,17 @@ max_repair_cycles: 1
     class Responses:
         def create(self, **kwargs: object) -> object:
             prompt = str(kwargs["input"])
-            source = (
-                "DEF run m( left m)"
-                if "DoorKey" in prompt or "RedBlueDoor" in prompt
-                else "DEF run m( turnLeft m)"
+            is_minigrid = "DoorKey" in prompt or "RedBlueDoor" in prompt
+            action = "left" if is_minigrid else "turnLeft"
+            source = f"DEF run m( {action} m)"
+            output = json.dumps(
+                {
+                    "python_source": f"def run():\n    {action}()\n",
+                    "dsl_backup": source,
+                }
             )
             return SimpleNamespace(
-                output_text=json.dumps({"source": source}),
+                output_text=output,
                 usage=SimpleNamespace(
                     input_tokens=10,
                     output_tokens=5,

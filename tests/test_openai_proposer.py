@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sqlite3
 import subprocess
 import sys
@@ -53,9 +52,38 @@ class FakeResponses:
 
     def create(self, **kwargs: object) -> object:
         self.calls.append(kwargs)
+        output = self._outputs.pop(0)
+        format_data = kwargs.get("text")
+        if (
+            isinstance(format_data, dict)
+            and isinstance(format_data.get("format"), dict)
+            and format_data["format"].get("name") == "candidate_program_v3"
+        ):
+            output = _pythonic_fixture(output)
         return SimpleNamespace(
-            output_text=self._outputs.pop(0), usage=self._usage, status="completed"
+            output_text=output, usage=self._usage, status="completed"
         )
+
+
+def _pythonic_fixture(output: str) -> str:
+    """Keep legacy valid DSL fixtures meaningful under the Pythonic response contract."""
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError:
+        return output
+    source = payload.get("source") if isinstance(payload, dict) else None
+    actions = {
+        "DEF run m( move m)": "move",
+        "DEF run m( turnLeft m)": "turnLeft",
+        "DEF run m( left m)": "left",
+        "DEF run m( forward m)": "forward",
+    }
+    action = actions.get(source)
+    if action is None:
+        return output
+    return json.dumps(
+        {"python_source": f"def run():\n    {action}()\n", "dsl_backup": source}
+    )
 
 
 def test_openai_proposer_uses_pinned_structured_responses_request() -> None:
@@ -177,13 +205,13 @@ failure_strategy:
     assert capsys.readouterr().err.splitlines() == [
         "[model] initial initial request -> requesting (provider attempt 1/2)",
         "[model] initial initial request -> output invalid "
-        "(schema: proposal source must be a non-empty string); requesting correction",
+        "(schema: Pythonic proposal must be a JSON object); requesting correction",
         "[model] initial correction 1/2 -> requesting (provider attempt 1/2)",
         "[model] initial correction 1/2 -> output invalid "
-        "(schema: proposal source must be a non-empty string); requesting correction",
+        "(schema: Pythonic proposal must be a JSON object); requesting correction",
         "[model] initial correction 2/2 -> requesting (provider attempt 1/2)",
         "[model] initial correction 2/2 -> output invalid "
-        "(schema: proposal source must be a non-empty string); corrections exhausted",
+        "(schema: Pythonic proposal must be a JSON object); corrections exhausted",
     ]
     assert model._progress_observer is None
 
@@ -260,10 +288,10 @@ def test_dsl_validation_errors_are_actionable(
     assert error.token_window
 
 
-def test_openai_proposer_includes_bounded_dsl_diagnostic_in_correction_feedback() -> None:
+def test_openai_proposer_includes_bounded_python_diagnostic_in_correction_feedback() -> None:
     responses = FakeResponses(
         [
-            '{"source":"DEF run m( IFELSE c( frontIsClear c) i( move i) e( turnLeft e) m)"}',
+            '{"python_source":"def run():\\n    pass\\n","dsl_backup":"DEF run m( move m)"}',
             '{"source":"DEF run m( turnLeft m)"}',
         ]
     )
@@ -272,8 +300,7 @@ def test_openai_proposer_includes_bounded_dsl_diagnostic_in_correction_feedback(
 
     correction = str(responses.calls[1]["input"])
     assert candidate.model_requests == 2
-    assert "DSL parse error in IFELSE" in correction
-    assert "expected `ELSE`; actual `e(`" in correction
+    assert "run must contain at least one statement" in correction
     assert "Correction ordinal: 1 of 2." in correction
     assert len(correction) <= 8000
 
@@ -421,7 +448,7 @@ def test_openai_proposer_observes_redacted_invalid_outputs_before_correction() -
     artifact = observed[0]
     assert artifact.phase == "initial"
     assert artifact.attempt == 1
-    assert artifact.validation_stage == "dsl"
+    assert artifact.validation_stage == "schema"
     assert artifact.finish_reason == "completed"
     assert artifact.response_original_length > len(artifact.response)
     assert "sk-response-secret" not in artifact.response
@@ -433,8 +460,8 @@ def test_openai_proposer_observes_redacted_invalid_outputs_before_correction() -
 @pytest.mark.parametrize(
     ("source", "evidence"),
     [
-        ("DEF run m( w) m)", "actual `w)`"),
-        ("DEF run m( ELSE m)", "actual `ELSE`"),
+        ("def run():\n    mystery()\n", "mystery is not an allowed action"),
+        ("def run():\n    move(1)\n", "action calls may not have arguments"),
     ],
 )
 def test_invalid_output_keeps_safe_dsl_symbols_while_redacting_credentials(
@@ -442,7 +469,7 @@ def test_invalid_output_keeps_safe_dsl_symbols_while_redacting_credentials(
 ) -> None:
     responses = FakeResponses(
         [
-            json.dumps({"source": source}),
+            json.dumps({"python_source": source, "dsl_backup": "DEF run m( move m)"}),
             '{"source":"DEF run m( turnLeft m)"}',
         ]
     )
@@ -487,17 +514,22 @@ def test_invalid_output_keeps_full_redacted_validation_error(
 
     def validate(source: str, task_name: str | None = None) -> None:
         _ = task_name
-        if source == "invalid":
+        if source == "DEF run m( move m)":
             raise ValueError(detail)
 
     monkeypatch.setattr(proposer_module, "_validate_dsl", validate)
     observed: list[InvalidOutputArtifact] = []
     proposer = OpenAIProposer(
-        FakeResponses(['{"source":"invalid"}', '{"source":"valid"}'])
+        FakeResponses(
+            [
+                '{"python_source":"def run():\\n    move()\\n","dsl_backup":"DEF run m( move m)"}',
+                '{"python_source":"def run():\\n    turnLeft()\\n","dsl_backup":"DEF run m( turnLeft m)"}',
+            ]
+        )
     )
     proposer.set_invalid_output_observer(observed.append)
 
-    assert proposer.propose("Solve CleanHouse").source == "valid"
+    assert proposer.propose("Solve CleanHouse").source == "DEF run m( turnLeft m)"
     assert observed[0].validation_error == "parser failure sk-[REDACTED] " + "x" * 1_500
 
 
@@ -1207,7 +1239,7 @@ def test_openai_proposer_repair_includes_task_dsl_contract() -> None:
 
     assert candidate.source == "DEF run m( move m)"
     assert "Goal: collect every marker" in str(responses.calls[0]["input"])
-    assert "REPEAT R=<0-19> r(" in str(responses.calls[0]["input"])
+    assert "for _ in range(<integer 0..19>)" in str(responses.calls[0]["input"])
 
 
 def test_openai_proposer_blocks_input_before_sending_a_request() -> None:
@@ -1318,25 +1350,23 @@ def test_openai_proposer_marks_invalid_usage_as_unknown() -> None:
         (
             "RedBlueDoor",
             "red door before opening the blue door",
-            "front_object_color h( red h)",
+            "front_object_color",
         ),
     ],
 )
-def test_task_prompt_includes_goal_and_exact_dsl_contract(
+def test_task_prompt_includes_goal_and_pythonic_contract(
     task_name: str, goal: str, task_condition: str
 ) -> None:
     prompt = task_prompt(task_name)
 
-    assert "DEF run m(" in prompt
-    assert "Example valid source" in prompt
-    assert "REPEAT R=<0-19> r(" in prompt
-    assert "WHILE c(" in prompt
-    assert "IFELSE c(" in prompt
+    assert "python_source" in prompt
+    assert "dsl_backup" in prompt
+    assert "def run():" in prompt
+    assert "for _ in range(<integer 0..19>)" in prompt
     assert goal in prompt
     assert task_condition in prompt
     assert "2,000 characters" in prompt
-    assert "Delimiter checklist" in prompt
-    assert "Example valid nested control" in prompt
+    assert "No imports" in prompt
 
 
 @pytest.mark.parametrize(
@@ -1348,10 +1378,10 @@ def test_task_prompt_includes_goal_and_exact_dsl_contract(
         ("RedBlueDoor", MinigridDSL()),
     ],
 )
-def test_task_prompt_nested_control_example_parses_with_local_parser(
+def test_task_prompt_describes_restricted_python_control_flow(
     task_name: str, dsl: KarelDSL | MinigridDSL
 ) -> None:
     prompt = task_prompt(task_name)
-    match = re.search(r"Example valid nested control: (DEF run m\([^.]*\))\. ", prompt)
-    assert match is not None
-    dsl.parse_str_to_node(match.group(1))  # type: ignore[no-untyped-call]
+    _ = dsl
+    assert "if/else" in prompt
+    assert "predicate-guarded while" in prompt

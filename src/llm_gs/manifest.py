@@ -15,68 +15,48 @@ from llm_gs.contracts import (
     ExperimentSpecification,
 )
 from llm_gs.memory import RETRIEVER_ORDER, RETRIEVER_VERSION, RETRIEVER_WEIGHTS
-from llm_gs.proposer import PROPOSAL_SCHEMA_VERSION
+from llm_gs.proposer import PYTHON_TRANSLATOR_VERSION, proposal_contract
 
 OFFLINE_PROMPT = "Produce one deterministic offline candidate."
-DSL_CONTROL_FLOW_PROMPT = (
-    "Control syntax: WHILE c( <condition> c) w( <statements> w); "
-    "REPEAT R=<0-19> r( <statements> r); "
-    "IF c( <condition> c) i( <statements> i); "
-    "IFELSE c( <condition> c) i( <statements> i) ELSE e( <statements> e); "
-    "negate conditions with not c( <condition> c). "
-)
 SOURCE_LIMIT_PROMPT = "Source must be no more than 2,000 characters. "
-KAREL_SOURCE_LIMIT_PROMPT = (
-    SOURCE_LIMIT_PROMPT
-    + "Delimiter checklist: every m(/w(/r(/i(/e(/c( has a matching close of the "
-    "same letter; close every WHILE/IF/IFELSE/REPEAT block before ending. "
-    "Example valid nested control: DEF run m( WHILE c( frontIsClear c) w( "
-    "IF c( markersPresent c) i( pickMarker i) move w) m). "
+PYTHON_SOURCE_LIMIT_PROMPT = "Each source field must be no more than 2,000 characters. "
+KAREL_PYTHONIC_PROMPT = (
+    "Return exactly one JSON object with non-empty python_source and dsl_backup fields. "
+    "Produce one deterministic {task} Karel program. python_source must be exactly one "
+    "zero-argument def run(): using only action calls, if/else, predicate-guarded while, "
+    "and for _ in range(<integer 0..19>). Actions: move, turnLeft, turnRight, pickMarker, "
+    "putMarker. Predicates: frontIsClear, leftIsClear, rightIsClear, markersPresent, "
+    "noMarkersPresent. No imports, declarations, assignments, attributes, keyword arguments, "
+    "elif, boolean literals, and/or, or other Python syntax. dsl_backup must be a complete "
+    "equivalent Karel DSL program: DEF run m( <statements> m). Goal: {goal}. "
+    "Example python_source: def run():\\n    move()\\n    turnLeft()\\n"
+    + PYTHON_SOURCE_LIMIT_PROMPT
+    + "Never output Markdown or prose."
 )
-MINIGRID_SOURCE_LIMIT_PROMPT = (
-    SOURCE_LIMIT_PROMPT
-    + "Delimiter checklist: every m(/w(/r(/i(/e(/c(/h( has a matching close of "
-    "the same letter; close every WHILE/IF/IFELSE/REPEAT block before ending. "
-    "Example valid nested control: DEF run m( WHILE c( front_is_clear c) w( "
-    "IF c( is_carrying_object c) i( toggle i) forward w) m). "
+MINIGRID_PYTHONIC_PROMPT = (
+    "Return exactly one JSON object with non-empty python_source and dsl_backup fields. "
+    "Produce one deterministic {task} MiniGrid program. python_source must be exactly one "
+    "zero-argument def run(): using only action calls, if/else, predicate-guarded while, "
+    "and for _ in range(<integer 0..19>). Actions: left, right, forward, pickup, drop, toggle. "
+    "Zero-argument predicates: front_is_clear, is_carrying_object. Value predicates: "
+    "front_object_type(\"lava\"|\"door\"|\"ball\"|\"box\"), "
+    "front_object_color(\"red\"|\"blue\"). No imports, declarations, assignments, attributes, "
+    "keyword arguments, elif, boolean literals, and/or, or other Python syntax. dsl_backup "
+    "must be a complete equivalent MiniGrid DSL program: DEF run m( <statements> m). "
+    "Goal: {goal}. Example python_source: def run():\\n    forward()\\n    left()\\n"
+    + PYTHON_SOURCE_LIMIT_PROMPT
+    + "Never output Markdown or prose."
 )
-KAREL_DSL_PROMPT = (
-    "Return exactly one JSON object: {{\"source\": \"<DSL source>\"}}. "
-    "Produce one deterministic {task} Karel program. "
-    "Source must use exact Karel DSL syntax: DEF run m( <statements> m). "
-    + DSL_CONTROL_FLOW_PROMPT
-    + "Actions: move, turnLeft, turnRight, pickMarker, putMarker. "
-    "Conditions: frontIsClear, leftIsClear, rightIsClear, markersPresent, noMarkersPresent. "
-    "Goal: {goal}. "
-    "Example valid source: DEF run m( move turnLeft m). "
-    + KAREL_SOURCE_LIMIT_PROMPT
-    + "Never output task name, pseudocode, Markdown, or Python."
-)
-MINIGRID_DSL_PROMPT = (
-    "Return exactly one JSON object: {{\"source\": \"<DSL source>\"}}. "
-    "Produce one deterministic {task} MiniGrid program. "
-    "Source must use exact MiniGrid DSL syntax: DEF run m( <statements> m). "
-    + DSL_CONTROL_FLOW_PROMPT
-    + "Actions: left, right, forward, pickup, drop, toggle. "
-    "Conditions: front_is_clear, is_carrying_object, front_object_type h( lava h) "
-    "(object type domain: lava, door, ball, box), front_object_type h( door h), "
-    "front_object_type h( ball h), front_object_type h( box h), "
-    "front_object_color h( red h) (object color domain: red, blue), "
-    "front_object_color h( blue h). Goal: {goal}. "
-    "Example valid source: DEF run m( forward left m). "
-    + MINIGRID_SOURCE_LIMIT_PROMPT
-    + "Never output task name, pseudocode, Markdown, or Python."
-)
-CLEAN_HOUSE_PROMPT = KAREL_DSL_PROMPT.format(
+CLEAN_HOUSE_PROMPT = KAREL_PYTHONIC_PROMPT.format(
     task="CleanHouse", goal="collect every marker"
 )
-FOUR_CORNERS_PROMPT = KAREL_DSL_PROMPT.format(
+FOUR_CORNERS_PROMPT = KAREL_PYTHONIC_PROMPT.format(
     task="FourCorners", goal="place a marker on each of the four corner cells and nowhere else"
 )
-DOOR_KEY_PROMPT = MINIGRID_DSL_PROMPT.format(
+DOOR_KEY_PROMPT = MINIGRID_PYTHONIC_PROMPT.format(
     task="DoorKey", goal="pick up the key, unlock the door, then reach the goal"
 )
-RED_BLUE_DOOR_PROMPT = MINIGRID_DSL_PROMPT.format(
+RED_BLUE_DOOR_PROMPT = MINIGRID_PYTHONIC_PROMPT.format(
     task="RedBlueDoor", goal="open the red door before opening the blue door"
 )
 TEXTWORLD_PILOT_PROMPT = (
@@ -154,6 +134,7 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
     is_minigrid_task = specification.task.name in {"DoorKey", "RedBlueDoor"}
     is_textworld_task = specification.task.name == "TextWorldPilot"
     task_name = specification.task.name
+    contract = proposal_contract(task_name)
     repair_rounds = (
         specification.failure_strategy.max_repair_cycles
         if (
@@ -220,7 +201,16 @@ def resolve_manifest(specification: ExperimentSpecification) -> ExperimentManife
             "prompt_sha256": sha256_bytes(
                 task_prompt(task_name).encode("utf-8")
             ).removeprefix("sha256:"),
-            "proposal_schema_version": f"v{PROPOSAL_SCHEMA_VERSION}",
+            "proposal_schema_version": f"v{contract.schema_version}",
+            **(
+                {
+                    "proposal_protocol": contract.protocol,
+                    "python_translator": PYTHON_TRANSLATOR_VERSION,
+                    "backup_normalizer": "not-enabled-v1",
+                }
+                if contract.protocol == "pythonic-dsl-v1"
+                else {}
+            ),
             **(
                 {"outcome_classifier": f"{task_name.lower()}-v1"}
                 if is_karel_task or is_minigrid_task or is_textworld_task

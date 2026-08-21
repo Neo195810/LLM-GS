@@ -234,6 +234,22 @@ _Avoid_: Conversation history, raw error log
 A private, bounded, redacted record of an invalid model output, its correction prompt, and validation evidence, retained for diagnosis without changing failure classification.
 _Avoid_: Execution Artifact, Failure Reason
 
+**Pythonic Proposal**:
+A restricted Python `def run():` source supplied for a Karel or MiniGrid Candidate Program and deterministically lowered to canonical DSL before admission.
+_Avoid_: Arbitrary Python, executable Python
+
+**Backup DSL**:
+The bounded DSL source paired with a Pythonic Proposal; it is retained in the proposal contract but is not an admitted Candidate Program unless its versioned admission path permits it.
+_Avoid_: Fallback program, alternate policy
+
+**Proposal Admission Path**:
+The versioned route by which model output becomes a Candidate Program, such as Pythonic lowering or a future validated Backup DSL path.
+_Avoid_: Parsing mode, retry path
+
+**Conservative Normalizer**:
+A versioned, semantics-preserving transformation allowed to repair only unambiguous Backup DSL formatting without inferring policy control flow.
+_Avoid_: Auto-repair, policy synthesis
+
 ## Platform Roles
 
 **Proposer**:

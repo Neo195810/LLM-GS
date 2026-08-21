@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -17,7 +18,8 @@ from prog_policies.minigrid.dsl import MinigridDSL
 
 MODEL_NAME = "gpt-5.6-luna"
 REASONING_EFFORT = "medium"
-PROPOSAL_SCHEMA_VERSION = 2
+DIRECT_DSL_SCHEMA_VERSION = 2
+PYTHONIC_DSL_SCHEMA_VERSION = 3
 PROPOSAL_SOURCE_CHAR_LIMIT = 2000
 PROPOSAL_SCHEMA = {
     "name": "candidate_program_v2",
@@ -35,6 +37,28 @@ PROPOSAL_SCHEMA = {
         },
     },
 }
+PYTHONIC_PROPOSAL_SCHEMA = {
+    "name": "candidate_program_v3",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["python_source", "dsl_backup"],
+        "properties": {
+            "python_source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": PROPOSAL_SOURCE_CHAR_LIMIT,
+            },
+            "dsl_backup": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": PROPOSAL_SOURCE_CHAR_LIMIT,
+            },
+        },
+    },
+}
+PYTHON_TRANSLATOR_VERSION = "pythonic-dsl-translator-v1"
 CORRECTION_ATTEMPTS = 2
 REQUEST_TIMEOUT_SECONDS = 60.0
 REQUEST_RETRY_ATTEMPTS = 1
@@ -80,6 +104,22 @@ class ProposalValidationError(ValueError):
     def __init__(self, stage: str, detail: str) -> None:
         self.stage = stage
         super().__init__(detail)
+
+
+@dataclass(frozen=True)
+class ProposalContract:
+    protocol: str
+    schema_version: int
+    schema: dict[str, object]
+
+
+def proposal_contract(task_name: str | None) -> ProposalContract:
+    """Resolve the versioned proposal contract without changing historical DSL tasks."""
+    if task_name in {"CleanHouse", "FourCorners", "DoorKey", "RedBlueDoor"}:
+        return ProposalContract(
+            "pythonic-dsl-v1", PYTHONIC_DSL_SCHEMA_VERSION, PYTHONIC_PROPOSAL_SCHEMA
+        )
+    return ProposalContract("direct-dsl-v2", DIRECT_DSL_SCHEMA_VERSION, PROPOSAL_SCHEMA)
 
 
 @dataclass(frozen=True)
@@ -253,25 +293,27 @@ class OpenAIProposer:
         phase: str,
         evaluation_evidence: str | None = None,
     ) -> CandidateProgram:
+        task_name = _task_name_from_prompt(prompt)
+        contract = proposal_contract(task_name)
         request_prompt = _bounded_feedback(prompt)
         if _token_estimate(request_prompt) > self._input_token_limit:
             raise ModelOutputFailure("request input exceeds the configured token budget")
         invalid_fingerprints: set[str] = set()
         request_count_before = len(self.records)
         for attempt in range(1, CORRECTION_ATTEMPTS + 2):
-            response = self._create_with_request_retry(request_prompt, phase, attempt)
+            response = self._create_with_request_retry(request_prompt, phase, attempt, contract)
             if getattr(response, "status", None) == "incomplete":
                 validation_error = ProposalValidationError(
                     "schema", INCOMPLETE_RESPONSE_DIAGNOSTIC
                 )
             else:
                 try:
-                    source = _proposal_source(response)
+                    source = _proposal_source(response, task_name, contract)
                 except (AssertionError, KeyError, TypeError, ValueError) as error:
                     validation_error = ProposalValidationError("schema", str(error))
                 else:
                     try:
-                        _validate_dsl(source, _task_name_from_prompt(prompt))
+                        _validate_dsl(source, task_name)
                     except Exception as error:
                         validation_error = ProposalValidationError("dsl", str(error))
                     else:
@@ -348,7 +390,11 @@ class OpenAIProposer:
         )
 
     def _create_with_request_retry(
-        self, request_prompt: str, phase: str, correction_attempt: int
+        self,
+        request_prompt: str,
+        phase: str,
+        correction_attempt: int,
+        contract: ProposalContract,
     ) -> object:
         last_error: Exception | None = None
         for request_retry in range(REQUEST_RETRY_ATTEMPTS + 1):
@@ -361,7 +407,7 @@ class OpenAIProposer:
                     reasoning={"effort": REASONING_EFFORT},
                     input=request_prompt,
                     max_output_tokens=self._output_token_limit,
-                    text={"format": {"type": "json_schema", **PROPOSAL_SCHEMA}},
+                    text={"format": {"type": "json_schema", **contract.schema}},
                 )
             except RequestNotSubmittedError as error:
                 self._release_reservation(reservation)
@@ -624,7 +670,9 @@ class OpenAIProposer:
         )
 
 
-def _proposal_source(response: object) -> str:
+def _proposal_source(
+    response: object, task_name: str | None, contract: ProposalContract
+) -> str:
     output_text = getattr(response, "output_text", None)
     if output_text is None:
         raise ValueError("response contains no output text")
@@ -633,10 +681,176 @@ def _proposal_source(response: object) -> str:
         payload = json.loads(text)
     except json.JSONDecodeError:
         payload = None
+    if contract.protocol == "pythonic-dsl-v1":
+        if not isinstance(payload, dict):
+            raise ValueError("Pythonic proposal must be a JSON object")
+        python_source = _payload_string(payload, "python_source")
+        _ = _payload_string(payload, "dsl_backup")
+        if task_name is None:
+            raise ValueError("Pythonic proposal does not identify a supported task")
+        return lower_pythonic_dsl(python_source, task_name)
     source = payload.get("source") if isinstance(payload, dict) else _code_fence_source(text)
     if not isinstance(source, str) or not source:
         raise ValueError("proposal source must be a non-empty string")
     return _normalize_source(source)
+
+
+def _payload_string(payload: dict[object, object], key: str) -> str:
+    value = payload.get(key)
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"proposal {key} must be a non-empty string")
+    if len(value) > PROPOSAL_SOURCE_CHAR_LIMIT:
+        raise ValueError(f"proposal {key} exceeds {PROPOSAL_SOURCE_CHAR_LIMIT} characters")
+    return value
+
+
+_KAREL_ACTIONS = {"move", "turnLeft", "turnRight", "pickMarker", "putMarker"}
+_KAREL_PREDICATES = {
+    "frontIsClear",
+    "leftIsClear",
+    "rightIsClear",
+    "markersPresent",
+    "noMarkersPresent",
+}
+_MINIGRID_ACTIONS = {"left", "right", "forward", "pickup", "drop", "toggle"}
+_MINIGRID_ZERO_ARGUMENT_PREDICATES = {"front_is_clear", "is_carrying_object"}
+_MINIGRID_VALUE_PREDICATES = {
+    "front_object_type": {"lava", "door", "ball", "box"},
+    "front_object_color": {"red", "blue"},
+}
+
+
+def lower_pythonic_dsl(source: str, task_name: str) -> str:
+    """Lower the intentionally tiny Python proposal language to canonical task DSL."""
+    try:
+        module = ast.parse(source, mode="exec")
+    except SyntaxError as error:
+        raise ValueError(f"invalid Python syntax: {error.msg}") from error
+    if len(module.body) != 1 or not isinstance(module.body[0], ast.FunctionDef):
+        raise ValueError("Pythonic proposal must contain exactly one def run(): function")
+    function = module.body[0]
+    if function.name != "run" or function.decorator_list or function.returns is not None:
+        raise ValueError(
+            "Pythonic proposal must contain exactly one undecorated def run(): function"
+        )
+    arguments = function.args
+    if (
+        arguments.posonlyargs
+        or arguments.args
+        or arguments.kwonlyargs
+        or arguments.vararg is not None
+        or arguments.kwarg is not None
+        or arguments.defaults
+        or arguments.kw_defaults
+    ):
+        raise ValueError("run must have no arguments")
+    if not function.body or (len(function.body) == 1 and isinstance(function.body[0], ast.Pass)):
+        raise ValueError("run must contain at least one statement")
+    body = _lower_python_statements(function.body, task_name)
+    return f"DEF run m( {body} m)"
+
+
+def _lower_python_statements(statements: list[ast.stmt], task_name: str) -> str:
+    if not statements:
+        raise ValueError("Pythonic control-flow blocks must not be empty")
+    lowered: list[str] = []
+    for statement in statements:
+        if isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
+            lowered.append(_lower_action(statement.value, task_name))
+        elif isinstance(statement, ast.If):
+            condition = _lower_predicate(statement.test, task_name)
+            then_body = _lower_python_statements(statement.body, task_name)
+            if statement.orelse:
+                if len(statement.orelse) == 1 and isinstance(statement.orelse[0], ast.If):
+                    raise ValueError("elif is not allowed")
+                else_body = _lower_python_statements(statement.orelse, task_name)
+                lowered.append(
+                    f"IFELSE c( {condition} c) i( {then_body} i) ELSE e( {else_body} e)"
+                )
+            else:
+                lowered.append(f"IF c( {condition} c) i( {then_body} i)")
+        elif isinstance(statement, ast.While):
+            condition = _lower_predicate(statement.test, task_name)
+            if statement.orelse:
+                raise ValueError("while may not have an else block")
+            body = _lower_python_statements(statement.body, task_name)
+            lowered.append(
+                f"WHILE c( {condition} c) w( {body} w)"
+            )
+        elif isinstance(statement, ast.For):
+            if statement.orelse:
+                raise ValueError("for may not have an else block")
+            if not isinstance(statement.target, ast.Name) or statement.target.id != "_":
+                raise ValueError("for loop target must be _")
+            repeat = _range_bound(statement.iter)
+            lowered.append(
+                f"REPEAT R={repeat} r( {_lower_python_statements(statement.body, task_name)} r)"
+            )
+        else:
+            raise ValueError(f"disallowed Python statement: {type(statement).__name__}")
+    return " ".join(lowered)
+
+
+def _range_bound(node: ast.expr) -> int:
+    if (
+        not isinstance(node, ast.Call)
+        or not isinstance(node.func, ast.Name)
+        or node.func.id != "range"
+        or node.keywords
+        or len(node.args) != 1
+        or not isinstance(node.args[0], ast.Constant)
+        or type(node.args[0].value) is not int
+    ):
+        raise ValueError("for loops require range(<integer 0..19>)")
+    bound = node.args[0].value
+    if not 0 <= bound <= 19:
+        raise ValueError("for loop range must be an integer from 0 through 19")
+    return bound
+
+
+def _lower_action(call: ast.Call, task_name: str) -> str:
+    name = _plain_call_name(call, "action")
+    if call.args:
+        raise ValueError("action calls may not have arguments")
+    actions = (
+        _KAREL_ACTIONS if task_name in {"CleanHouse", "FourCorners"} else _MINIGRID_ACTIONS
+    )
+    if task_name not in {"CleanHouse", "FourCorners", "DoorKey", "RedBlueDoor"} or (
+        name not in actions
+    ):
+        raise ValueError(f"{name} is not an allowed action for {task_name}")
+    return name
+
+
+def _lower_predicate(node: ast.expr, task_name: str) -> str:
+    if not isinstance(node, ast.Call):
+        raise ValueError("if and while conditions must be allowlisted predicate calls")
+    name = _plain_call_name(node, "predicate")
+    if task_name in {"CleanHouse", "FourCorners"}:
+        if name not in _KAREL_PREDICATES or node.args:
+            raise ValueError(f"{name} is not an allowed predicate for {task_name}")
+        return name
+    if task_name not in {"DoorKey", "RedBlueDoor"}:
+        raise ValueError(f"{name} is not an allowed predicate for {task_name}")
+    if name in _MINIGRID_ZERO_ARGUMENT_PREDICATES:
+        if node.args:
+            raise ValueError(f"{name} does not take arguments")
+        return name
+    values = _MINIGRID_VALUE_PREDICATES.get(name)
+    if values is None or len(node.args) != 1 or not isinstance(node.args[0], ast.Constant):
+        raise ValueError(f"{name} requires one allowlisted string value")
+    value = node.args[0].value
+    if not isinstance(value, str) or value not in values:
+        raise ValueError(f"{name} has an invalid value")
+    return f"{name} h( {value} h)"
+
+
+def _plain_call_name(call: ast.Call, kind: str) -> str:
+    if not isinstance(call.func, ast.Name):
+        raise ValueError(f"{kind} must be a direct call")
+    if call.keywords:
+        raise ValueError(f"{kind} calls may not use keyword arguments")
+    return call.func.id
 
 
 def _response_candidate_raw(response: object) -> str:
