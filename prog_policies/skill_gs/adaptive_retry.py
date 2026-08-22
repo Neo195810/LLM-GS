@@ -18,6 +18,7 @@ def run_doorkey_retry_loop(
     seeds: Iterable[int],
     initial_max_steps: int = 200,
     retry_max_steps: int = 200,
+    retry_budget_schedule: Iterable[int] | None = None,
     max_attempts: int = 2,
     skill_store_path: str | Path | None = None,
     attempt_memory_path: str | Path | None = None,
@@ -36,6 +37,7 @@ def run_doorkey_retry_loop(
         raise ValueError("max_attempts must be at least 1")
 
     seed_list = list(seeds)
+    retry_schedule = _normalize_retry_budget_schedule(retry_budget_schedule)
     attempts: list[dict[str, Any]] = []
     final_runs: list[dict[str, Any]] = []
     retried_seeds: list[int] = []
@@ -77,7 +79,11 @@ def run_doorkey_retry_loop(
                 diagnosis,
                 attempt_index + 1,
                 max_steps,
-                retry_max_steps,
+                _retry_budget_for_next_attempt(
+                    retry_schedule,
+                    current_attempt=attempt_index + 1,
+                    fallback_retry_max_steps=retry_max_steps,
+                ),
                 perturbation,
                 skill_ranking,
                 trace_attribution,
@@ -138,6 +144,7 @@ def run_doorkey_retry_loop(
             "max_attempts": max_attempts,
             "initial_max_steps": initial_max_steps,
             "retry_max_steps": retry_max_steps,
+            "retry_budget_schedule": retry_schedule,
             "repair_strategy": "diagnosis_guided_replanning",
             "replanner_policy": replanner_policy,
             "perturbation_enabled": perturbation_enabled,
@@ -186,6 +193,30 @@ def _make_perturbation(
             attempt=attempt,
         )
     return {}
+
+
+def _normalize_retry_budget_schedule(
+    retry_budget_schedule: Iterable[int] | None,
+) -> list[int]:
+    if retry_budget_schedule is None:
+        return []
+    schedule = [int(item) for item in retry_budget_schedule]
+    if any(item < 1 for item in schedule):
+        raise ValueError("retry_budget_schedule values must be positive integers")
+    return schedule
+
+
+def _retry_budget_for_next_attempt(
+    retry_budget_schedule: list[int],
+    current_attempt: int,
+    fallback_retry_max_steps: int,
+) -> int:
+    if not retry_budget_schedule:
+        return fallback_retry_max_steps
+    schedule_index = current_attempt - 1
+    if schedule_index < len(retry_budget_schedule):
+        return retry_budget_schedule[schedule_index]
+    return retry_budget_schedule[-1]
 
 
 def _make_repair_plan(

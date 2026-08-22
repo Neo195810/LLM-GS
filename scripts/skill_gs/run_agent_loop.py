@@ -22,6 +22,7 @@ def main() -> None:
     parser.add_argument("--adaptive-retry", action="store_true")
     parser.add_argument("--initial-max-steps", type=int)
     parser.add_argument("--retry-max-steps", type=int)
+    parser.add_argument("--retry-budget-schedule", type=int, nargs="*")
     parser.add_argument("--max-attempts", type=int, default=2)
     parser.add_argument("--attempt-memory")
     parser.add_argument("--perturbation-seed", type=int, default=0)
@@ -42,6 +43,7 @@ def main() -> None:
         adaptive_retry=args.adaptive_retry,
         initial_max_steps=args.initial_max_steps,
         retry_max_steps=args.retry_max_steps,
+        retry_budget_schedule=args.retry_budget_schedule,
         max_attempts=args.max_attempts,
         attempt_memory_path=args.attempt_memory,
         perturbation_seed=args.perturbation_seed,

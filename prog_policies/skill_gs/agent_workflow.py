@@ -74,6 +74,7 @@ def run_doorkey_agent_loop(
     adaptive_retry: bool = False,
     initial_max_steps: int | None = None,
     retry_max_steps: int | None = None,
+    retry_budget_schedule: Iterable[int] | None = None,
     max_attempts: int = 2,
     attempt_memory_path: str | Path | None = None,
     perturbation_seed: int = 0,
@@ -90,6 +91,7 @@ def run_doorkey_agent_loop(
                 initial_max_steps if initial_max_steps is not None else max_steps
             ),
             retry_max_steps=retry_max_steps if retry_max_steps is not None else max_steps,
+            retry_budget_schedule=retry_budget_schedule,
             max_attempts=max_attempts,
             skill_store_path=skill_store_path,
             attempt_memory_path=attempt_memory_path,

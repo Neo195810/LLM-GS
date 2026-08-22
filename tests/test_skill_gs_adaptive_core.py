@@ -245,6 +245,37 @@ class SkillGSAdaptiveCoreTests(unittest.TestCase):
             "increase_step_budget",
         )
 
+    def test_retry_budget_schedule_advances_attempt_step_limits(self):
+        result = run_doorkey_retry_loop(
+            seeds=[1],
+            initial_max_steps=10,
+            retry_max_steps=20,
+            retry_budget_schedule=[20, 22],
+            max_attempts=3,
+            perturbation_seed=123,
+            replanner_policy="attribution_aware",
+        )
+
+        self.assertEqual([attempt["max_steps"] for attempt in result["attempts"]], [10, 20, 22])
+        self.assertEqual(result["success_rate"], 1.0)
+        self.assertEqual(result["failed_seeds"], [])
+
+    def test_retry_budget_schedule_is_reported_in_adaptive_retry_config(self):
+        result = run_doorkey_retry_loop(
+            seeds=[1],
+            initial_max_steps=10,
+            retry_max_steps=20,
+            retry_budget_schedule=[20, 22],
+            max_attempts=3,
+            perturbation_seed=123,
+            replanner_policy="attribution_aware",
+        )
+
+        self.assertEqual(
+            result["adaptive_retry"]["retry_budget_schedule"],
+            [20, 22],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
