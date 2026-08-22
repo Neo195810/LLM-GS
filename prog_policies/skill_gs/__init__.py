@@ -16,6 +16,7 @@ from .evaluator import run_doorkey_mvp, run_many_doorkey_mvp
 from .failure_detector import FailureDiagnosis, detect_failure
 from .replanner import RepairPlan, replan_after_failure
 from .agent_workflow import run_doorkey_agent_loop
+from .baseline_comparison import run_doorkey_baseline_comparison
 from .skill_memory import record_skills_from_evaluation
 from .skill_ranker import build_default_doorkey_skill_ranking, rank_skills_for_failure
 from .stochastic_perturbation import choose_repair_strategy
@@ -50,6 +51,7 @@ __all__ = [
     "rank_skills_for_failure",
     "replan_after_failure",
     "run_doorkey_agent_loop",
+    "run_doorkey_baseline_comparison",
     "run_doorkey_mvp",
     "run_many_doorkey_mvp",
     "run_doorkey_retry_loop",
