@@ -13,6 +13,7 @@ from .adaptive_retry import run_doorkey_retry_loop
 from .doorkey_policy import DoorKeyFixedPolicy
 from .doorkey_state import DoorKeyState, extract_doorkey_state
 from .evaluator import run_doorkey_mvp, run_many_doorkey_mvp
+from .evidence_pack import generate_evidence_pack
 from .failure_detector import FailureDiagnosis, detect_failure
 from .replanner import RepairPlan, replan_after_failure
 from .agent_workflow import run_doorkey_agent_loop
@@ -46,6 +47,7 @@ __all__ = [
     "extract_doorkey_state",
     "build_default_doorkey_skill_ranking",
     "choose_repair_strategy",
+    "generate_evidence_pack",
     "analyze_doorkey_trace",
     "detect_failure",
     "rank_skills_for_failure",

@@ -139,6 +139,28 @@ Optionally persist Adaptive Core attempt memory:
 python scripts/skill_gs/run_agent_loop.py --seeds 0 --adaptive-retry --initial-max-steps 1 --retry-max-steps 200 --max-attempts 2 --attempt-memory output/skill_gs/adaptive_attempts.json --perturbation-seed 123
 ```
 
+Run the fair baseline comparison used by the current demo report:
+
+```bash
+python scripts/skill_gs/run_baseline_comparison.py --seed-start 0 --seed-end 127 --initial-max-steps 10 --search-candidate-max-steps 10 20 22 24 --ours-retry-budget-schedule 20 22 24 --ours-max-attempts 4 --perturbation-seed 123 --output output/skill_gs/baseline_comparison_seed0_127.json
+```
+
+Generate the chart/report evidence pack from that comparison JSON:
+
+```bash
+python scripts/skill_gs/generate_evidence_pack.py --baseline-json output/skill_gs/baseline_comparison_seed0_127.json
+```
+
+The generated demo report is written to
+`reports/skill_gs_demo_evidence_pack_2026-08-22.md`, with SVG charts under
+`reports/assets/`. The current local proxy comparison shows:
+
+```text
+llm_generated one-shot proxy: 14/128 success, 128 evaluations
+llm_gs_style_search proxy: 128/128 success, 512 evaluations
+ours_adaptive_skill_gs: 128/128 success, 250 evaluations
+```
+
 ## Adapting LLM-GS to Your Environment
 
 To use LLM-GS for your custom PRL task:

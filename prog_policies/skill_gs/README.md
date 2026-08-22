@@ -14,6 +14,10 @@ that can be wired into experiments later.
 - `doorkey_policy.py`: fixed BFS/rule-based policy for the DoorKey MVP loop.
 - `evaluator.py`: DoorKey MVP runner and multi-seed summary.
 - `skill_memory.py`: cumulative JSON skill recording from successful evaluator results.
+- `baseline_comparison.py`: fair local proxy comparison across one-shot,
+  candidate-search, and adaptive Skill-GS groups.
+- `evidence_pack.py`: SVG chart and Markdown demo report generation from
+  baseline comparison JSON.
 - `schemas.py`: shared dataclasses for skill records, queries, plans, and critiques.
 
 ## First smoke command
@@ -40,6 +44,30 @@ Critic/Repair decision. Multi-seed runs also include a `critic_decisions`
 summary. With `--skill-store`, successful runs persist learned skills into a
 cumulative JSON store with source-agent and source-seed metadata. This is a
 smoke baseline for the Skill-GS pipeline, not the final Skill-GS search method.
+
+## Baseline comparison and demo evidence
+
+Run the current fair comparison:
+
+```bash
+python scripts/skill_gs/run_baseline_comparison.py --seed-start 0 --seed-end 127 --initial-max-steps 10 --search-candidate-max-steps 10 20 22 24 --ours-retry-budget-schedule 20 22 24 --ours-max-attempts 4 --perturbation-seed 123 --output output/skill_gs/baseline_comparison_seed0_127.json
+```
+
+Generate tracked SVG charts and a Markdown demo report:
+
+```bash
+python scripts/skill_gs/generate_evidence_pack.py --baseline-json output/skill_gs/baseline_comparison_seed0_127.json
+```
+
+The demo evidence pack compares:
+
+```text
+LLM-generated one-shot proxy
+vs LLM-GS-style candidate search proxy
+vs ours Adaptive Skill-GS
+```
+
+It is a reproducible local proxy benchmark. It does not call an external LLM API.
 
 ## Intended next wiring
 

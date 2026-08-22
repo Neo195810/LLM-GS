@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="384" viewBox="0 0 900 384">
+<style>
+text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
+.title { font-size: 28px; font-weight: 700; }
+.subtitle { font-size: 15px; fill: #64748b; }
+.label { font-size: 15px; font-weight: 600; }
+.value { font-size: 15px; font-weight: 700; }
+.caption { font-size: 13px; fill: #64748b; }
+.track { fill: #e8edf3; }
+</style>
+<rect width="100%" height="100%" fill="#fbfcfe" />
+<text x="42" y="46" class="title">Success Rate by Baseline</text>
+<text x="42" y="72" class="subtitle">Same DoorKey task, same seeds, same evaluator</text>
+<text x="42" y="126" class="label">llm_generated</text>
+<rect x="300" y="104" width="500" height="32" rx="6" class="track" />
+<rect x="300" y="104" width="54.69" height="32" rx="6" fill="#7c8da6" />
+<text x="818" y="126" class="value">10.9%</text>
+<text x="300" y="160" class="caption">14/128</text>
+<text x="42" y="204" class="label">llm_gs_style_search</text>
+<rect x="300" y="182" width="500" height="32" rx="6" class="track" />
+<rect x="300" y="182" width="500.00" height="32" rx="6" fill="#d18b47" />
+<text x="818" y="204" class="value">100.0%</text>
+<text x="300" y="238" class="caption">128/128</text>
+<text x="42" y="282" class="label">ours_adaptive_skill_gs</text>
+<rect x="300" y="260" width="500" height="32" rx="6" class="track" />
+<rect x="300" y="260" width="500.00" height="32" rx="6" fill="#2f8f83" />
+<text x="818" y="282" class="value">100.0%</text>
+<text x="300" y="316" class="caption">128/128</text>
+</svg>
