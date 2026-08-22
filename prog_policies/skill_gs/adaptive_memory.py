@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 import json
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,56 @@ class AdaptiveAttemptMemory:
                 "success": success,
             }
         )
+
+    def skill_feedback(
+        self,
+        failure_attribution: str | None = None,
+    ) -> dict[str, Any]:
+        """Summarize repair outcomes as skill-level ranking feedback."""
+
+        by_skill: dict[str, dict[str, Any]] = defaultdict(
+            lambda: {
+                "attempts": 0,
+                "successful_repairs": 0,
+                "failed_repairs": 0,
+            }
+        )
+        for outcome in self._payload["repair_outcomes"]:
+            if (
+                failure_attribution is not None
+                and outcome.get("failure_attribution") != failure_attribution
+            ):
+                continue
+            skill_id = outcome.get("selected_skill_id")
+            if not skill_id:
+                continue
+            item = by_skill[skill_id]
+            item["attempts"] += 1
+            if outcome.get("success"):
+                item["successful_repairs"] += 1
+            else:
+                item["failed_repairs"] += 1
+
+        normalized = {}
+        for skill_id, item in by_skill.items():
+            attempts = int(item["attempts"])
+            successes = int(item["successful_repairs"])
+            failures = int(item["failed_repairs"])
+            success_rate = successes / attempts if attempts else 0.0
+            score_delta = min(successes * 0.75, 3.0) - min(failures * 1.0, 4.0)
+            normalized[skill_id] = {
+                "attempts": attempts,
+                "successful_repairs": successes,
+                "failed_repairs": failures,
+                "success_rate": round(success_rate, 6),
+                "score_delta": round(score_delta, 6),
+            }
+
+        return {
+            "source": "adaptive_attempt_memory",
+            "failure_attribution": failure_attribution,
+            "by_skill": normalized,
+        }
 
     def summary(self) -> dict[str, Any]:
         attempts = list(self._payload["attempts"])

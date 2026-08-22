@@ -69,6 +69,8 @@ def run_doorkey_retry_loop(
             skill_ranking = _make_skill_ranking(
                 diagnosis,
                 perturbation,
+                trace_attribution,
+                adaptive_memory,
                 can_retry,
             )
             repair_plan = _make_repair_plan(
@@ -213,13 +215,19 @@ def _make_repair_plan(
 def _make_skill_ranking(
     diagnosis: FailureDiagnosis,
     perturbation: dict[str, Any],
+    trace_attribution: dict[str, Any],
+    adaptive_memory: AdaptiveAttemptMemory,
     can_retry: bool,
 ) -> dict[str, Any]:
     if diagnosis.success or not can_retry:
         return {}
+    skill_feedback = adaptive_memory.skill_feedback(
+        trace_attribution.get("attribution")
+    )
     return build_default_doorkey_skill_ranking(
         diagnosis,
         perturbation=perturbation,
+        skill_feedback=skill_feedback,
     )
 
 

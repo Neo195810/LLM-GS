@@ -17,6 +17,7 @@ def rank_skills_for_failure(
     candidates: list[RetrievedSkill],
     diagnosis: FailureDiagnosis | dict[str, Any],
     perturbation: dict[str, Any] | None = None,
+    skill_feedback: dict[str, Any] | None = None,
     top_k: int | None = None,
 ) -> dict[str, Any]:
     """Rerank retrieved skills using Adaptive Core failure context."""
@@ -24,7 +25,7 @@ def rank_skills_for_failure(
     failure_type = _diagnosis_value(diagnosis, "failure_type")
     policy = _policy_for_failure(failure_type)
     ranked = [
-        _rank_candidate(candidate, failure_type, policy)
+        _rank_candidate(candidate, failure_type, policy, skill_feedback)
         for candidate in candidates
     ]
     ranked.sort(
@@ -38,6 +39,11 @@ def rank_skills_for_failure(
         "perturbation_strategy": (
             perturbation or {}
         ).get("strategy_id"),
+        "skill_feedback": skill_feedback or {
+            "source": "none",
+            "failure_attribution": None,
+            "by_skill": {},
+        },
         "ranked_skills": ranked,
     }
 
@@ -45,6 +51,7 @@ def rank_skills_for_failure(
 def build_default_doorkey_skill_ranking(
     diagnosis: FailureDiagnosis,
     perturbation: dict[str, Any] | None = None,
+    skill_feedback: dict[str, Any] | None = None,
     top_k: int = 5,
 ) -> dict[str, Any]:
     """Build a DoorKey skill ranking artifact for the adaptive retry trace."""
@@ -64,6 +71,7 @@ def build_default_doorkey_skill_ranking(
         candidates,
         diagnosis,
         perturbation=perturbation,
+        skill_feedback=skill_feedback,
         top_k=top_k,
     )
     ranking["query"] = {
@@ -79,6 +87,7 @@ def _rank_candidate(
     candidate: RetrievedSkill,
     failure_type: str,
     policy: str,
+    skill_feedback: dict[str, Any] | None,
 ) -> dict[str, Any]:
     skill = candidate.skill
     score = float(candidate.score)
@@ -115,6 +124,8 @@ def _rank_candidate(
         score -= 3.0
         reasons.append("known_failure_signature_penalty")
 
+    score = _apply_feedback(score, reasons, skill.skill_id, skill_feedback)
+
     return {
         "skill_id": skill.skill_id,
         "name": skill.name,
@@ -126,6 +137,23 @@ def _rank_candidate(
         "failure_signatures": list(skill.failure_signatures),
         "reasons": reasons,
     }
+
+
+def _apply_feedback(
+    score: float,
+    reasons: list[str],
+    skill_id: str,
+    skill_feedback: dict[str, Any] | None,
+) -> float:
+    feedback = (skill_feedback or {}).get("by_skill", {}).get(skill_id)
+    if not feedback:
+        return score
+    delta = float(feedback.get("score_delta", 0.0))
+    if delta > 0:
+        reasons.append(f"repair_success_feedback_bonus={delta:.2f}")
+    elif delta < 0:
+        reasons.append(f"repair_failure_feedback_penalty={delta:.2f}")
+    return score + delta
 
 
 def _diagnosis_value(
