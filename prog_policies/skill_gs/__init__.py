@@ -19,6 +19,7 @@ from .agent_workflow import run_doorkey_agent_loop
 from .skill_memory import record_skills_from_evaluation
 from .skill_ranker import build_default_doorkey_skill_ranking, rank_skills_for_failure
 from .stochastic_perturbation import choose_repair_strategy
+from .trace_attribution import analyze_doorkey_trace
 from .skill_manager import (
     JsonSkillStore,
     SkillManager,
@@ -44,6 +45,7 @@ __all__ = [
     "extract_doorkey_state",
     "build_default_doorkey_skill_ranking",
     "choose_repair_strategy",
+    "analyze_doorkey_trace",
     "detect_failure",
     "rank_skills_for_failure",
     "replan_after_failure",

@@ -9,6 +9,7 @@ from prog_policies.skill_gs.evaluator import run_doorkey_mvp
 from prog_policies.skill_gs.failure_detector import detect_failure
 from prog_policies.skill_gs.replanner import replan_after_failure
 from prog_policies.skill_gs.stochastic_perturbation import choose_repair_strategy
+from prog_policies.skill_gs.trace_attribution import analyze_doorkey_trace
 
 
 class SkillGSAdaptiveCoreTests(unittest.TestCase):
@@ -24,6 +25,28 @@ class SkillGSAdaptiveCoreTests(unittest.TestCase):
         self.assertEqual(diagnosis.recommended_repair, "increase_step_budget")
         self.assertEqual(diagnosis.evidence["source_failure_type"], "no_progress")
         self.assertEqual(diagnosis.evidence["steps"], 1)
+
+    def test_trace_attribution_classifies_before_key_budget_cutoff(self):
+        evaluation = run_doorkey_mvp(seed=0, max_steps=1)
+
+        metrics = analyze_doorkey_trace(evaluation, max_steps=1)
+
+        self.assertEqual(metrics["attribution"], "budget_cutoff_before_key")
+        self.assertEqual(metrics["stage_at_end"], "before_key")
+        self.assertTrue(metrics["budget_exhausted"])
+        self.assertEqual(metrics["reward_at_end"], 0.0)
+        self.assertEqual(metrics["blocked_moves"], 0)
+
+    def test_trace_attribution_classifies_after_key_budget_cutoff(self):
+        evaluation = run_doorkey_mvp(seed=0, max_steps=10)
+
+        metrics = analyze_doorkey_trace(evaluation, max_steps=10)
+
+        self.assertEqual(metrics["attribution"], "budget_cutoff_after_key")
+        self.assertEqual(metrics["stage_at_end"], "after_key_before_goal")
+        self.assertTrue(metrics["budget_exhausted"])
+        self.assertEqual(metrics["reward_at_end"], 0.5)
+        self.assertEqual(metrics["action_counts"]["pickMarker"], 1)
 
     def test_stochastic_perturbation_is_seeded_and_constrained(self):
         diagnosis = detect_failure(run_doorkey_mvp(seed=0, max_steps=1), max_steps=1)
@@ -130,6 +153,10 @@ class SkillGSAdaptiveCoreTests(unittest.TestCase):
         self.assertEqual(memory["successful_repairs"], 1)
         self.assertEqual(len(payload["attempts"]), 2)
         self.assertEqual(payload["attempts"][0]["diagnosis"]["failure_type"], "step_budget_exhausted")
+        self.assertEqual(
+            payload["attempts"][0]["trace_attribution"]["attribution"],
+            "budget_cutoff_before_key",
+        )
         self.assertEqual(payload["attempts"][0]["repair_plan"]["status"], "retry")
         self.assertEqual(
             payload["attempts"][0]["repair_plan"]["selected_skill"]["skill_id"],
@@ -139,6 +166,11 @@ class SkillGSAdaptiveCoreTests(unittest.TestCase):
             payload["repair_outcomes"][0]["selected_skill_id"],
             "karel.doorkey.navigate_forward_until_blocked.v1",
         )
+        self.assertEqual(
+            payload["repair_outcomes"][0]["failure_attribution"],
+            "budget_cutoff_before_key",
+        )
+        self.assertEqual(payload["repair_outcomes"][0]["observed_solve_steps"], 16)
         self.assertTrue(payload["attempts"][1]["success"])
 
 

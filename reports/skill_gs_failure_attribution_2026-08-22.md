@@ -21,6 +21,10 @@ failure detector、retry loop 與 trace output 中分析：
 就被截斷。這類 failure 適合被標記為 `step_budget_exhausted`，並可進一步
 細分為 key 已取得後的 `after_key_before_goal` budget pressure。
 
+後續已將此分析落成 deterministic trace-level attribution metrics：
+Adaptive Core 會在每次 attempt 後產生 `trace_attribution`，並在 retry memory
+的 repair outcome 中保存 `failure_attribution` 與 `observed_solve_steps`。
+
 ## 資料來源
 
 本次分析使用既有實驗 output，不重新跑大量 seed：
@@ -241,9 +245,9 @@ after_key_before_goal budget pressure
 短期建議：
 
 1. 暫時不新增 Analyzer Agent。
-2. 先補 trace-level attribution metrics，例如 blocked moves、turn ratio、progress stall、stage at failure。
-3. 在 retry memory 中保存 `failure_attribution` 與 `observed_solve_steps`。
-4. 讓 Replanner 區分「需要更多步數」與「需要換 skill」。
+2. 已先補上 trace-level attribution metrics，例如 blocked moves、turn ratio、stage at failure。
+3. 已在 retry memory 中保存 `failure_attribution` 與 `observed_solve_steps`。
+4. 下一步讓 Replanner 更明確區分「需要更多步數」與「需要換 skill」。
 
 更完整的下一階段可以是：
 

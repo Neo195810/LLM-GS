@@ -11,6 +11,7 @@ from .failure_detector import FailureDiagnosis, detect_failure
 from .replanner import RepairPlan, replan_after_failure
 from .skill_ranker import build_default_doorkey_skill_ranking
 from .stochastic_perturbation import choose_repair_strategy
+from .trace_attribution import analyze_doorkey_trace
 
 
 def run_doorkey_retry_loop(
@@ -49,6 +50,7 @@ def run_doorkey_retry_loop(
                 max_steps=max_steps,
                 skill_store_path=skill_store_path,
             )
+            trace_attribution = analyze_doorkey_trace(run, max_steps=max_steps)
             diagnosis = detect_failure(
                 run,
                 attempt=attempt_index + 1,
@@ -84,6 +86,7 @@ def run_doorkey_retry_loop(
                 diagnosis,
                 repair_plan,
                 skill_ranking,
+                trace_attribution,
             )
             attempts.append(attempt)
             seed_attempts.append(attempt)
@@ -99,10 +102,18 @@ def run_doorkey_retry_loop(
             adaptive_memory.record_repair_outcome(
                 seed=seed,
                 failure_type=seed_attempts[0]["diagnosis"]["failure_type"],
+                failure_attribution=seed_attempts[0]["trace_attribution"][
+                    "attribution"
+                ],
                 strategy_id=seed_attempts[0]["repair_plan"]["strategy_id"],
                 selected_skill_id=seed_attempts[0]["repair_plan"]
                 .get("selected_skill", {})
                 .get("skill_id"),
+                observed_solve_steps=(
+                    int(seed_attempts[-1]["steps"])
+                    if seed_attempts[-1]["success"]
+                    else None
+                ),
                 from_attempt=seed_attempts[0]["attempt"],
                 to_attempt=seed_attempts[-1]["attempt"],
                 success=bool(seed_attempts[-1]["success"]),
@@ -129,6 +140,7 @@ def run_doorkey_retry_loop(
         "adaptive_core": {
             "failure_detector": "prog_policies.skill_gs.failure_detector",
             "stochastic_perturbation": "prog_policies.skill_gs.stochastic_perturbation",
+            "trace_attribution": "prog_policies.skill_gs.trace_attribution",
             "skill_ranker": "prog_policies.skill_gs.skill_ranker",
             "replanner": "prog_policies.skill_gs.replanner",
             "memory": "prog_policies.skill_gs.adaptive_memory",
@@ -210,6 +222,7 @@ def _summarize_attempt(
     diagnosis: FailureDiagnosis,
     repair_plan: RepairPlan,
     skill_ranking: dict[str, Any],
+    trace_attribution: dict[str, Any],
 ) -> dict[str, Any]:
     critique = run.get("critique", {})
     summary = {
@@ -222,6 +235,7 @@ def _summarize_attempt(
         "failure_type": critique.get("failure_type"),
         "repair_operator": critique.get("repair_operator"),
         "repair_hint": critique.get("repair_hint"),
+        "trace_attribution": trace_attribution,
         "diagnosis": diagnosis.to_dict(),
         "repair_plan": repair_plan.to_dict(),
     }
