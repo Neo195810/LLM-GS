@@ -13,6 +13,7 @@ class RepairPlan:
     next_attempt: dict[str, Any] = field(default_factory=dict)
     rationale: str = ""
     perturbation: dict[str, Any] = field(default_factory=dict)
+    decision_basis: dict[str, Any] = field(default_factory=dict)
     selected_skill: dict[str, Any] = field(default_factory=dict)
     plan_variant: dict[str, Any] = field(default_factory=dict)
 
@@ -27,9 +28,13 @@ def replan_after_failure(
     retry_max_steps: int,
     perturbation: dict[str, Any] | None = None,
     skill_ranking: dict[str, Any] | None = None,
+    trace_attribution: dict[str, Any] | None = None,
+    replanner_policy: str = "legacy",
     can_retry: bool = True,
 ) -> RepairPlan:
     """Convert a failure diagnosis into the next retry configuration."""
+
+    _validate_replanner_policy(replanner_policy)
 
     if diagnosis.success:
         return RepairPlan(
@@ -37,6 +42,13 @@ def replan_after_failure(
             strategy_id="store_skill",
             rationale="Evaluation succeeded; store the successful skill trace.",
             perturbation=perturbation or {},
+            decision_basis=_decision_basis(
+                replanner_policy,
+                diagnosis,
+                trace_attribution,
+                "store_skill",
+                "store_skill",
+            ),
         )
 
     if not can_retry:
@@ -45,15 +57,41 @@ def replan_after_failure(
             strategy_id="max_attempts_exhausted",
             rationale="No retry budget remains for this seed.",
             perturbation=perturbation or {},
+            decision_basis=_decision_basis(
+                replanner_policy,
+                diagnosis,
+                trace_attribution,
+                "max_attempts_exhausted",
+                "max_attempts_exhausted",
+            ),
         )
 
-    strategy_id = (
+    original_strategy_id = (
         perturbation.get("strategy_id")
         if perturbation
         else diagnosis.recommended_repair
     )
+    strategy_id = _choose_strategy(
+        original_strategy_id,
+        diagnosis,
+        trace_attribution,
+        replanner_policy,
+    )
+    decision_basis = _decision_basis(
+        replanner_policy,
+        diagnosis,
+        trace_attribution,
+        original_strategy_id,
+        strategy_id,
+    )
     selected_skill = _select_skill(skill_ranking)
-    plan_variant = _make_plan_variant(diagnosis, skill_ranking, selected_skill)
+    plan_variant = _make_plan_variant(
+        diagnosis,
+        skill_ranking,
+        selected_skill,
+        trace_attribution,
+        decision_basis,
+    )
     next_max_steps = _next_max_steps(strategy_id, current_max_steps, retry_max_steps)
     next_attempt = {
         "attempt": attempt + 1,
@@ -70,6 +108,7 @@ def replan_after_failure(
         next_attempt=next_attempt,
         rationale=_rationale(diagnosis.failure_type, strategy_id),
         perturbation=perturbation or {},
+        decision_basis=decision_basis,
         selected_skill=selected_skill,
         plan_variant=plan_variant,
     )
@@ -98,6 +137,54 @@ def _rationale(failure_type: str, strategy_id: str) -> str:
     )
 
 
+def _validate_replanner_policy(replanner_policy: str) -> None:
+    if replanner_policy not in {"legacy", "attribution_aware"}:
+        raise ValueError(
+            "replanner_policy must be either 'legacy' or 'attribution_aware'"
+        )
+
+
+def _choose_strategy(
+    original_strategy_id: str,
+    diagnosis: FailureDiagnosis,
+    trace_attribution: dict[str, Any] | None,
+    replanner_policy: str,
+) -> str:
+    if replanner_policy == "legacy":
+        return original_strategy_id
+
+    attribution = (trace_attribution or {}).get("attribution")
+    if attribution in {
+        "budget_cutoff_before_key",
+        "budget_cutoff_after_key",
+        "budget_cutoff",
+    }:
+        return "increase_step_budget"
+    if attribution == "blocked_motion":
+        return "retrieve_alternative_skill"
+    if diagnosis.failure_type == "looping_or_no_progress":
+        return "insert_progress_guard"
+    return original_strategy_id
+
+
+def _decision_basis(
+    replanner_policy: str,
+    diagnosis: FailureDiagnosis,
+    trace_attribution: dict[str, Any] | None,
+    original_strategy_id: str,
+    strategy_id: str,
+) -> dict[str, Any]:
+    attribution = (trace_attribution or {}).get("attribution")
+    return {
+        "policy": replanner_policy,
+        "failure_type": diagnosis.failure_type,
+        "failure_attribution": attribution,
+        "original_strategy_id": original_strategy_id,
+        "strategy_id": strategy_id,
+        "overrode_perturbation": original_strategy_id != strategy_id,
+    }
+
+
 def _select_skill(skill_ranking: dict[str, Any] | None) -> dict[str, Any]:
     if not skill_ranking:
         return {}
@@ -117,6 +204,8 @@ def _make_plan_variant(
     diagnosis: FailureDiagnosis,
     skill_ranking: dict[str, Any] | None,
     selected_skill: dict[str, Any],
+    trace_attribution: dict[str, Any] | None,
+    decision_basis: dict[str, Any],
 ) -> dict[str, Any]:
     if not skill_ranking or not selected_skill:
         return {}
@@ -124,6 +213,8 @@ def _make_plan_variant(
     return {
         "source": "skill_ranking",
         "failure_type": diagnosis.failure_type,
+        "failure_attribution": (trace_attribution or {}).get("attribution"),
+        "decision_basis": dict(decision_basis),
         "ranking_policy": skill_ranking.get("ranking_policy"),
         "target_subgoal": query.get("subgoal"),
         "context_tags": list(query.get("context_tags", [])),

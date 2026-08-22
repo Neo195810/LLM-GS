@@ -78,6 +78,7 @@ def run_doorkey_agent_loop(
     attempt_memory_path: str | Path | None = None,
     perturbation_seed: int = 0,
     perturbation_enabled: bool = True,
+    replanner_policy: str = "legacy",
 ) -> dict[str, Any]:
     """Run the DoorKey MVP as an explicit Skill-GS agent workflow."""
 
@@ -94,6 +95,7 @@ def run_doorkey_agent_loop(
             attempt_memory_path=attempt_memory_path,
             perturbation_seed=perturbation_seed,
             perturbation_enabled=perturbation_enabled,
+            replanner_policy=replanner_policy,
         )
     else:
         evaluation = run_many_doorkey_mvp(

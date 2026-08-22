@@ -84,6 +84,54 @@ class SkillGSAdaptiveCoreTests(unittest.TestCase):
         self.assertEqual(plan.next_attempt["max_steps"], 200)
         self.assertEqual(plan.next_attempt["reason"], "step_budget_exhausted")
 
+    def test_legacy_replanner_keeps_stochastic_strategy(self):
+        evaluation = run_doorkey_mvp(seed=0, max_steps=10)
+        diagnosis = detect_failure(evaluation, max_steps=10)
+        trace_attribution = analyze_doorkey_trace(evaluation, max_steps=10)
+
+        plan = replan_after_failure(
+            diagnosis,
+            attempt=1,
+            current_max_steps=10,
+            retry_max_steps=20,
+            perturbation={
+                "strategy_id": "retrieve_alternative_skill",
+                "failure_type": "step_budget_exhausted",
+            },
+            trace_attribution=trace_attribution,
+            replanner_policy="legacy",
+        )
+
+        self.assertEqual(plan.strategy_id, "retrieve_alternative_skill")
+        self.assertEqual(plan.decision_basis["policy"], "legacy")
+        self.assertFalse(plan.decision_basis["overrode_perturbation"])
+
+    def test_attribution_aware_replanner_prefers_budget_for_trace_cutoff(self):
+        evaluation = run_doorkey_mvp(seed=0, max_steps=10)
+        diagnosis = detect_failure(evaluation, max_steps=10)
+        trace_attribution = analyze_doorkey_trace(evaluation, max_steps=10)
+
+        plan = replan_after_failure(
+            diagnosis,
+            attempt=1,
+            current_max_steps=10,
+            retry_max_steps=20,
+            perturbation={
+                "strategy_id": "retrieve_alternative_skill",
+                "failure_type": "step_budget_exhausted",
+            },
+            trace_attribution=trace_attribution,
+            replanner_policy="attribution_aware",
+        )
+
+        self.assertEqual(plan.strategy_id, "increase_step_budget")
+        self.assertEqual(plan.decision_basis["policy"], "attribution_aware")
+        self.assertEqual(
+            plan.decision_basis["failure_attribution"],
+            "budget_cutoff_after_key",
+        )
+        self.assertTrue(plan.decision_basis["overrode_perturbation"])
+
     def test_replanner_uses_top_ranked_skill_for_plan_variant(self):
         diagnosis = detect_failure(run_doorkey_mvp(seed=0, max_steps=1), max_steps=1)
         skill_ranking = {
@@ -172,6 +220,30 @@ class SkillGSAdaptiveCoreTests(unittest.TestCase):
         )
         self.assertEqual(payload["repair_outcomes"][0]["observed_solve_steps"], 16)
         self.assertTrue(payload["attempts"][1]["success"])
+
+    def test_retry_loop_uses_attribution_aware_replanner_policy(self):
+        result = run_doorkey_retry_loop(
+            seeds=[0],
+            initial_max_steps=10,
+            retry_max_steps=20,
+            max_attempts=2,
+            perturbation_seed=123,
+            replanner_policy="attribution_aware",
+        )
+
+        first_attempt = result["attempts"][0]
+        self.assertEqual(
+            result["adaptive_retry"]["replanner_policy"],
+            "attribution_aware",
+        )
+        self.assertEqual(
+            first_attempt["repair_plan"]["decision_basis"]["policy"],
+            "attribution_aware",
+        )
+        self.assertEqual(
+            first_attempt["repair_plan"]["strategy_id"],
+            "increase_step_budget",
+        )
 
 
 if __name__ == "__main__":

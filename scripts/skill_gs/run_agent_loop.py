@@ -26,6 +26,11 @@ def main() -> None:
     parser.add_argument("--attempt-memory")
     parser.add_argument("--perturbation-seed", type=int, default=0)
     parser.add_argument("--disable-perturbation", action="store_true")
+    parser.add_argument(
+        "--replanner-policy",
+        choices=["legacy", "attribution_aware"],
+        default="legacy",
+    )
     args = parser.parse_args()
 
     seeds = args.seeds if args.seeds else [args.seed]
@@ -41,6 +46,7 @@ def main() -> None:
         attempt_memory_path=args.attempt_memory,
         perturbation_seed=args.perturbation_seed,
         perturbation_enabled=not args.disable_perturbation,
+        replanner_policy=args.replanner_policy,
     )
     print(json.dumps(result, indent=2))
 

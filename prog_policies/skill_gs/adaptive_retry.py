@@ -23,6 +23,7 @@ def run_doorkey_retry_loop(
     attempt_memory_path: str | Path | None = None,
     perturbation_seed: int = 0,
     perturbation_enabled: bool = True,
+    replanner_policy: str = "legacy",
 ) -> dict[str, Any]:
     """Run DoorKey with a minimal adaptive retry wrapper.
 
@@ -77,6 +78,8 @@ def run_doorkey_retry_loop(
                 retry_max_steps,
                 perturbation,
                 skill_ranking,
+                trace_attribution,
+                replanner_policy,
                 can_retry,
             )
             attempt = _summarize_attempt(
@@ -134,6 +137,7 @@ def run_doorkey_retry_loop(
             "initial_max_steps": initial_max_steps,
             "retry_max_steps": retry_max_steps,
             "repair_strategy": "diagnosis_guided_replanning",
+            "replanner_policy": replanner_policy,
             "perturbation_enabled": perturbation_enabled,
             "perturbation_seed": perturbation_seed,
         },
@@ -189,6 +193,8 @@ def _make_repair_plan(
     retry_max_steps: int,
     perturbation: dict[str, Any],
     skill_ranking: dict[str, Any],
+    trace_attribution: dict[str, Any],
+    replanner_policy: str,
     can_retry: bool,
 ) -> RepairPlan:
     return replan_after_failure(
@@ -198,6 +204,8 @@ def _make_repair_plan(
         retry_max_steps=retry_max_steps,
         perturbation=perturbation,
         skill_ranking=skill_ranking,
+        trace_attribution=trace_attribution,
+        replanner_policy=replanner_policy,
         can_retry=can_retry,
     )
 
