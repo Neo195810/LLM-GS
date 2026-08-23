@@ -15,6 +15,15 @@ from .doorkey_state import DoorKeyState, extract_doorkey_state
 from .evaluator import run_doorkey_mvp, run_many_doorkey_mvp
 from .evidence_pack import generate_evidence_pack
 from .failure_detector import FailureDiagnosis, detect_failure
+from .llm_generated_baseline import (
+    build_openai_responses_payload,
+    build_state_conditioned_prompt,
+    extract_openai_response_text,
+    extract_initial_doorkey_environment_status,
+    parse_policy_response,
+    run_llm_generated_one_shot_smoke,
+)
+from .llm_repair import repair_doorkey_llm_policy
 from .replanner import RepairPlan, replan_after_failure
 from .agent_workflow import run_doorkey_agent_loop
 from .baseline_comparison import run_doorkey_baseline_comparison
@@ -50,10 +59,17 @@ __all__ = [
     "generate_evidence_pack",
     "analyze_doorkey_trace",
     "detect_failure",
+    "build_openai_responses_payload",
+    "build_state_conditioned_prompt",
+    "extract_openai_response_text",
+    "extract_initial_doorkey_environment_status",
+    "parse_policy_response",
     "rank_skills_for_failure",
+    "repair_doorkey_llm_policy",
     "replan_after_failure",
     "run_doorkey_agent_loop",
     "run_doorkey_baseline_comparison",
+    "run_llm_generated_one_shot_smoke",
     "run_doorkey_mvp",
     "run_many_doorkey_mvp",
     "run_doorkey_retry_loop",
