@@ -14,6 +14,7 @@ from prog_policies.karel_tasks import DoorKey
 from .doorkey_policy import ACTION_NAMES
 from .doorkey_state import extract_doorkey_state
 from .evaluator import KAREL_DOORKEY_ENV_ARGS
+from .skill_manager import JsonSkillStore
 
 
 GenerateResponse = Callable[[str, str, float], str]
@@ -32,6 +33,8 @@ DIRECTION_TOKENS = {
     3: "A<",
 }
 ENVIRONMENT_STATE_PLACEHOLDER = "{{environment_state}}"
+SKILLS_CONTEXT_PLACEHOLDER = "{{skills_context}}"
+NO_SKILLS_CONTEXT = "No learned skills are available yet."
 
 
 def parse_policy_response(raw_response: str) -> dict[str, Any]:
@@ -75,6 +78,7 @@ def run_llm_generated_one_shot_smoke(
     seed: int = 0,
     temperature: float = 0.0,
     cache_dir: str | Path = "output/skill_gs/llm_generated_baseline",
+    skill_store_path: str | Path | None = None,
     provider: str = "Ollama",
     num_gpu: int | None = None,
     think: bool | str | None = False,
@@ -88,7 +92,12 @@ def run_llm_generated_one_shot_smoke(
     prompt_path = Path(prompt_template_path)
     prompt_template = prompt_path.read_text(encoding="utf-8")
     environment_status = extract_initial_doorkey_environment_status(seed)
-    prompt = build_state_conditioned_prompt(prompt_template, environment_status)
+    skills_context = build_skills_context(skill_store_path)
+    prompt = build_state_conditioned_prompt(
+        prompt_template,
+        environment_status,
+        skills_context=skills_context,
+    )
     if generate_response:
         raw_response = generate_response(prompt, model_name, temperature)
     elif provider.lower() == "openai":
@@ -128,10 +137,12 @@ def run_llm_generated_one_shot_smoke(
         "reasoning_effort": reasoning_effort,
         "max_output_tokens": max_output_tokens,
         "prompt_template_path": str(prompt_path),
+        "skill_store_path": str(Path(skill_store_path)) if skill_store_path else None,
         "output_format": "structured_json",
         "cache_response": True,
         "seed": seed,
         "environment_status": environment_status,
+        "skills_context": skills_context,
         "final_prompt": prompt,
         "raw_response": raw_response,
         "policy": policy,
@@ -175,13 +186,61 @@ def extract_initial_doorkey_environment_status(seed: int) -> dict[str, Any]:
 def build_state_conditioned_prompt(
     template: str,
     environment_status: dict[str, Any],
+    skills_context: str | None = None,
 ) -> str:
     """Insert a runtime environment snapshot into a static prompt template."""
 
     environment_text = _format_environment_status(environment_status)
+    skills_text = skills_context if skills_context is not None else NO_SKILLS_CONTEXT
     if ENVIRONMENT_STATE_PLACEHOLDER in template:
-        return template.replace(ENVIRONMENT_STATE_PLACEHOLDER, environment_text)
-    return template.rstrip() + "\n\n" + environment_text
+        prompt = template.replace(ENVIRONMENT_STATE_PLACEHOLDER, environment_text)
+    else:
+        prompt = template.rstrip() + "\n\n" + environment_text
+
+    if SKILLS_CONTEXT_PLACEHOLDER in prompt:
+        return prompt.replace(SKILLS_CONTEXT_PLACEHOLDER, skills_text)
+    if skills_context and skills_context != NO_SKILLS_CONTEXT:
+        return prompt.rstrip() + "\n\nAvailable Skills:\n" + skills_text
+    return prompt
+
+
+def build_skills_context(
+    skill_store_path: str | Path | None,
+    task_family: str = "Karel",
+    max_skills: int = 5,
+) -> str:
+    """Format learned skills as concise prompt context for an LLM policy."""
+
+    if not skill_store_path:
+        return NO_SKILLS_CONTEXT
+
+    store_path = Path(skill_store_path)
+    if not store_path.exists():
+        return NO_SKILLS_CONTEXT
+
+    store = JsonSkillStore(store_path).load()
+    records = [
+        record
+        for record in store.all()
+        if not task_family or record.task_family.lower() == task_family.lower()
+    ]
+    if not records:
+        return NO_SKILLS_CONTEXT
+
+    records.sort(
+        key=lambda record: (
+            -record.success_rate,
+            -record.mean_reward,
+            -record.num_evaluations,
+            record.complexity,
+            record.skill_id,
+        )
+    )
+
+    return "\n\n".join(
+        _format_skill_for_prompt(index, record)
+        for index, record in enumerate(records[:max_skills], 1)
+    )
 
 
 def generate_openai_response(
@@ -453,6 +512,31 @@ def _format_environment_status(status: dict[str, Any]) -> str:
             status["ascii_map"],
         ]
     )
+
+
+def _format_skill_for_prompt(index: int, record) -> str:
+    return "\n".join(
+        [
+            f"Skill {index}:",
+            f"Skill ID: {record.skill_id}",
+            f"Name: {record.name}",
+            f"Purpose: {record.description}",
+            f"Semantic Tags: {_format_list(record.semantic_tags)}",
+            f"Preconditions: {_format_list(record.preconditions)}",
+            f"Postconditions: {_format_list(record.postconditions)}",
+            f"Action Pattern: {record.dsl_source}",
+            (
+                "Reliability: "
+                f"success_rate={record.success_rate:.3f}, "
+                f"mean_reward={record.mean_reward:.3f}, "
+                f"evaluations={record.num_evaluations}"
+            ),
+        ]
+    )
+
+
+def _format_list(values: list[str]) -> str:
+    return ", ".join(values) if values else "none"
 
 
 def _wall_cells(env) -> list[list[int]]:

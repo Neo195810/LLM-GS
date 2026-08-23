@@ -61,6 +61,10 @@ def main() -> None:
         default="output/skill_gs/llm_generated_baseline",
     )
     parser.add_argument(
+        "--skill-store",
+        help="Optional JSON skill database to inject into {{skills_context}}.",
+    )
+    parser.add_argument(
         "--raw-response-file",
         help="Use a saved raw LLM response instead of calling Ollama.",
     )
@@ -81,6 +85,7 @@ def main() -> None:
         temperature=args.temperature,
         provider=args.provider,
         cache_dir=args.cache_dir,
+        skill_store_path=args.skill_store,
         num_gpu=args.num_gpu,
         think=args.think,
         num_predict=args.num_predict,

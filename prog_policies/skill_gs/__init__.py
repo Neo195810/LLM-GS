@@ -17,6 +17,7 @@ from .evidence_pack import generate_evidence_pack
 from .failure_detector import FailureDiagnosis, detect_failure
 from .llm_generated_baseline import (
     build_openai_responses_payload,
+    build_skills_context,
     build_state_conditioned_prompt,
     extract_openai_response_text,
     extract_initial_doorkey_environment_status,
@@ -60,6 +61,7 @@ __all__ = [
     "analyze_doorkey_trace",
     "detect_failure",
     "build_openai_responses_payload",
+    "build_skills_context",
     "build_state_conditioned_prompt",
     "extract_openai_response_text",
     "extract_initial_doorkey_environment_status",
