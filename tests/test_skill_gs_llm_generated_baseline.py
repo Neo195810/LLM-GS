@@ -99,6 +99,30 @@ class SkillGSLLMGeneratedBaselineTests(unittest.TestCase):
         self.assertIn("Postconditions: goal_topped_off, success", skills_context)
         self.assertIn("Action Pattern: turnLeft turnLeft move move putMarker", skills_context)
 
+    def test_build_skills_context_gates_skills_by_initial_environment_stage(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            skill_store_path = pathlib.Path(temp_dir) / "skills.json"
+            _write_two_stage_repair_skill_store(skill_store_path)
+
+            skills_context = build_skills_context(
+                skill_store_path,
+                environment_status={
+                    "task": "DoorKey",
+                    "seed": 0,
+                    "door_open": False,
+                },
+            )
+
+        self.assertIn(
+            "Skill ID: llm_repair.karel.doorkey.navigate_to_key_before_door_open.v1",
+            skills_context,
+        )
+        self.assertIn("Preconditions: door_closed, key_not_picked", skills_context)
+        self.assertNotIn(
+            "Skill ID: llm_repair.karel.doorkey.navigate_to_goal_after_key.v1",
+            skills_context,
+        )
+
     def test_build_skills_context_reports_no_skills_without_store(self):
         self.assertEqual(
             build_skills_context(None),
@@ -236,7 +260,7 @@ class SkillGSLLMGeneratedBaselineTests(unittest.TestCase):
                 "Rules\n{{environment_state}}\nAvailable Skills:\n{{skills_context}}\nReturn JSON.",
                 encoding="utf-8",
             )
-            _write_repair_skill_store(skill_store_path)
+            _write_two_stage_repair_skill_store(skill_store_path)
 
             result = run_llm_generated_one_shot_smoke(
                 prompt_template_path=prompt_path,
@@ -249,10 +273,14 @@ class SkillGSLLMGeneratedBaselineTests(unittest.TestCase):
 
             self.assertEqual(result["skill_store_path"], str(skill_store_path))
             self.assertIn(
+                "Skill ID: llm_repair.karel.doorkey.navigate_to_key_before_door_open.v1",
+                result["final_prompt"],
+            )
+            self.assertIn("Preconditions: door_closed, key_not_picked", result["final_prompt"])
+            self.assertNotIn(
                 "Skill ID: llm_repair.karel.doorkey.navigate_to_goal_after_key.v1",
                 result["final_prompt"],
             )
-            self.assertIn("Preconditions: door_open, key_picked", result["final_prompt"])
             self.assertNotIn("{{skills_context}}", result["final_prompt"])
 
     def test_one_shot_smoke_script_writes_result_with_raw_response_file(self):
@@ -270,7 +298,7 @@ class SkillGSLLMGeneratedBaselineTests(unittest.TestCase):
                 encoding="utf-8",
             )
             raw_response_path.write_text(_fake_ollama_response("", "", 0.0), encoding="utf-8")
-            _write_repair_skill_store(skill_store_path)
+            _write_two_stage_repair_skill_store(skill_store_path)
 
             completed = subprocess.run(
                 [
@@ -312,7 +340,7 @@ class SkillGSLLMGeneratedBaselineTests(unittest.TestCase):
             self.assertEqual(payload["policy"]["actions"], ["move"])
             self.assertEqual(payload["seed"], 0)
             self.assertIn(
-                "Skill ID: llm_repair.karel.doorkey.navigate_to_goal_after_key.v1",
+                "Skill ID: llm_repair.karel.doorkey.navigate_to_key_before_door_open.v1",
                 payload["final_prompt"],
             )
 
@@ -360,6 +388,74 @@ def _write_repair_skill_store(path):
                         "metadata": {},
                         "version": 1,
                     }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def _write_two_stage_repair_skill_store(path):
+    path.write_text(
+        json.dumps(
+            {
+                "skills": [
+                    {
+                        "skill_id": "llm_repair.karel.doorkey.navigate_to_goal_after_key.v1",
+                        "name": "repair_post_key_navigation_to_goal",
+                        "description": "Navigate from a post-key state to the goal and putMarker.",
+                        "task_family": "Karel",
+                        "dsl_source": "turnLeft turnLeft move move putMarker",
+                        "ast_json": {
+                            "type": "action_sequence",
+                            "actions": ["turnLeft", "turnLeft", "move", "move", "putMarker"],
+                        },
+                        "root_nonterminal": "ActionSequence",
+                        "semantic_tags": [
+                            "doorkey",
+                            "goal",
+                            "llm_repair",
+                            "navigation",
+                            "post_key_navigation",
+                        ],
+                        "preconditions": ["door_open", "key_picked"],
+                        "postconditions": ["goal_topped_off", "success"],
+                        "success_rate": 1.0,
+                        "mean_reward": 1.0,
+                        "num_evaluations": 7,
+                        "failure_signatures": ["wrong_put_marker_position"],
+                        "metadata": {},
+                        "version": 1,
+                    },
+                    {
+                        "skill_id": "llm_repair.karel.doorkey.navigate_to_key_before_door_open.v1",
+                        "name": "repair_navigate_to_key_before_door_open",
+                        "description": "Navigate to key_position first, then use pickMarker exactly on the key.",
+                        "task_family": "Karel",
+                        "dsl_source": "navigate_to key_position then pickMarker",
+                        "ast_json": {
+                            "type": "strategy_hint",
+                            "target": "key_position",
+                            "terminal_action": "pickMarker",
+                        },
+                        "root_nonterminal": "StrategyHint",
+                        "semantic_tags": [
+                            "before_key",
+                            "doorkey",
+                            "key",
+                            "key_navigation",
+                            "llm_repair",
+                            "navigation",
+                        ],
+                        "preconditions": ["door_closed", "key_not_picked"],
+                        "postconditions": ["door_open", "key_picked"],
+                        "success_rate": 1.0,
+                        "mean_reward": 1.0,
+                        "num_evaluations": 5,
+                        "failure_signatures": ["missed_key_pickup"],
+                        "metadata": {},
+                        "version": 1,
+                    },
                 ]
             }
         ),

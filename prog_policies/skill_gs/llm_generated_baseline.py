@@ -92,7 +92,10 @@ def run_llm_generated_one_shot_smoke(
     prompt_path = Path(prompt_template_path)
     prompt_template = prompt_path.read_text(encoding="utf-8")
     environment_status = extract_initial_doorkey_environment_status(seed)
-    skills_context = build_skills_context(skill_store_path)
+    skills_context = build_skills_context(
+        skill_store_path,
+        environment_status=environment_status,
+    )
     prompt = build_state_conditioned_prompt(
         prompt_template,
         environment_status,
@@ -208,6 +211,7 @@ def build_skills_context(
     skill_store_path: str | Path | None,
     task_family: str = "Karel",
     max_skills: int = 5,
+    environment_status: dict[str, Any] | None = None,
 ) -> str:
     """Format learned skills as concise prompt context for an LLM policy."""
 
@@ -219,11 +223,14 @@ def build_skills_context(
         return NO_SKILLS_CONTEXT
 
     store = JsonSkillStore(store_path).load()
-    records = [
-        record
-        for record in store.all()
-        if not task_family or record.task_family.lower() == task_family.lower()
-    ]
+    stage_tags = _stage_tags(environment_status)
+    records = []
+    for record in store.all():
+        if task_family and record.task_family.lower() != task_family.lower():
+            continue
+        if not _skill_matches_stage(record, stage_tags):
+            continue
+        records.append(record)
     if not records:
         return NO_SKILLS_CONTEXT
 
@@ -533,6 +540,23 @@ def _format_skill_for_prompt(index: int, record) -> str:
             ),
         ]
     )
+
+
+def _stage_tags(environment_status: dict[str, Any] | None) -> set[str] | None:
+    if environment_status is None:
+        return None
+    if environment_status.get("door_open"):
+        return {"door_open", "key_picked"}
+    return {"door_closed", "key_not_picked"}
+
+
+def _skill_matches_stage(record, stage_tags: set[str] | None) -> bool:
+    if stage_tags is None:
+        return True
+    preconditions = set(record.preconditions)
+    if not preconditions:
+        return True
+    return preconditions.issubset(stage_tags)
 
 
 def _format_list(values: list[str]) -> str:
