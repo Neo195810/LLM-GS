@@ -158,10 +158,14 @@ def _with_invalid_output_observation(
 ) -> CandidateProgram:
     observer = getattr(model, "set_invalid_output_observer", None)
     if not callable(observer):
-        return request()
+        candidate = request()
+        store.record_proposal_admission(execution_id, candidate.admission_path)
+        return candidate
     observer(lambda artifact: store.save_invalid_output_artifact(execution_id, artifact))
     try:
-        return request()
+        candidate = request()
+        store.record_proposal_admission(execution_id, candidate.admission_path)
+        return candidate
     finally:
         observer(None)
         records = getattr(model, "records", None)
@@ -636,6 +640,8 @@ def _with_proposal_admission_audit(
 ) -> dict[str, object]:
     """Add safe Pythonic admission counts without inventing legacy metadata."""
     paths = ("python", "backup", "normalized-backup")
+    if isinstance(audit.get("proposal_admission"), dict):
+        return audit
     admitted_paths = [candidate.admission_path for candidate in candidates]
     if not any(path is not None for path in admitted_paths):
         return audit

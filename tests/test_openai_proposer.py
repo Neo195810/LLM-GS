@@ -872,6 +872,53 @@ def test_pythonic_admission_counts_are_public_while_pair_diagnostics_stay_privat
         assert "independent correction request" not in serialized
 
 
+def test_resumed_pythonic_execution_retains_admission_counts(tmp_path: Path) -> None:
+    manifest = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "resumed-pythonic-admission-reporting",
+                "task": {"name": "CleanHouse"},
+                "seeds": {"task": [1, 2]},
+            }
+        )
+    )
+    store = WorkspaceStore(tmp_path)
+
+    class SuccessfulEvaluator:
+        def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+            _ = candidate, task_seed
+            return EpisodeResult(outcome="success")
+
+    model = OpenAIProposer(
+        FakeResponses(
+            [
+                json.dumps(
+                    {
+                        "python_source": "def run():\n    move()\n",
+                        "dsl_backup": "DEF run m( turnLeft m)",
+                    }
+                )
+            ]
+        )
+    )
+    first_report, first_status = execute_resumable(
+        manifest, experiment_id(manifest), store, model, SuccessfulEvaluator(), stop_after=1
+    )
+    report, status = execute_resumable(
+        manifest, experiment_id(manifest), store, model, SuccessfulEvaluator()
+    )
+
+    assert first_report is None
+    assert first_status == "interrupted"
+    assert report is not None
+    assert status == "completed"
+    assert store.reporting_view(experiment_id(manifest))["audit"]["proposal_admission"] == {
+        "python": 1,
+        "backup": 0,
+        "normalized-backup": 0,
+    }
+
+
 def test_resumable_execution_persists_terminal_initial_invalid_outputs(tmp_path: Path) -> None:
     manifest = resolve_manifest(
         ExperimentSpecification.model_validate(

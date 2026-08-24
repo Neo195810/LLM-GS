@@ -208,6 +208,36 @@ class WorkspaceStore:
         if cursor.rowcount != 1:
             raise ValueError(f"running execution not found: {execution_id}")
 
+    def record_proposal_admission(self, execution_id: str, path: str | None) -> None:
+        """Durably retain a safe Pythonic admission count without source material."""
+        if path is None:
+            return
+        if path not in {"python", "backup", "normalized-backup"}:
+            raise ValueError("unknown proposal admission path")
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT report_json FROM executions WHERE execution_id = ?", (execution_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"execution not found: {execution_id}")
+            try:
+                report = json.loads(str(row[0])) if row[0] is not None else {}
+            except json.JSONDecodeError:
+                report = {}
+            audit = report.get("audit") if isinstance(report, dict) else None
+            audit = dict(audit) if isinstance(audit, dict) else {}
+            existing = audit.get("proposal_admission")
+            counts = {
+                name: int(existing.get(name, 0)) if isinstance(existing, dict) else 0
+                for name in ("python", "backup", "normalized-backup")
+            }
+            counts[path] += 1
+            audit["proposal_admission"] = counts
+            connection.execute(
+                "UPDATE executions SET report_json = ? WHERE execution_id = ?",
+                (canonical_json({"audit": audit}), execution_id),
+            )
+
     def next_pending_work(self, experiment_id: str) -> PendingWork | None:
         with self._connect() as connection:
             row = connection.execute(
