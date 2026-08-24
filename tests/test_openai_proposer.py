@@ -794,7 +794,82 @@ def test_reports_and_exports_expose_only_safe_invalid_output_metadata(tmp_path: 
             legacy_records.pop("matrix_arms")
         legacy_payload = {key: value for key, value in legacy_bundle.items() if key != "checksum"}
         legacy_bundle["checksum"] = _bundle_checksum(legacy_payload)
-        assert WorkspaceStore(tmp_path / f"legacy-v{version}").import_bundle(legacy_bundle) == experiment_id(manifest)
+        legacy_store = WorkspaceStore(tmp_path / f"legacy-v{version}")
+        assert legacy_store.import_bundle(legacy_bundle) == experiment_id(manifest)
+        assert "proposal_admission" not in legacy_store.reporting_view(experiment_id(manifest))["audit"]
+
+
+def test_pythonic_admission_counts_are_public_while_pair_diagnostics_stay_private(
+    tmp_path: Path,
+) -> None:
+    manifest = resolve_manifest(
+        ExperimentSpecification.model_validate(
+            {
+                "display_name": "pythonic-admission-reporting",
+                "task": {"name": "CleanHouse"},
+                "seeds": {"task": [1]},
+            }
+        )
+    )
+    store = WorkspaceStore(tmp_path)
+
+    class SuccessfulEvaluator:
+        def evaluate(self, candidate: CandidateProgram, task_seed: int) -> EpisodeResult:
+            _ = candidate, task_seed
+            return EpisodeResult(outcome="success")
+
+    report, status = execute_resumable(
+        manifest,
+        experiment_id(manifest),
+        store,
+        OpenAIProposer(
+            FakeResponses(
+                [
+                    json.dumps(
+                        {
+                            "python_source": "def run():\n    import raw_python_marker\n",
+                            "dsl_backup": "DEF run m( raw_backup_marker m)",
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "python_source": "def run():\n    move()\n",
+                            "dsl_backup": "DEF run m( turnLeft m)",
+                        }
+                    ),
+                ]
+            )
+        ),
+        SuccessfulEvaluator(),
+    )
+
+    assert report is not None
+    assert status == "completed"
+    private_audit = store.inspect_execution(report.execution_id)
+    assert private_audit["proposal_admission"] == {
+        "python": 1,
+        "backup": 0,
+        "normalized-backup": 0,
+    }
+    diagnostic = str(private_audit["invalid_output_artifacts"][0]["validation_error"])
+    assert "Python admission error:" in diagnostic
+    assert "Backup DSL admission error:" in diagnostic
+
+    reporting = store.reporting_view(experiment_id(manifest))
+    bundle = store.export_bundle(experiment_id(manifest))
+    assert reporting["audit"]["proposal_admission"] == {
+        "python": 1,
+        "backup": 0,
+        "normalized-backup": 0,
+    }
+    exported_execution = cast(dict[str, object], bundle["records"]["executions"][0])
+    exported_report = json.loads(cast(str, exported_execution["report_json"]))
+    assert exported_report["audit"]["proposal_admission"] == reporting["audit"]["proposal_admission"]
+    for public_output in (reporting, bundle):
+        serialized = json.dumps(public_output, sort_keys=True)
+        assert "raw_python_marker" not in serialized
+        assert "raw_backup_marker" not in serialized
+        assert "independent correction request" not in serialized
 
 
 def test_resumable_execution_persists_terminal_initial_invalid_outputs(tmp_path: Path) -> None:

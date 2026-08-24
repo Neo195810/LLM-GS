@@ -132,6 +132,7 @@ def test_pythonic_contract_uses_bounded_pair_and_python_precedence() -> None:
     candidate = OpenAIProposer(responses).propose(task_prompt("CleanHouse"))
 
     assert candidate.source == "DEF run m( move m)"
+    assert candidate.admission_path == "python"
     assert responses.calls[0]["text"] == {
         "format": {"type": "json_schema", **proposal_contract("CleanHouse").schema}
     }
@@ -148,6 +149,21 @@ def test_invalid_pythonic_source_admits_valid_backup() -> None:
     candidate = OpenAIProposer(_Responses(payload)).propose(task_prompt("CleanHouse"))
 
     assert candidate.source == "DEF run m( move m)"
+    assert candidate.admission_path == "backup"
+
+
+def test_normalized_backup_admission_records_its_distinct_path() -> None:
+    payload = json.dumps(
+        {
+            "python_source": "def run():\n    import os\n",
+            "dsl_backup": "DEF run m( move",
+        }
+    )
+
+    candidate = OpenAIProposer(_Responses(payload)).propose(task_prompt("CleanHouse"))
+
+    assert candidate.source == "DEF run m( move m)"
+    assert candidate.admission_path == "normalized-backup"
 
 
 @pytest.mark.parametrize(

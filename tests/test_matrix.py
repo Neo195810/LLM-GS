@@ -111,6 +111,31 @@ def test_complete_frozen_ablation_matrix_is_paired_and_reports_all_arms() -> Non
         "replacements": 0,
     }
     assert report["protocols"]["Frozen"]["confidence_interval"]["method"] == "wilson-95"
+    assert "proposal_admission" not in report
+
+
+def test_matrix_aggregates_only_recorded_proposal_admission_counts() -> None:
+    report = matrix_report(
+        [
+            {
+                "protocol": "Frozen",
+                "fixed_budget_success_rate": 1.0,
+                "audit": {"proposal_admission": {"python": 2, "backup": 1, "normalized-backup": 0}},
+            },
+            {
+                "protocol": "Frozen",
+                "fixed_budget_success_rate": 0.0,
+                "audit": {"proposal_admission": {"python": 1, "backup": 0, "normalized-backup": 1}},
+            },
+            {"protocol": "Frozen", "fixed_budget_success_rate": 0.0},
+        ]
+    )
+
+    assert report["proposal_admission"] == {
+        "python": 3,
+        "backup": 1,
+        "normalized-backup": 1,
+    }
 
 
 def test_matrix_cli_validates_and_reports_unrun_arms_without_omitting_them(tmp_path: Path) -> None:

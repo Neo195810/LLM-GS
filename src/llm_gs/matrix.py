@@ -85,6 +85,7 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
     incomplete = 0
     unreported = 0
     development_gated_reasons: dict[str, int] = {}
+    proposal_admission: dict[str, int] | None = None
     arm_states = {
         "pending": 0,
         "running": 0,
@@ -102,9 +103,17 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
         if isinstance(failures, dict):
             for key in failure_classes:
                 failure_classes[key] += int(failures.get(key, 0))
+        audit = record.get("audit")
+        paths = audit.get("proposal_admission") if isinstance(audit, dict) else None
+        if isinstance(paths, dict):
+            if proposal_admission is None:
+                proposal_admission = {"python": 0, "backup": 0, "normalized-backup": 0}
+            for path in proposal_admission:
+                value = paths.get(path, 0)
+                if isinstance(value, int):
+                    proposal_admission[path] += value
         state = _arm_state(record)
         if state == "development-gated":
-            audit = record.get("audit")
             admission = audit.get("candidate_admission") if isinstance(audit, dict) else None
             reason = "unknown"
             if isinstance(admission, dict) and isinstance(admission.get("reason"), str):
@@ -115,7 +124,7 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
         else:
             unreported += 1
     cost = _cost_summary(records)
-    return {
+    report: dict[str, object] = {
         "arms": len(records),
         "arm_reports": records,
         "protocols": protocols,
@@ -129,6 +138,9 @@ def matrix_report(reports: Iterable[dict[str, object]]) -> dict[str, object]:
         "failure_classes": failure_classes,
         "cost": cost,
     }
+    if proposal_admission is not None:
+        report["proposal_admission"] = proposal_admission
+    return report
 
 
 def _wilson_interval(proportion: float, count: int) -> tuple[float, float]:

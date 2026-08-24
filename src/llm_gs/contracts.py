@@ -113,6 +113,7 @@ class ExperimentManifest(StrictContract):
 class CandidateProgram(StrictContract):
     source: str
     model_requests: int = 1
+    admission_path: Literal["python", "backup", "normalized-backup"] | None = None
 
 
 class EpisodeResult(StrictContract):

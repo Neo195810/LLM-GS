@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from hashlib import sha256
 from time import perf_counter
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
@@ -93,6 +93,12 @@ class ResponsesClient(Protocol):
 
 class ModelOutputFailure(ValueError):
     """The model exhausted its bounded output-format corrections."""
+
+
+@dataclass(frozen=True)
+class _AdmittedSource:
+    source: str
+    admission_path: Literal["python", "backup", "normalized-backup"] | None = None
 
 
 class RequestNotSubmittedError(Exception):
@@ -309,19 +315,20 @@ class OpenAIProposer:
                 )
             else:
                 try:
-                    source = _proposal_source(response, task_name, contract)
+                    admitted = _proposal_source(response, task_name, contract)
                 except (AssertionError, KeyError, TypeError, ValueError) as error:
                     validation_error = ProposalValidationError("schema", str(error))
                 else:
                     try:
-                        _validate_dsl(source, task_name)
+                        _validate_dsl(admitted.source, task_name)
                     except Exception as error:
                         validation_error = ProposalValidationError("dsl", str(error))
                     else:
                         self._emit_progress(phase, attempt, 0, "output_valid")
                         return CandidateProgram(
-                            source=source,
+                            source=admitted.source,
                             model_requests=len(self.records) - request_count_before,
+                            admission_path=admitted.admission_path,
                         )
             candidate = _response_candidate(response)
             fingerprint = _invalid_output_fingerprint(response)
@@ -671,7 +678,7 @@ class OpenAIProposer:
 
 def _proposal_source(
     response: object, task_name: str | None, contract: ProposalContract
-) -> str:
+) -> _AdmittedSource:
     output_text = getattr(response, "output_text", None)
     if output_text is None:
         raise ValueError("response contains no output text")
@@ -688,10 +695,14 @@ def _proposal_source(
         if task_name is None:
             raise ValueError("Pythonic proposal does not identify a supported task")
         try:
-            return lower_pythonic_dsl(python_source, task_name)
+            return _AdmittedSource(lower_pythonic_dsl(python_source, task_name), "python")
         except ValueError as python_error:
             try:
-                return normalize_dsl_backup(dsl_backup, task_name)
+                backup_source = normalize_dsl_backup(dsl_backup, task_name)
+                return _AdmittedSource(
+                    backup_source,
+                    "normalized-backup" if backup_source != dsl_backup else "backup",
+                )
             except ValueError as backup_error:
                 raise ValueError(
                     f"Python admission error: {python_error}; "
@@ -700,7 +711,7 @@ def _proposal_source(
     source = payload.get("source") if isinstance(payload, dict) else _code_fence_source(text)
     if not isinstance(source, str) or not source:
         raise ValueError("proposal source must be a non-empty string")
-    return _normalize_source(source)
+    return _AdmittedSource(_normalize_source(source))
 
 
 def _payload_string(payload: dict[object, object], key: str) -> str:

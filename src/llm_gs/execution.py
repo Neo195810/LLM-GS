@@ -250,6 +250,7 @@ def execute_resumable(
         in {"CleanHouse", "DoorKey", "FourCorners", "RedBlueDoor", "TextWorldPilot"}
     ):
         return _execute_reflect(manifest, experiment_id, store, model, evaluator, stop_after)
+    proposal_candidates: list[CandidateProgram] = []
     work = store.next_pending_work(experiment_id)
     if work is None and store.active_execution_id(experiment_id) is None:
         new_execution_id = store.next_execution_id(experiment_id)
@@ -260,6 +261,7 @@ def execute_resumable(
         candidate = _propose_with_invalid_output_observation(
             model, prompt, store, new_execution_id
         )
+        proposal_candidates.append(candidate)
         store.update_execution_candidate(
             new_execution_id, candidate.source, candidate.model_requests
         )
@@ -287,7 +289,9 @@ def execute_resumable(
         active_execution_id,
         results,
         store.model_requests(active_execution_id),
-        audit=store.execution_audit(active_execution_id),
+        audit=_with_proposal_admission_audit(
+            store.execution_audit(active_execution_id), proposal_candidates
+        ),
     )
     store.save(manifest, report)
     return report, "completed"
@@ -325,6 +329,7 @@ def _execute_frozen_memory_protocol(
     initial_candidate = _propose_with_invalid_output_observation(
         model, task_prompt(task_name), store, execution_id
     )
+    proposal_candidates = [initial_candidate]
     store.update_execution_candidate(
         execution_id, initial_candidate.source, initial_candidate.model_requests
     )
@@ -364,6 +369,7 @@ def _execute_frozen_memory_protocol(
             proposed_candidate = _propose_with_invalid_output_observation(
                 model, task_prompt(task_name), store, execution_id
             )
+            proposal_candidates.append(proposed_candidate)
             if store.model_requests(execution_id) + proposed_candidate.model_requests > int(
                 manifest.budgets["model_requests"]
             ):
@@ -386,6 +392,7 @@ def _execute_frozen_memory_protocol(
                 replacement = _propose_with_invalid_output_observation(
                     model, task_prompt(task_name), store, execution_id
                 )
+                proposal_candidates.append(replacement)
                 if store.model_requests(execution_id) + replacement.model_requests > int(
                     manifest.budgets["model_requests"]
                 ):
@@ -436,6 +443,7 @@ def _execute_frozen_memory_protocol(
                 if retrieval_id is not None:
                     store.record_no_retrieval_impact(retrieval_id)
                 break
+            proposal_candidates.append(repaired_candidate)
             next_repair_attempt_round += 1
             if store.model_requests(execution_id) + repaired_candidate.model_requests > int(
                 manifest.budgets["model_requests"]
@@ -463,6 +471,7 @@ def _execute_frozen_memory_protocol(
         sum(len(results) for _, results in candidates) + len(training_results)
     )
     audit = store.execution_audit(execution_id)
+    _with_proposal_admission_audit(audit, proposal_candidates)
     audit["memory_protocol"] = str(manifest.memory_snapshot.get("protocol", "none"))
     audit["effective_execution_limit"] = _effective_execution_limit(task_name)
     if not admitted_candidates:
@@ -622,6 +631,21 @@ def _candidate_admission_audit(
     }
 
 
+def _with_proposal_admission_audit(
+    audit: dict[str, object], candidates: list[CandidateProgram]
+) -> dict[str, object]:
+    """Add safe Pythonic admission counts without inventing legacy metadata."""
+    paths = ("python", "backup", "normalized-backup")
+    admitted_paths = [candidate.admission_path for candidate in candidates]
+    if not any(path is not None for path in admitted_paths):
+        return audit
+    audit["proposal_admission"] = {
+        path: sum(candidate_path == path for candidate_path in admitted_paths)
+        for path in paths
+    }
+    return audit
+
+
 def _effective_execution_limit(task_name: str) -> dict[str, int]:
     if task_name == "TextWorldPilot":
         return {"max_actions": _TEXTWORLD_MAX_ACTIONS}
@@ -663,6 +687,7 @@ def _execute_reflect(
         store.update_execution_candidate(execution_id, candidate.source, candidate.model_requests)
     else:
         candidate = CandidateProgram(source=store.execution_candidate_source(execution_id))
+    proposal_candidates = [candidate]
     seeds = _task_seeds(manifest)
     strategy = str(manifest.failure_strategy["name"])
     is_online_memory = strategy in {"memory_repair", "memory_reflect"}
@@ -716,6 +741,7 @@ def _execute_reflect(
             regenerated_candidate = _propose_with_invalid_output_observation(
                 model, task_prompt(str(manifest.task["name"])), store, execution_id
             )
+            proposal_candidates.append(regenerated_candidate)
             if model_requests_used + regenerated_candidate.model_requests > model_request_budget:
                 break
             model_requests_used += regenerated_candidate.model_requests
@@ -777,6 +803,7 @@ def _execute_reflect(
             if is_online_memory:
                 store.record_no_retrieval_impact(retrieval_id)
             break
+        proposal_candidates.append(repaired_candidate)
         if model_requests_used + repaired_candidate.model_requests > model_request_budget:
             if is_online_memory:
                 store.record_no_retrieval_impact(retrieval_id)
@@ -798,6 +825,7 @@ def _execute_reflect(
         if not made_improvement:
             break
     audit = store.execution_audit(execution_id)
+    _with_proposal_admission_audit(audit, proposal_candidates)
     audit["memory_protocol"] = str(manifest.memory_snapshot.get("protocol", "none"))
     if is_online_memory:
         audit["memory_lineage"] = store.memory_lineage_audit(execution_id)

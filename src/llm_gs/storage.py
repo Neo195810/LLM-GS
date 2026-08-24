@@ -605,7 +605,8 @@ class WorkspaceStore:
     def execution_audit(self, execution_id: str) -> dict[str, object]:
         with self._connect() as connection:
             usage = connection.execute(
-                "SELECT model_requests, episode_evaluations FROM executions WHERE execution_id = ?",
+                "SELECT model_requests, episode_evaluations, report_json FROM executions "
+                "WHERE execution_id = ?",
                 (execution_id,),
             ).fetchone()
             retrieval_rows = connection.execute(
@@ -651,6 +652,16 @@ class WorkspaceStore:
         }
         if invalid_output_rows:
             audit["invalid_output_artifacts"] = invalid_output_rows
+        report_json = usage[2]
+        if isinstance(report_json, str):
+            try:
+                report_audit = json.loads(report_json).get("audit")
+            except (AttributeError, json.JSONDecodeError):
+                report_audit = None
+            if isinstance(report_audit, dict) and isinstance(
+                report_audit.get("proposal_admission"), dict
+            ):
+                audit["proposal_admission"] = report_audit["proposal_admission"]
         return audit
 
     def save(self, manifest: ExperimentManifest, report: ExperimentReport) -> None:
