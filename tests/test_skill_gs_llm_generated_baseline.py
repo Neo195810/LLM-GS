@@ -6,10 +6,12 @@ import tempfile
 import unittest
 
 from prog_policies.skill_gs.llm_generated_baseline import (
+    build_gemini_interactions_payload,
     build_ollama_generate_payload,
     build_openai_responses_payload,
     build_skills_context,
     build_state_conditioned_prompt,
+    extract_gemini_response_text,
     extract_openai_response_text,
     extract_initial_doorkey_environment_status,
     parse_policy_response,
@@ -169,6 +171,29 @@ class SkillGSLLMGeneratedBaselineTests(unittest.TestCase):
             ["move", "turnLeft", "turnRight", "pickMarker", "putMarker"],
         )
 
+    def test_build_gemini_payload_requests_structured_action_sequence_schema(self):
+        payload = build_gemini_interactions_payload(
+            prompt="Return valid JSON only.",
+            model_name="gemini-3.5-flash",
+            temperature=0.0,
+            max_output_tokens=512,
+        )
+
+        self.assertEqual(payload["model"], "gemini-3.5-flash")
+        self.assertEqual(payload["input"], "Return valid JSON only.")
+        self.assertEqual(payload["generation_config"]["temperature"], 0.0)
+        self.assertEqual(payload["generation_config"]["thinking_level"], "minimal")
+        self.assertEqual(payload["generation_config"]["max_output_tokens"], 512)
+        response_format = payload["response_format"]
+        self.assertEqual(response_format["type"], "text")
+        self.assertEqual(response_format["mime_type"], "application/json")
+        schema = response_format["schema"]
+        self.assertEqual(schema["required"], ["policy_name", "policy_type", "actions", "notes"])
+        self.assertEqual(
+            schema["properties"]["actions"]["items"]["enum"],
+            ["move", "turnLeft", "turnRight", "pickMarker", "putMarker"],
+        )
+
     def test_extract_openai_response_text_reads_responses_message_content(self):
         response_text = extract_openai_response_text(
             {
@@ -179,6 +204,30 @@ class SkillGSLLMGeneratedBaselineTests(unittest.TestCase):
                         "content": [
                             {
                                 "type": "output_text",
+                                "text": '{"policy_name":"p","policy_type":"action_sequence","actions":[],"notes":""}',
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(
+            response_text,
+            '{"policy_name":"p","policy_type":"action_sequence","actions":[],"notes":""}',
+        )
+
+    def test_extract_gemini_response_text_reads_interaction_model_output_step(self):
+        response_text = extract_gemini_response_text(
+            {
+                "id": "int_test",
+                "status": "completed",
+                "steps": [
+                    {
+                        "type": "model_output",
+                        "content": [
+                            {
+                                "type": "text",
                                 "text": '{"policy_name":"p","policy_type":"action_sequence","actions":[],"notes":""}',
                             }
                         ],
@@ -343,6 +392,55 @@ class SkillGSLLMGeneratedBaselineTests(unittest.TestCase):
                 "Skill ID: llm_repair.karel.doorkey.navigate_to_key_before_door_open.v1",
                 payload["final_prompt"],
             )
+
+    def test_one_shot_smoke_script_accepts_gemini_provider_with_raw_response_file(self):
+        repo_root = pathlib.Path(__file__).resolve().parents[1]
+        script_path = repo_root / "scripts" / "skill_gs" / "run_llm_generated_smoke.py"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            prompt_path = temp_path / "prompt.txt"
+            raw_response_path = temp_path / "response.json"
+            output_path = temp_path / "result.json"
+            cache_dir = temp_path / "cache"
+            prompt_path.write_text(
+                "Return valid JSON only.\n{{environment_state}}",
+                encoding="utf-8",
+            )
+            raw_response_path.write_text(_fake_ollama_response("", "", 0.0), encoding="utf-8")
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(script_path),
+                    "--provider",
+                    "Gemini",
+                    "--prompt-template",
+                    str(prompt_path),
+                    "--model",
+                    "gemini-3.5-flash",
+                    "--seed",
+                    "0",
+                    "--max-output-tokens",
+                    "512",
+                    "--cache-dir",
+                    str(cache_dir),
+                    "--raw-response-file",
+                    str(raw_response_path),
+                    "--output",
+                    str(output_path),
+                ],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            payload = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["provider"], "Gemini")
+            self.assertEqual(payload["model_name"], "gemini-3.5-flash")
+            self.assertEqual(payload["max_output_tokens"], 512)
+            self.assertEqual(payload["policy"]["actions"], ["move"])
 
 
 def _fake_ollama_response(prompt, model_name, temperature):

@@ -111,6 +111,13 @@ def run_llm_generated_one_shot_smoke(
             reasoning_effort=reasoning_effort,
             max_output_tokens=max_output_tokens,
         )
+    elif provider.lower() == "gemini":
+        raw_response = generate_gemini_response(
+            prompt,
+            model_name,
+            temperature,
+            max_output_tokens=max_output_tokens,
+        )
     elif provider.lower() == "ollama":
         raw_response = generate_ollama_response(
             prompt,
@@ -122,7 +129,7 @@ def run_llm_generated_one_shot_smoke(
         )
     else:
         raise ValueError(
-            f"Unsupported LLM provider: {provider}. Expected OpenAI or Ollama."
+            f"Unsupported LLM provider: {provider}. Expected OpenAI, Gemini, or Ollama."
         )
     policy = parse_policy_response(raw_response)
     evaluation = evaluate_doorkey_action_sequence(
@@ -292,6 +299,50 @@ def generate_openai_response(
     return extract_openai_response_text(body)
 
 
+def generate_gemini_response(
+    prompt: str,
+    model_name: str,
+    temperature: float,
+    max_output_tokens: int | None = None,
+    api_key: str | None = None,
+) -> str:
+    """Generate one Gemini Interactions API result with JSON schema output."""
+
+    resolved_api_key = (
+        api_key
+        or os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+    )
+    if not resolved_api_key:
+        raise RuntimeError("GEMINI_API_KEY or GOOGLE_API_KEY is not set.")
+    payload = build_gemini_interactions_payload(
+        prompt=prompt,
+        model_name=model_name,
+        temperature=temperature,
+        max_output_tokens=max_output_tokens,
+    )
+    request = urllib.request.Request(
+        "https://generativelanguage.googleapis.com/v1beta/interactions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "x-goog-api-key": resolved_api_key,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=300) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Gemini API request failed with HTTP {exc.code}: {error_body[:500]}"
+        ) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeError("Gemini API request failed.") from exc
+    return extract_gemini_response_text(body)
+
+
 def build_openai_responses_payload(
     prompt: str,
     model_name: str,
@@ -301,6 +352,7 @@ def build_openai_responses_payload(
 ) -> dict[str, Any]:
     """Build the OpenAI Responses API payload for the DoorKey JSON policy."""
 
+    schema = _action_sequence_policy_schema()
     payload: dict[str, Any] = {
         "model": model_name,
         "input": prompt,
@@ -310,31 +362,7 @@ def build_openai_responses_payload(
                 "type": "json_schema",
                 "name": "doorkey_action_sequence_policy",
                 "strict": True,
-                "schema": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "policy_name": {"type": "string"},
-                        "policy_type": {
-                            "type": "string",
-                            "enum": ["action_sequence"],
-                        },
-                        "actions": {
-                            "type": "array",
-                            "items": {
-                                "type": "string",
-                                "enum": ACTION_SCHEMA_NAMES,
-                            },
-                        },
-                        "notes": {"type": "string"},
-                    },
-                    "required": [
-                        "policy_name",
-                        "policy_type",
-                        "actions",
-                        "notes",
-                    ],
-                },
+                "schema": schema,
             },
         },
     }
@@ -343,6 +371,32 @@ def build_openai_responses_payload(
     if max_output_tokens is not None:
         payload["max_output_tokens"] = max_output_tokens
     return payload
+
+
+def build_gemini_interactions_payload(
+    prompt: str,
+    model_name: str,
+    temperature: float,
+    max_output_tokens: int | None = None,
+) -> dict[str, Any]:
+    """Build the Gemini Interactions API payload for the DoorKey JSON policy."""
+
+    generation_config: dict[str, Any] = {
+        "temperature": temperature,
+        "thinking_level": "minimal",
+    }
+    if max_output_tokens is not None:
+        generation_config["max_output_tokens"] = max_output_tokens
+    return {
+        "model": model_name,
+        "input": prompt,
+        "generation_config": generation_config,
+        "response_format": {
+            "type": "text",
+            "mime_type": "application/json",
+            "schema": _action_sequence_policy_schema(),
+        },
+    }
 
 
 def extract_openai_response_text(body: dict[str, Any]) -> str:
@@ -363,6 +417,34 @@ def extract_openai_response_text(body: dict[str, Any]) -> str:
                 return text
 
     raise ValueError("OpenAI response did not contain output text.")
+
+
+def extract_gemini_response_text(body: dict[str, Any]) -> str:
+    """Extract text from a Gemini Interactions API response body."""
+
+    output_text = body.get("output_text")
+    if isinstance(output_text, str) and output_text:
+        return output_text
+
+    if body.get("policy_type") == "action_sequence":
+        return json.dumps(body)
+
+    for step in reversed(body.get("steps", [])):
+        if not isinstance(step, dict) or step.get("type") != "model_output":
+            continue
+        texts = []
+        for content_item in step.get("content", []):
+            if not isinstance(content_item, dict):
+                continue
+            if content_item.get("type") != "text":
+                continue
+            text = content_item.get("text")
+            if isinstance(text, str) and text:
+                texts.append(text)
+        if texts:
+            return "".join(texts)
+
+    raise ValueError("Gemini response did not contain output text.")
 
 
 def generate_ollama_response(
@@ -496,6 +578,34 @@ def _write_cache(
 
 def _sanitize_model_name(model_name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", model_name)
+
+
+def _action_sequence_policy_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "policy_name": {"type": "string"},
+            "policy_type": {
+                "type": "string",
+                "enum": ["action_sequence"],
+            },
+            "actions": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": ACTION_SCHEMA_NAMES,
+                },
+            },
+            "notes": {"type": "string"},
+        },
+        "required": [
+            "policy_name",
+            "policy_type",
+            "actions",
+            "notes",
+        ],
+    }
 
 
 def _format_environment_status(status: dict[str, Any]) -> str:

@@ -18,7 +18,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run one real LLM-generated DoorKey smoke baseline."
     )
-    parser.add_argument("--provider", default="Ollama", choices=["Ollama", "OpenAI"])
+    parser.add_argument(
+        "--provider",
+        default="Ollama",
+        choices=["Ollama", "OpenAI", "Gemini"],
+    )
     parser.add_argument("--prompt-template", required=True)
     parser.add_argument("--model", default="qwen3.5:latest")
     parser.add_argument("--seed", type=int, default=0)
