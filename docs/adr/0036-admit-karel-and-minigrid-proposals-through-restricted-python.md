@@ -8,9 +8,11 @@ DSL through the existing parser before creating a Candidate Program.
 
 The Python subset permits allowlisted action calls, `if` with optional `else`,
 predicate-guarded `while`, and `for _ in range(<integer 0..19>)`. All other
-syntax, non-allowlisted task symbols, and invalid bounds are rejected. Ticket
-01 intentionally does not admit the backup: a later protocol increment may
-add conservative backup normalization without changing this primary path.
+syntax, non-allowlisted task symbols, and invalid bounds are rejected. Python
+admission always takes precedence. Only if it fails may the versioned
+Conservative Normalizer remove unambiguous backup-DSL formatting before that
+backup is validated through the same parser. It never infers control flow or
+otherwise synthesizes a policy.
 
 TextWorldPilot and OfflineEcho remain on their existing direct-DSL contract.
 Historical direct-DSL Experiment Manifests remain readable. New Pythonic
@@ -22,6 +24,9 @@ so their Experiment IDs cannot collide with direct-DSL executions.
 The proposal schema changes only for Karel and MiniGrid requests, preserving
 the existing Model Budget and bounded correction count. Every admitted Pythonic
 Candidate Program is still canonical DSL at the evaluator boundary, so existing
-task evaluators and AST-based analysis remain applicable. A malformed Pythonic
-response creates no Candidate Program and continues through the existing
-Model Output Failure process.
+task evaluators and AST-based analysis remain applicable. A malformed pair
+creates no Candidate Program and continues through the existing Model Output
+Failure process. The private execution audit records only the admission path
+and failed-pair diagnostics under its redaction boundary; public reports and
+exports expose only aggregate path counts. This preserves historical
+direct-DSL workspaces and bundles without fabricating provenance for them.

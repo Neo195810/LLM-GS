@@ -5,8 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_gs.contracts import ExperimentSpecification
+from llm_gs.contracts import CandidateProgram, ExperimentSpecification
 from llm_gs.manifest import experiment_id, resolve_manifest, task_prompt
+from llm_gs.minigrid_door_key import DoorKeyLimits, MiniGridDoorKeyAdapter
+from llm_gs.minigrid_red_blue_door import RedBlueDoorAdapter, RedBlueDoorLimits
 from llm_gs.proposer import (
     ModelOutputFailure,
     OpenAIProposer,
@@ -14,6 +16,7 @@ from llm_gs.proposer import (
     normalize_dsl_backup,
     proposal_contract,
 )
+from llm_gs.v1_adapter import V1Adapter, V1ExecutionLimits
 from prog_policies.karel.dsl import KarelDSL
 from prog_policies.minigrid.dsl import MinigridDSL
 
@@ -75,6 +78,34 @@ def run():
         "WHILE c( front_is_clear c) w( forward w) m)"
     )
     MinigridDSL().parse_str_to_node(lowered)
+
+
+@pytest.mark.parametrize(
+    ("task_name", "python_source"),
+    [
+        ("CleanHouse", "def run():\n    turnLeft()\n"),
+        ("FourCorners", "def run():\n    putMarker()\n"),
+        ("DoorKey", "def run():\n    left()\n"),
+        ("RedBlueDoor", "def run():\n    left()\n"),
+    ],
+)
+def test_lowered_pythonic_source_preserves_task_adapter_compatibility(
+    task_name: str, python_source: str
+) -> None:
+    candidate = CandidateProgram(source=lower_pythonic_dsl(python_source, task_name))
+
+    if task_name in {"CleanHouse", "FourCorners"}:
+        V1Adapter().assert_equivalent(
+            task_name, candidate.source, seed=7, limits=V1ExecutionLimits(max_calls=10)
+        )
+    elif task_name == "DoorKey":
+        MiniGridDoorKeyAdapter().assert_equivalent(
+            candidate, seed=11, limits=DoorKeyLimits(max_calls=10)
+        )
+    else:
+        RedBlueDoorAdapter().assert_equivalent(
+            candidate, seed=11, limits=RedBlueDoorLimits(max_calls=10)
+        )
 
 
 def test_pythonic_source_allows_nested_if_in_else_block() -> None:
