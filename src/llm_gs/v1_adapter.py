@@ -107,13 +107,19 @@ class V1Adapter:
                 "correct_marker_count": correct_marker_count,
                 "placed_marker_count": placed_marker_count,
                 "incorrect_marker_count": incorrect_marker_count,
-                "program_call_count": environment.num_calls,
+                "program_call_count": environment.program_call_count,
+                "attempted_program_call_count": environment.attempted_program_call_count,
+                "stop_reason": environment.stop_reason,
                 "terminal_state": terminal_state,
             }
             if environment.is_crashed():
                 return V1AttemptResult(
-                    "policy_crash", correct_marker_count / goal_marker_count,
-                    "policy_failure", "environment_crash", evidence, terminal_state,
+                    "policy_crash",
+                    correct_marker_count / goal_marker_count,
+                    "policy_failure",
+                    _policy_failure_reason(environment.stop_reason),
+                    evidence,
+                    terminal_state,
                 )
             if correct_marker_count == goal_marker_count and incorrect_marker_count == 0:
                 return V1AttemptResult("success", 1.0, None, None, evidence, terminal_state)
@@ -134,7 +140,9 @@ class V1Adapter:
             "version": 1,
             "initial_marker_count": initial_marker_count,
             "remaining_marker_count": remaining_marker_count,
-            "program_call_count": environment.num_calls,
+            "program_call_count": environment.program_call_count,
+            "attempted_program_call_count": environment.attempted_program_call_count,
+            "stop_reason": environment.stop_reason,
             "terminal_state": terminal_state,
         }
         if environment.is_crashed():
@@ -142,7 +150,7 @@ class V1Adapter:
                 "policy_crash",
                 normalized_progress,
                 "policy_failure",
-                "environment_crash",
+                _policy_failure_reason(environment.stop_reason),
                 evidence,
                 terminal_state,
             )
@@ -212,3 +220,9 @@ def _terminal_state(task_name: V1TaskName, environment: Any) -> str:
         },
         separators=(",", ":"),
     )
+
+
+def _policy_failure_reason(stop_reason: object) -> str:
+    if stop_reason in {"call_limit_exhausted", "stalled_policy", "invalid_action"}:
+        return str(stop_reason)
+    return "environment_crash"

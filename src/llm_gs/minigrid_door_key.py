@@ -57,6 +57,8 @@ class _MiniGridDoorKeyBaseline:
     reward: float
     crashed: bool
     program_call_count: int
+    attempted_program_call_count: int
+    stop_reason: str | None
     key_collected: bool
     door_unlocked: bool
     goal_completed: bool
@@ -87,7 +89,9 @@ def _evaluate_v1_minigrid_baseline(
         terminal_state=_terminal_state(environment),
         reward=reward,
         crashed=environment.is_crashed(),  # type: ignore[no-untyped-call]
-        program_call_count=environment.num_calls,
+        program_call_count=environment.program_call_count,
+        attempted_program_call_count=environment.attempted_program_call_count,
+        stop_reason=environment.stop_reason,
         key_collected=key_collected,
         door_unlocked=door_unlocked,
         goal_completed=goal_completed,
@@ -107,6 +111,8 @@ def _classify_baseline(baseline: _MiniGridDoorKeyBaseline) -> EpisodeResult:
         "truncated": baseline.truncated,
         "score": baseline.reward,
         "program_call_count": baseline.program_call_count,
+        "attempted_program_call_count": baseline.attempted_program_call_count,
+        "stop_reason": baseline.stop_reason,
         "movement": {
             "initial_position": baseline.initial_state["agent_position"],
             "initial_direction": baseline.initial_state["agent_direction"],
@@ -130,7 +136,7 @@ def _classify_baseline(baseline: _MiniGridDoorKeyBaseline) -> EpisodeResult:
             outcome="policy_crash",
             normalized_progress=progress,
             failure_type="policy_failure",
-            failure_reason="call_limit_exhausted",
+            failure_reason=_policy_failure_reason(baseline.stop_reason),
             evaluation_evidence=evidence,
             terminal_state=terminal_state,
         )
@@ -156,6 +162,12 @@ def _classify_baseline(baseline: _MiniGridDoorKeyBaseline) -> EpisodeResult:
         evaluation_evidence=evidence,
         terminal_state=terminal_state,
     )
+
+
+def _policy_failure_reason(stop_reason: str | None) -> str:
+    if stop_reason in {"call_limit_exhausted", "stalled_policy", "invalid_action"}:
+        return stop_reason
+    return "environment_crash"
 
 
 def _world_state(environment: ProgramWrapper) -> dict[str, int | list[int] | None]:

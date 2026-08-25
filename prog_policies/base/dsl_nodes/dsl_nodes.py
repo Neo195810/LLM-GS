@@ -96,7 +96,7 @@ class While(StatementNode, OperationNode):
             # If we have seen this state previously, we're in an infinite loop
             for previous_env in self.previous_envs:
                 if env == previous_env:
-                    env.crash()
+                    env.crash("stalled_policy")
             self.previous_envs.append(copy.deepcopy(env))
             if env.is_crashed():
                 return  # To avoid infinite loops
@@ -108,7 +108,7 @@ class While(StatementNode, OperationNode):
             env_hash = env.hash()
             for previous_env_hash in self.previous_env_hashes:
                 if env_hash == previous_env_hash:
-                    env.crash()
+                    env.crash("stalled_policy")
             self.previous_env_hashes.append(env_hash)
             if env.is_crashed():
                 return  # To avoid infinite loops
@@ -120,7 +120,7 @@ class While(StatementNode, OperationNode):
             # If we have seen this state previously, we're in an infinite loop
             for previous_env in self.previous_envs:
                 if env == previous_env:
-                    env.crash()
+                    env.crash("stalled_policy")
             self.previous_envs.append(copy.deepcopy(env))
             if env.is_crashed():
                 return  # To avoid infinite loops

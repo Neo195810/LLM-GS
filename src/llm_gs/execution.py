@@ -607,13 +607,23 @@ def _candidate_admission_audit(
     candidates: list[tuple[CandidateProgram, list[EpisodeResult]]],
 ) -> dict[str, object]:
     summaries: list[dict[str, object]] = []
+    aggregate_failure_reasons: dict[str, int] = {}
     for _, results in candidates:
         outcomes: dict[str, int] = {}
+        failure_reasons: dict[str, int] = {}
         for result in results:
             outcomes[result.outcome] = outcomes.get(result.outcome, 0) + 1
+            if result.failure_reason is not None:
+                failure_reasons[result.failure_reason] = (
+                    failure_reasons.get(result.failure_reason, 0) + 1
+                )
+                aggregate_failure_reasons[result.failure_reason] = (
+                    aggregate_failure_reasons.get(result.failure_reason, 0) + 1
+                )
         summaries.append(
             {
                 "outcomes": outcomes,
+                "failure_reasons": failure_reasons,
                 "mean_normalized_progress": (
                     sum(result.normalized_progress for result in results) / len(results)
                     if results
@@ -630,6 +640,7 @@ def _candidate_admission_audit(
         ),
         "candidate_count": len(candidates),
         "admitted_candidate_count": admitted_count,
+        "failure_reasons": aggregate_failure_reasons,
         "candidates": summaries,
         "reason": "development_admission_failed" if admitted_count == 0 else None,
     }

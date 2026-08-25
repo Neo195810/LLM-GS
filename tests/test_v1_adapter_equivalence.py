@@ -97,6 +97,8 @@ def test_clean_house_adapter_emits_versioned_partial_completion_evidence() -> No
         "initial_marker_count": 11,
         "remaining_marker_count": 11,
         "program_call_count": 1,
+        "attempted_program_call_count": 1,
+        "stop_reason": None,
         "terminal_state": result.terminal_state,
     }
 
@@ -117,8 +119,26 @@ def test_four_corners_adapter_emits_versioned_goal_progress_evidence() -> None:
         "placed_marker_count": 0,
         "incorrect_marker_count": 0,
         "program_call_count": 1,
+        "attempted_program_call_count": 1,
+        "stop_reason": None,
         "terminal_state": result.terminal_state,
     }
+
+
+def test_karel_adapter_classifies_program_call_limit() -> None:
+    result = V1Adapter().evaluate_attempt(
+        "CleanHouse",
+        "DEF run m( REPEAT R=3 r( turnLeft r) m)",
+        7,
+        V1ExecutionLimits(max_calls=2),
+    )
+
+    assert result.outcome == "policy_crash"
+    assert result.failure_reason == "call_limit_exhausted"
+    assert result.evaluation_evidence is not None
+    assert result.evaluation_evidence["program_call_count"] == 2
+    assert result.evaluation_evidence["attempted_program_call_count"] == 3
+    assert result.evaluation_evidence["stop_reason"] == "call_limit_exhausted"
 
 
 def test_equivalence_failure_blocks_baseline_selection(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -44,6 +44,21 @@ def test_door_key_adapter_matches_the_v1_minigrid_runtime() -> None:
     )
 
 
+def test_door_key_adapter_classifies_program_call_limit() -> None:
+    result = MiniGridDoorKeyAdapter().evaluate(
+        CandidateProgram(source="DEF run m( REPEAT R=3 r( left r) m)"),
+        seed=11,
+        limits=DoorKeyLimits(max_calls=2),
+    )
+
+    assert result.outcome == "policy_crash"
+    assert result.failure_reason == "call_limit_exhausted"
+    assert result.evaluation_evidence is not None
+    assert result.evaluation_evidence["program_call_count"] == 2
+    assert result.evaluation_evidence["attempted_program_call_count"] == 3
+    assert result.evaluation_evidence["stop_reason"] == "call_limit_exhausted"
+
+
 def test_door_key_condition_helpers_do_not_use_deprecated_wrapper_attributes() -> None:
     candidate = CandidateProgram(
         source="DEF run m( IF c( front_is_clear c) i( left i) m)"

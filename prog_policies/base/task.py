@@ -5,7 +5,7 @@ import copy
 
 import numpy as np
 
-from .environment import BaseEnvironment
+from .environment import BaseEnvironment, ProgramCallLimitExceeded
 from . import dsl_nodes
 from PIL import Image
 
@@ -63,15 +63,18 @@ class BaseTask(ABC):
         action_nodes = [node for node in all_nodes if isinstance(node, dsl_nodes.Action)]
         action_scores = {node: 0. for node in action_nodes}
         action_counts = {node: 0 for node in action_nodes}
-        for action in program.run_generator(self.environment):
-            terminated, instant_reward = self.get_reward(self.environment)
-            if self.environment.is_crashed():
-                instant_reward += self.crash_penalty
-            reward += instant_reward
-            action_scores[action] += instant_reward
-            action_counts[action] += 1
-            if terminated or self.environment.is_crashed():
-                break
+        try:
+            for action in program.run_generator(self.environment):
+                terminated, instant_reward = self.get_reward(self.environment)
+                if self.environment.is_crashed():
+                    instant_reward += self.crash_penalty
+                reward += instant_reward
+                action_scores[action] += instant_reward
+                action_counts[action] += 1
+                if terminated or self.environment.is_crashed():
+                    break
+        except ProgramCallLimitExceeded:
+            pass
         for action in action_nodes:
             current_node = action
             while not issubclass(type(current_node), dsl_nodes.Program):
@@ -84,11 +87,14 @@ class BaseTask(ABC):
         self.program_num += 1
         self.reset_environment()
         reward = 0.
-        for _ in program.run_generator(self.environment):
-            terminated, instant_reward = self.get_reward(self.environment)
-            reward += instant_reward
-            if terminated or self.environment.is_crashed():
-                break
+        try:
+            for _ in program.run_generator(self.environment):
+                terminated, instant_reward = self.get_reward(self.environment)
+                reward += instant_reward
+                if terminated or self.environment.is_crashed():
+                    break
+        except ProgramCallLimitExceeded:
+            pass
         return reward
 
     def record_evaluate_program(self, program: dsl_nodes.Program) -> tuple[float, list[list[dict[str, str]]]]:
@@ -99,26 +105,29 @@ class BaseTask(ABC):
         reward = 0.
         logs = [{"state": self.environment.to_string_worldcoder_style(), "program_str": node_to_indent_python(program)}]
         step = 0
-        for node in program.record_run_generator(self.environment):
-            step += 1
-            if type(node) == dsl_nodes.Action:
-                terminated, instant_reward = self.get_reward(self.environment)
-                state = self.environment.record_partial_state()
-                node.current = True
-                program_str = record_node_to_indent_python(program)
-                node.current = False
-                reward += instant_reward
-                logs.append({"state": state, "program_str": program_str, "instant_reward": instant_reward, "terminated": terminated, "name": node.name, "type": "action"})
-                if terminated or self.environment.is_crashed():
-                    break
-            else:
-                if node.name == "Not":
-                    continue
-                state = self.environment.record_partial_state()
-                node.current = True
-                program_str = record_node_to_indent_python(program)
-                node.current = False
-                logs.append({"state": state, "program_str": program_str, "name": node.name, "result": self.environment.get_bool_feature(node.name), "type": "perception"})
+        try:
+            for node in program.record_run_generator(self.environment):
+                step += 1
+                if type(node) == dsl_nodes.Action:
+                    terminated, instant_reward = self.get_reward(self.environment)
+                    state = self.environment.record_partial_state()
+                    node.current = True
+                    program_str = record_node_to_indent_python(program)
+                    node.current = False
+                    reward += instant_reward
+                    logs.append({"state": state, "program_str": program_str, "instant_reward": instant_reward, "terminated": terminated, "name": node.name, "type": "action"})
+                    if terminated or self.environment.is_crashed():
+                        break
+                else:
+                    if node.name == "Not":
+                        continue
+                    state = self.environment.record_partial_state()
+                    node.current = True
+                    program_str = record_node_to_indent_python(program)
+                    node.current = False
+                    logs.append({"state": state, "program_str": program_str, "name": node.name, "result": self.environment.get_bool_feature(node.name), "type": "perception"})
+        except ProgramCallLimitExceeded:
+            pass
         return reward, logs
 
     def trace_program(self, program: dsl_nodes.Program, image_name: str = 'trace.gif', max_steps: int = 1000, save: bool = True, root_dir = "./") -> list[Image.Image]:
@@ -126,11 +135,14 @@ class BaseTask(ABC):
         self.reset_environment()
         im = Image.fromarray(self.environment.to_image(root_dir=root_dir))
         im_list = []
-        for _ in program.run_generator(self.environment):
-            terminated, _ = self.get_reward(self.environment)
-            im_list.append(Image.fromarray(self.environment.to_image(root_dir=root_dir)))
-            if len(im_list) > max_steps or terminated or self.environment.is_crashed():
-                break
+        try:
+            for _ in program.run_generator(self.environment):
+                terminated, _ = self.get_reward(self.environment)
+                im_list.append(Image.fromarray(self.environment.to_image(root_dir=root_dir)))
+                if len(im_list) > max_steps or terminated or self.environment.is_crashed():
+                    break
+        except ProgramCallLimitExceeded:
+            pass
         if save:
             im.save(image_name, save_all=True, append_images=im_list, duration=75, loop=0)
             

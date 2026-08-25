@@ -30,6 +30,21 @@ def test_red_blue_door_replay_and_v1_equivalence_are_deterministic() -> None:
     adapter.assert_equivalent(_candidate(), seed=11, limits=RedBlueDoorLimits(max_calls=10))
 
 
+def test_red_blue_door_adapter_classifies_program_call_limit() -> None:
+    result = RedBlueDoorAdapter().evaluate(
+        CandidateProgram(source="DEF run m( REPEAT R=3 r( left r) m)"),
+        seed=11,
+        limits=RedBlueDoorLimits(max_calls=2),
+    )
+
+    assert result.outcome == "policy_crash"
+    assert result.failure_reason == "call_limit_exhausted"
+    assert result.evaluation_evidence is not None
+    assert result.evaluation_evidence["program_call_count"] == 2
+    assert result.evaluation_evidence["attempted_program_call_count"] == 3
+    assert result.evaluation_evidence["stop_reason"] == "call_limit_exhausted"
+
+
 @pytest.mark.parametrize(
     ("source", "limits", "expected_order"),
     [

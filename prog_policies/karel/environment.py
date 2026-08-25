@@ -270,7 +270,7 @@ class KarelEnvironment(BaseEnvironment):
         is_clear = self.is_clear(new_r, new_c)
         
         if not is_clear and self.crashable:
-            self.crashed = True
+            self.crash("invalid_action")
         
         if not self.crashed and is_clear:
             self.state[d, r, c] = False
@@ -299,7 +299,7 @@ class KarelEnvironment(BaseEnvironment):
         num_marker = self.markers_grid[r, c]
         if num_marker == 0:
             if self.crashable:
-                self.crashed = True
+                self.crash("invalid_action")
         else:
             self.state[5 + num_marker, r, c] = False
             self.state[4 + num_marker, r, c] = True
@@ -309,7 +309,7 @@ class KarelEnvironment(BaseEnvironment):
         num_marker = self.markers_grid[r, c]
         if num_marker == 0:
             if self.crashable:
-                self.crashed = True
+                self.crash("invalid_action")
         else:
             self.state[5 + num_marker, r, c] = False
             self.state[4 + num_marker, r, c] = True
@@ -320,7 +320,7 @@ class KarelEnvironment(BaseEnvironment):
         num_marker = self.markers_grid[r, c]
         if num_marker == MAX_MARKERS_PER_SQUARE:
             if self.crashable:
-                self.crashed = True
+                self.crash("invalid_action")
         else:
             self.state[5 + num_marker, r, c] = False
             self.state[6 + num_marker, r, c] = True
@@ -330,7 +330,7 @@ class KarelEnvironment(BaseEnvironment):
         num_marker = self.markers_grid[r, c]
         if num_marker == MAX_MARKERS_PER_SQUARE:
             if self.crashable:
-                self.crashed = True
+                self.crash("invalid_action")
         else:
             self.state[5 + num_marker, r, c] = False
             self.state[6 + num_marker, r, c] = True

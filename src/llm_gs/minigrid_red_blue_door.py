@@ -27,6 +27,8 @@ class _RedBlueDoorBaseline:
     reward: float
     crashed: bool
     program_call_count: int
+    attempted_program_call_count: int
+    stop_reason: str | None
     red_door_opened: bool
     blue_door_opened: bool
     red_opened_before_blue: bool
@@ -76,7 +78,9 @@ def _evaluate_v1_baseline(
         terminal_state=_terminal_state(environment),
         reward=reward,
         crashed=environment.is_crashed(),  # type: ignore[no-untyped-call]
-        program_call_count=environment.num_calls,
+        program_call_count=environment.program_call_count,
+        attempted_program_call_count=environment.attempted_program_call_count,
+        stop_reason=environment.stop_reason,
         red_door_opened=red_door_opened,
         blue_door_opened=blue_door_opened,
         red_opened_before_blue=red_opened_before_blue,
@@ -107,6 +111,8 @@ def _classify(baseline: _RedBlueDoorBaseline) -> EpisodeResult:
         "score": baseline.reward,
         "v1_crashed": baseline.crashed,
         "program_call_count": baseline.program_call_count,
+        "attempted_program_call_count": baseline.attempted_program_call_count,
+        "stop_reason": baseline.stop_reason,
         "movement": {
             "initial_position": baseline.initial_state["agent_position"],
             "initial_direction": baseline.initial_state["agent_direction"],
@@ -127,7 +133,7 @@ def _classify(baseline: _RedBlueDoorBaseline) -> EpisodeResult:
             outcome="policy_crash",
             normalized_progress=progress,
             failure_type="policy_failure",
-            failure_reason="call_limit_exhausted",
+            failure_reason=_policy_failure_reason(baseline.stop_reason),
             evaluation_evidence=evidence,
             terminal_state=baseline.terminal_state,
         )
@@ -146,6 +152,12 @@ def _classify(baseline: _RedBlueDoorBaseline) -> EpisodeResult:
         evaluation_evidence=evidence,
         terminal_state=baseline.terminal_state,
     )
+
+
+def _policy_failure_reason(stop_reason: str | None) -> str:
+    if stop_reason in {"call_limit_exhausted", "stalled_policy", "invalid_action"}:
+        return stop_reason
+    return "environment_crash"
 
 
 def _world_state(environment: ProgramWrapper) -> dict[str, int | list[int] | None]:

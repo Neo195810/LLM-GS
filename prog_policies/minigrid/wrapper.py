@@ -4,6 +4,7 @@ from typing import Any, SupportsFloat
 from gymnasium import Wrapper
 from ..base.dsl_nodes import dsl_nodes
 from ..base import BaseDSL
+from ..base.environment import ProgramCallLimitExceeded
 from minigrid.core.actions import Actions
 from minigrid.minigrid_env import MiniGridEnv
 from .dsl import MinigridDSL
@@ -63,12 +64,14 @@ class ProgramWrapper(Wrapper):
             "drop": self.drop,
             "toggle": self.toggle,
         }
+        self.actions_list = list(self.actions.keys())
         self.bool_features = {
             "front_is_clear": self.front_is_clear,
             "front_object_type": self.front_object_type,
             "front_object_color": self.front_object_color,
             "is_carrying_object": self.is_carrying_object,
         }
+        self.int_features: dict[str, Any] = {}
         self.has_parameters = {
             "front_is_clear": False,
             "front_object_type": True,
@@ -78,11 +81,14 @@ class ProgramWrapper(Wrapper):
         # Maximum num of calls
         self.max_calls: int = max_calls
         self.num_calls: int = 0
+        self.program_call_count: int = 0
+        self.attempted_program_call_count: int = 0
         # Whether the env will terminate whenever perform invalid actions
         self.crashable: bool = crashable
         # Whenever perform invalid action, get penalty
         self.crash_penalty = crash_penalty
         self.crushed: bool = False
+        self.stop_reason: str | None = None
         # Whether to record the history the agent
         self.record_history = record_history
         self.history = []
@@ -97,7 +103,10 @@ class ProgramWrapper(Wrapper):
         self.terminated = False
         self.info = {}
         self.num_calls = 0
+        self.program_call_count = 0
+        self.attempted_program_call_count = 0
         self.crushed = False
+        self.stop_reason = None
         self.history = []
         return super().reset(seed=self.seed)
 
@@ -112,13 +121,16 @@ class ProgramWrapper(Wrapper):
         self.program_num += 1
         if record_video:
             images = []
-        for _ in program.run_generator(self):
-            if record_video:
-                images.append(self.get_frame())
-            terminated, instant_reward = self.get_reward()
-            reward += instant_reward
-            if terminated:
-                break
+        try:
+            for _ in program.run_generator(self):
+                if record_video:
+                    images.append(self.get_frame())
+                terminated, instant_reward = self.get_reward()
+                reward += instant_reward
+                if terminated or self.is_crashed():
+                    break
+        except ProgramCallLimitExceeded:
+            pass
 
         if record_video:
             assert record_dir != None
@@ -137,11 +149,14 @@ class ProgramWrapper(Wrapper):
         """Replay a program without changing its evaluation counter."""
         self.reset()
         frames = [Image.fromarray(self.unwrapped.get_frame())]
-        for _ in program.run_generator(self):
-            terminated, _ = self.get_reward()
-            frames.append(Image.fromarray(self.unwrapped.get_frame()))
-            if len(frames) > max_steps or terminated or self.is_crashed():
-                break
+        try:
+            for _ in program.run_generator(self):
+                terminated, _ = self.get_reward()
+                frames.append(Image.fromarray(self.unwrapped.get_frame()))
+                if len(frames) > max_steps or terminated or self.is_crashed():
+                    break
+        except ProgramCallLimitExceeded:
+            pass
         return frames
 
     def generate_action_history(
@@ -194,22 +209,33 @@ class ProgramWrapper(Wrapper):
 
             history["feedback"]
 
+    def _register_program_call(self) -> None:
+        """Count a call and stop before it can have side effects past the limit."""
+        self.attempted_program_call_count += 1
+        if self.attempted_program_call_count > self.max_calls:
+            self.crash("call_limit_exhausted")
+            raise ProgramCallLimitExceeded(
+                f"Program call limit ({self.max_calls}) exceeded"
+            )
+        self.program_call_count += 1
+        # ``num_calls`` is a compatibility name used by older callers.
+        self.num_calls = self.program_call_count
+
     def run_action(self, action: str):
-        self.num_calls += 1
+        self._register_program_call()
         old_hash = self.env.hash()
         self.actions[action]()
         if self.env.hash() == old_hash:
             if self.crashable:
-                self.crush()
+                self.crash("invalid_action")
             else:
                 self.reward += self.crash_penalty
-        if self.num_calls >= self.max_calls:
-            self.crushed = True
+
+    def run_action_index(self, action_index: int):
+        self.run_action(self.actions_list[action_index])
 
     def get_bool_feature(self, feature: str):
-        self.num_calls += 1
-        if self.num_calls >= self.max_calls:
-            self.crushed = True
+        self._register_program_call()
         if self.has_parameters[feature]:
             return self.bool_features[feature]
         else:
@@ -217,17 +243,20 @@ class ProgramWrapper(Wrapper):
                 feature
             ]()  # no parameters, directly call the function
 
+    def get_int_feature(self, feature: str):
+        self._register_program_call()
+        return self.int_features[feature]()
+
     def get_reward(self):
         terminated = self.terminated
         reward = self.reward
-        if terminated:
-            self.crash()
         self.reward = 0.0
 
         return terminated, reward
 
-    def crash(self):
+    def crash(self, reason: str = "environment_crash"):
         self.crushed = True
+        self.stop_reason = reason
 
     def is_crashed(self):
         return self.crushed
