@@ -5,6 +5,7 @@ data/*.pkl
 logs
 wandb
 .env
+.venv-dashboard/
 *.gif
 *.pdf
 output

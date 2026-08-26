@@ -26,6 +26,8 @@ dependencies:
       - python-dotenv
       - wrapt-timeout-decorator
       - gradio==4.44.1
+      - fastapi<0.116
+      - starlette<1.0
       - huggingface-hub<1.0
       - pydantic==2.10.6
   # Minigrid installation

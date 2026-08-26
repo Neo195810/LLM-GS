@@ -69,6 +69,24 @@ vs ours Adaptive Skill-GS
 
 It is a reproducible local proxy benchmark. It does not call an external LLM API.
 
+## Skill-GS JSON demo dashboard
+
+Open the Skill-GS demo dashboard from an environment with Gradio installed:
+
+```bash
+pip install "gradio==4.44.1" "pandas" "huggingface-hub<1.0" "fastapi<0.116" "starlette<1.0"
+python scripts/skill_gs/run_skill_gs_dashboard.py
+```
+
+The dashboard reads saved JSON files under `output/skill_gs` and does not call
+OpenAI, Gemini, Ollama, or the evaluator. It displays:
+
+- Luna and Gemini one-shot versus repaired success summaries.
+- Per-seed environment state, policy actions, failure attribution, repair plan,
+  and trace tables.
+- Current skill memory rows with success rate, evaluation count, failure
+  signatures, and compact source seed examples.
+
 ## Intended next wiring
 
 1. Feed successful LLM-GS programs/subtrees into `SkillRecord`.
