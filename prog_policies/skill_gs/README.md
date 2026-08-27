@@ -83,9 +83,15 @@ OpenAI, Gemini, Ollama, or the evaluator. It displays:
 
 - Luna and Gemini one-shot versus repaired success summaries.
 - Per-seed environment state, policy actions, failure attribution, repair plan,
-  and trace tables.
+  step-by-step visual trace playback, and trace tables.
 - Current skill memory rows with success rate, evaluation count, failure
   signatures, and compact source seed examples.
+
+The Trace Player is the primary visual inspection surface. Choose `one-shot` or
+`repaired`, then use `Prev` and `Next` to move through the saved trace. The
+action record reports the current action, agent transition, reward, total
+reward, and door state while the SVG highlights the path prefix and current
+agent direction.
 
 ## Intended next wiring
 

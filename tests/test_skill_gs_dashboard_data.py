@@ -8,11 +8,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import prog_policies.skill_gs.dashboard_data as dashboard_data
 from prog_policies.skill_gs.dashboard_data import (
     DashboardDatasetConfig,
     load_dataset_summary,
     load_seed_detail,
     load_skill_rows,
+    render_trace_svg,
     trace_to_rows,
 )
 
@@ -53,8 +55,14 @@ class SkillGSDashboardDataTests(unittest.TestCase):
         self.assertEqual(detail["repair_plan"]["strategy_id"], "splice_post_key_navigation")
         self.assertTrue(detail["repaired_success"])
         self.assertEqual(detail["repaired_steps"], 5)
+        self.assertIn("one_shot_trace", detail)
+        self.assertIn("repaired_trace", detail)
+        self.assertEqual(detail["one_shot_trace"][0]["action"], "move")
+        self.assertEqual(detail["repaired_trace"][2]["action"], "putMarker")
         self.assertEqual(len(detail["one_shot_trace_rows"]), 2)
         self.assertEqual(len(detail["repaired_trace_rows"]), 3)
+        self.assertNotIn("one_shot_visual_trace", detail)
+        self.assertNotIn("repaired_visual_trace", detail)
 
     def test_load_seed_detail_handles_successful_one_shot_without_repair_file(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -99,6 +107,87 @@ class SkillGSDashboardDataTests(unittest.TestCase):
                 }
             ],
         )
+
+    def test_render_trace_svg_draws_environment_landmarks_and_path(self):
+        environment_status = {
+            "grid_size": [8, 8],
+            "agent": {"position": [4, 2], "direction_index": 1},
+            "key_position": [5, 2],
+            "goal_position": [1, 6],
+            "door_cells": [[2, 4], [3, 4]],
+            "wall_cells": [[0, 0], [0, 1], [1, 0], [1, 7]],
+        }
+        trace = [
+            _trace_step(1, "move", [4, 2, 1], [5, 2, 1]),
+            _trace_step(2, "pickMarker", [5, 2, 1], [5, 2, 1], total_reward=0.5),
+        ]
+
+        svg = render_trace_svg(environment_status, trace, title="Demo Trace")
+
+        self.assertIn("<svg", svg)
+        self.assertIn("Demo Trace", svg)
+        self.assertIn("data-layer=\"path\"", svg)
+        self.assertIn("data-cell=\"wall\"", svg)
+        self.assertIn("data-cell=\"door\"", svg)
+        self.assertIn("data-cell=\"key\"", svg)
+        self.assertIn("data-cell=\"goal\"", svg)
+        self.assertIn("data-marker=\"start\"", svg)
+        self.assertIn("data-marker=\"end\"", svg)
+
+    def test_render_trace_step_svg_draws_prefix_and_current_agent_direction(self):
+        environment_status = {
+            "grid_size": [8, 8],
+            "agent": {"position": [4, 2], "direction_index": 1},
+            "key_position": [5, 2],
+            "goal_position": [1, 6],
+            "door_cells": [[2, 4], [3, 4]],
+            "wall_cells": [[0, 0], [0, 1], [1, 0], [1, 7]],
+        }
+        trace = [
+            _trace_step(1, "move", [4, 2, 1], [5, 2, 1]),
+            _trace_step(2, "turnRight", [5, 2, 1], [5, 2, 2]),
+            _trace_step(3, "move", [5, 2, 2], [6, 2, 2]),
+        ]
+
+        self.assertTrue(hasattr(dashboard_data, "render_trace_step_svg"))
+
+        svg = dashboard_data.render_trace_step_svg(
+            environment_status,
+            trace,
+            step_index=1,
+            title="Trace Player",
+        )
+
+        self.assertIn("Trace Player", svg)
+        self.assertIn("data-current-step=\"2\"", svg)
+        self.assertIn("data-visible-step-count=\"2\"", svg)
+        self.assertIn("data-current-action=\"turnRight\"", svg)
+        self.assertIn("data-marker=\"current-agent\"", svg)
+        self.assertIn("data-direction-index=\"2\"", svg)
+
+    def test_trace_step_summary_describes_current_action_and_rewards(self):
+        trace = [
+            _trace_step(1, "move", [4, 2, 1], [5, 2, 1]),
+            _trace_step(
+                2,
+                "pickMarker",
+                [5, 2, 1],
+                [5, 2, 1],
+                instant_reward=0.5,
+                total_reward=0.5,
+                door_open=True,
+            ),
+        ]
+
+        self.assertTrue(hasattr(dashboard_data, "trace_step_summary"))
+
+        summary = dashboard_data.trace_step_summary(trace, step_index=1, trace_label="One-shot")
+
+        self.assertIn("One-shot", summary)
+        self.assertIn("Step 2/2: pickMarker", summary)
+        self.assertIn("[5, 2, 1] -> [5, 2, 1]", summary)
+        self.assertIn("reward 0.5", summary)
+        self.assertIn("door_open True", summary)
 
     def test_load_skill_rows_summarizes_large_seed_lists(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -160,6 +249,33 @@ class SkillGSDashboardAppTests(unittest.TestCase):
         self.assertIn("Open the Skill-GS JSON demo dashboard", result.stdout)
         self.assertIn("--share", result.stdout)
 
+    def test_seed_outputs_use_trace_player_without_static_visual_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _write_demo_dataset(root)
+
+            dashboard = _load_dashboard_script()
+            with mock.patch.object(
+                dashboard,
+                "_df",
+                side_effect=lambda rows, columns: {"rows": rows, "columns": columns},
+            ):
+                outputs = dashboard._seed_outputs(
+                    root,
+                    (_demo_config(),),
+                    "Demo Provider",
+                    0,
+                    "repaired",
+                )
+
+        self.assertEqual(len(outputs), 10)
+        self.assertEqual(outputs[5], 0)
+        self.assertIn("trace-action-card", outputs[6])
+        self.assertIn("Action: move", outputs[6])
+        self.assertIn("data-marker=\"current-agent\"", outputs[7])
+        self.assertEqual(outputs[8]["columns"], dashboard.TRACE_COLUMNS)
+        self.assertEqual(outputs[9]["columns"], dashboard.TRACE_COLUMNS)
+
     def test_dashboard_app_builds_from_json_results(self):
         if importlib.util.find_spec("gradio") is None:
             self.skipTest("gradio is not installed in this Python environment")
@@ -199,6 +315,11 @@ class SkillGSDashboardAppTests(unittest.TestCase):
         self.assertIn("Overview", labels)
         self.assertIn("Dataset", labels)
         self.assertIn("Seed", labels)
+        self.assertIn("Trace Source", labels)
+        self.assertIn("Trace Player", labels)
+        self.assertIn("Action Record", labels)
+        self.assertNotIn("One-shot Visual Trace", labels)
+        self.assertNotIn("Repaired Visual Trace", labels)
         self.assertIn("One-shot Trace", labels)
         self.assertIn("Repaired Trace", labels)
         self.assertIn("Skill Memory", labels)
@@ -233,9 +354,12 @@ def _write_demo_dataset(root):
             "task": "DoorKey",
             "seed": 0,
             "environment_status": {
+                "grid_size": [8, 8],
                 "agent": {"position": [4, 2], "direction": "east"},
                 "key_position": [5, 2],
                 "goal_position": [1, 6],
+                "door_cells": [[2, 4], [3, 4]],
+                "wall_cells": [[0, 0], [0, 1], [1, 0], [1, 7], [2, 4], [3, 4]],
                 "ascii_map": "########\n#A K G #\n########",
             },
             "policy": {
@@ -261,9 +385,12 @@ def _write_demo_dataset(root):
             "task": "DoorKey",
             "seed": 1,
             "environment_status": {
+                "grid_size": [8, 8],
                 "agent": {"position": [1, 1], "direction": "south"},
                 "key_position": [2, 1],
                 "goal_position": [6, 6],
+                "door_cells": [[2, 4], [3, 4]],
+                "wall_cells": [[0, 0], [0, 1], [1, 0], [1, 7], [2, 4], [3, 4]],
                 "ascii_map": "########\n#A.....#\n########",
             },
             "policy": {"actions": ["move", "pickMarker", "putMarker"]},

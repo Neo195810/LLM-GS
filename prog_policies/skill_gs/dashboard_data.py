@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+import html
 import json
 import re
 from pathlib import Path
@@ -141,6 +142,9 @@ def load_seed_detail(
     source_attribution = (repair_detail or {}).get("source_attribution")
     repaired_evaluation = (repair_detail or {}).get("repaired_evaluation") or {}
     one_shot_evaluation = one_shot.get("evaluation") or {}
+    environment_status = one_shot.get("environment_status") or {}
+    one_shot_trace = one_shot_evaluation.get("trace") or []
+    repaired_trace = repaired_evaluation.get("trace") or []
 
     return {
         "dataset_id": config.dataset_id,
@@ -152,13 +156,14 @@ def load_seed_detail(
         "repair_path": _relative_display_path(
             _resolved_optional_path(root, repair_result.get("output_path")), root
         ),
-        "environment_status": one_shot.get("environment_status") or {},
+        "environment_status": environment_status,
         "policy": one_shot.get("policy") or {},
         "policy_actions": list((one_shot.get("policy") or {}).get("actions") or []),
         "one_shot_success": bool(one_shot_evaluation.get("success")),
         "one_shot_reward": one_shot_evaluation.get("reward"),
         "one_shot_steps": one_shot_evaluation.get("steps"),
-        "one_shot_trace_rows": trace_to_rows(one_shot_evaluation.get("trace") or []),
+        "one_shot_trace": one_shot_trace,
+        "one_shot_trace_rows": trace_to_rows(one_shot_trace),
         "repair_status": repair_result.get("status") or "not_available",
         "source_attribution": source_attribution,
         "repair_plan": repair_plan,
@@ -168,7 +173,8 @@ def load_seed_detail(
         ),
         "repaired_reward": repaired_evaluation.get("reward", repair_result.get("reward")),
         "repaired_steps": repaired_evaluation.get("steps", repair_result.get("steps")),
-        "repaired_trace_rows": trace_to_rows(repaired_evaluation.get("trace") or []),
+        "repaired_trace": repaired_trace,
+        "repaired_trace_rows": trace_to_rows(repaired_trace),
     }
 
 
@@ -187,6 +193,184 @@ def trace_to_rows(trace: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def render_trace_svg(
+    environment_status: dict[str, Any],
+    trace: list[dict[str, Any]],
+    title: str = "Trace",
+    *,
+    current_step_index: int | None = None,
+) -> str:
+    environment_status = environment_status or {}
+    full_trace = trace or []
+    selected_step_index = _clamped_trace_index(full_trace, current_step_index)
+    trace = _trace_prefix(full_trace, selected_step_index)
+    current_step = full_trace[selected_step_index] if selected_step_index is not None else None
+    grid_rows, grid_cols = _trace_grid_size(environment_status, full_trace)
+    cell_size = 34
+    padding = 18
+    title_height = 30
+    legend_height = 22
+    width = padding * 2 + grid_cols * cell_size
+    height = title_height + padding + grid_rows * cell_size + legend_height
+    grid_top = title_height
+
+    walls = _cell_set(environment_status.get("wall_cells"))
+    doors = _cell_set(environment_status.get("door_cells"))
+    key_position = _cell_position(environment_status.get("key_position"))
+    goal_position = _cell_position(environment_status.get("goal_position"))
+    positions = _trace_positions(environment_status, trace)
+
+    escaped_title = html.escape(title)
+    escaped_action = html.escape(str((current_step or {}).get("action") or ""), quote=True)
+    current_step_number = (
+        str((current_step or {}).get("step") or selected_step_index + 1)
+        if selected_step_index is not None
+        else ""
+    )
+    player_attrs = (
+        f' data-current-step="{current_step_number}"'
+        f' data-visible-step-count="{len(trace)}"'
+        f' data-current-action="{escaped_action}"'
+    )
+    parts = [
+        (
+            f'<svg xmlns="http://www.w3.org/2000/svg" '
+            f'viewBox="0 0 {width} {height}" role="img" '
+            f'aria-label="{escaped_title}" '
+            f'{player_attrs} '
+            f'style="width:100%;max-width:{width}px;height:auto;">'
+        ),
+        f"<title>{escaped_title}</title>",
+        f"<desc>{escaped_title} on the DoorKey grid.</desc>",
+        '<rect width="100%" height="100%" rx="8" fill="#f8fafc"/>',
+        (
+            f'<text x="{padding}" y="20" fill="#111827" '
+            f'font-family="Arial, sans-serif" font-size="13" '
+            f'font-weight="700">{escaped_title}</text>'
+        ),
+    ]
+
+    for row in range(grid_rows):
+        for col in range(grid_cols):
+            cell_kind, fill, text = _cell_style((row, col), walls, doors, key_position, goal_position)
+            x = padding + col * cell_size
+            y = grid_top + row * cell_size
+            parts.append(
+                (
+                    f'<rect data-cell="{cell_kind}" x="{x}" y="{y}" '
+                    f'width="{cell_size}" height="{cell_size}" fill="{fill}" '
+                    f'stroke="#cbd5e1" stroke-width="1"/>'
+                )
+            )
+            if text:
+                parts.append(
+                    (
+                        f'<text x="{x + cell_size / 2:.1f}" y="{y + cell_size / 2 + 5:.1f}" '
+                        f'fill="#111827" font-family="Arial, sans-serif" '
+                        f'font-size="12" font-weight="700" text-anchor="middle">{text}</text>'
+                    )
+                )
+
+    if positions:
+        points = " ".join(
+            f"{_cell_center(position, padding, grid_top, cell_size)[0]:.1f},"
+            f"{_cell_center(position, padding, grid_top, cell_size)[1]:.1f}"
+            for position in positions
+        )
+        if len(positions) > 1:
+            parts.append(
+                (
+                    f'<polyline data-layer="path" points="{points}" fill="none" '
+                    f'stroke="#2563eb" stroke-width="4" stroke-linecap="round" '
+                    f'stroke-linejoin="round" opacity="0.86"/>'
+                )
+            )
+        for step_index, position in _condensed_path_points(positions):
+            cx, cy = _cell_center(position, padding, grid_top, cell_size)
+            parts.append(
+                (
+                    f'<circle data-layer="step" cx="{cx:.1f}" cy="{cy:.1f}" '
+                    f'r="5" fill="#1d4ed8" opacity="0.78"/>'
+                )
+            )
+            if 0 < step_index < len(positions) - 1:
+                parts.append(
+                    (
+                        f'<text x="{cx:.1f}" y="{cy - 8:.1f}" fill="#1f2937" '
+                        f'font-family="Arial, sans-serif" font-size="9" '
+                        f'text-anchor="middle">{step_index}</text>'
+                    )
+                )
+        _append_marker(parts, "start", positions[0], padding, grid_top, cell_size, "S", "#0f766e")
+        _append_marker(parts, "end", positions[-1], padding, grid_top, cell_size, "E", "#dc2626")
+        if current_step is not None:
+            _append_current_agent(
+                parts,
+                current_step.get("agent_after"),
+                padding,
+                grid_top,
+                cell_size,
+            )
+    else:
+        parts.append(
+            (
+                f'<text x="{width / 2:.1f}" y="{height / 2:.1f}" fill="#475569" '
+                f'font-family="Arial, sans-serif" font-size="13" text-anchor="middle">'
+                "No trace available</text>"
+            )
+        )
+
+    legend_y = title_height + padding + grid_rows * cell_size + 15
+    parts.append(
+        (
+            f'<text x="{padding}" y="{legend_y}" fill="#334155" '
+            f'font-family="Arial, sans-serif" font-size="11">'
+            "S start | K key | D door | G goal | E end</text>"
+        )
+    )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def render_trace_step_svg(
+    environment_status: dict[str, Any],
+    trace: list[dict[str, Any]],
+    step_index: int,
+    title: str = "Trace Player",
+) -> str:
+    return render_trace_svg(
+        environment_status,
+        trace,
+        title=title,
+        current_step_index=step_index,
+    )
+
+
+def trace_step_summary(
+    trace: list[dict[str, Any]],
+    step_index: int,
+    trace_label: str = "Trace",
+) -> str:
+    trace = trace or []
+    current_index = _clamped_trace_index(trace, step_index)
+    if current_index is None:
+        return f"{trace_label}: no trace available."
+
+    item = trace[current_index]
+    step_number = item.get("step") or current_index + 1
+    action = item.get("action") or "unknown"
+    before = _format_agent_state(item.get("agent_before"))
+    after = _format_agent_state(item.get("agent_after"))
+    instant_reward = item.get("instant_reward")
+    total_reward = item.get("total_reward")
+    door_open = item.get("door_open")
+    return (
+        f"{trace_label} | Step {step_number}/{len(trace)}: {action} | "
+        f"{before} -> {after} | reward {instant_reward} | "
+        f"total {total_reward} | door_open {door_open}"
+    )
 
 
 def overview_rows(summaries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -381,6 +565,205 @@ def _coalesce_success(*values: Any) -> bool | None:
         if value is not None:
             return bool(value)
     return None
+
+
+def _clamped_trace_index(
+    trace: list[dict[str, Any]],
+    step_index: int | None,
+) -> int | None:
+    if step_index is None or not trace:
+        return None
+    try:
+        index = int(step_index)
+    except (TypeError, ValueError):
+        index = 0
+    return min(max(index, 0), len(trace) - 1)
+
+
+def _trace_prefix(
+    trace: list[dict[str, Any]],
+    selected_step_index: int | None,
+) -> list[dict[str, Any]]:
+    if selected_step_index is None:
+        return trace
+    return trace[: selected_step_index + 1]
+
+
+def _trace_grid_size(
+    environment_status: dict[str, Any],
+    trace: list[dict[str, Any]],
+) -> tuple[int, int]:
+    grid_size = environment_status.get("grid_size")
+    if isinstance(grid_size, (list, tuple)) and len(grid_size) >= 2:
+        try:
+            return max(1, int(grid_size[0])), max(1, int(grid_size[1]))
+        except (TypeError, ValueError):
+            pass
+
+    positions = []
+    positions.extend(_cell_set(environment_status.get("wall_cells")))
+    positions.extend(_cell_set(environment_status.get("door_cells")))
+    for key in ("key_position", "goal_position"):
+        position = _cell_position(environment_status.get(key))
+        if position is not None:
+            positions.append(position)
+    agent_position = _cell_position((environment_status.get("agent") or {}).get("position"))
+    if agent_position is not None:
+        positions.append(agent_position)
+    positions.extend(_trace_positions(environment_status, trace))
+    if not positions:
+        return 1, 1
+    return (
+        max(row for row, _ in positions) + 1,
+        max(col for _, col in positions) + 1,
+    )
+
+
+def _cell_set(values: Any) -> set[tuple[int, int]]:
+    if not isinstance(values, list):
+        return set()
+    cells = set()
+    for value in values:
+        position = _cell_position(value)
+        if position is not None:
+            cells.add(position)
+    return cells
+
+
+def _cell_position(value: Any) -> tuple[int, int] | None:
+    if isinstance(value, dict):
+        value = value.get("position")
+    if not isinstance(value, (list, tuple)) or len(value) < 2:
+        return None
+    try:
+        return int(value[0]), int(value[1])
+    except (TypeError, ValueError):
+        return None
+
+
+def _trace_positions(
+    environment_status: dict[str, Any],
+    trace: list[dict[str, Any]],
+) -> list[tuple[int, int]]:
+    positions = []
+    if trace:
+        first_position = _cell_position(trace[0].get("agent_before"))
+        if first_position is not None:
+            positions.append(first_position)
+        for item in trace:
+            position = _cell_position(item.get("agent_after"))
+            if position is not None:
+                positions.append(position)
+    if positions:
+        return positions
+    agent_position = _cell_position((environment_status.get("agent") or {}).get("position"))
+    return [agent_position] if agent_position is not None else []
+
+
+def _cell_style(
+    position: tuple[int, int],
+    walls: set[tuple[int, int]],
+    doors: set[tuple[int, int]],
+    key_position: tuple[int, int] | None,
+    goal_position: tuple[int, int] | None,
+) -> tuple[str, str, str]:
+    if position == key_position:
+        return "key", "#facc15", "K"
+    if position == goal_position:
+        return "goal", "#86efac", "G"
+    if position in doors:
+        return "door", "#fb923c", "D"
+    if position in walls:
+        return "wall", "#334155", ""
+    return "empty", "#ffffff", ""
+
+
+def _cell_center(
+    position: tuple[int, int],
+    padding: int,
+    grid_top: int,
+    cell_size: int,
+) -> tuple[float, float]:
+    row, col = position
+    return (
+        padding + col * cell_size + cell_size / 2,
+        grid_top + row * cell_size + cell_size / 2,
+    )
+
+
+def _condensed_path_points(positions: list[tuple[int, int]]) -> list[tuple[int, tuple[int, int]]]:
+    condensed = []
+    previous = None
+    for index, position in enumerate(positions):
+        if position != previous:
+            condensed.append((index, position))
+            previous = position
+    return condensed
+
+
+def _append_marker(
+    parts: list[str],
+    marker_id: str,
+    position: tuple[int, int],
+    padding: int,
+    grid_top: int,
+    cell_size: int,
+    label: str,
+    fill: str,
+) -> None:
+    cx, cy = _cell_center(position, padding, grid_top, cell_size)
+    parts.append(
+        (
+            f'<circle data-marker="{marker_id}" cx="{cx:.1f}" cy="{cy:.1f}" '
+            f'r="10" fill="{fill}" stroke="#ffffff" stroke-width="2"/>'
+        )
+    )
+    parts.append(
+        (
+            f'<text x="{cx:.1f}" y="{cy + 4:.1f}" fill="#ffffff" '
+            f'font-family="Arial, sans-serif" font-size="10" font-weight="700" '
+            f'text-anchor="middle">{label}</text>'
+        )
+    )
+
+
+def _append_current_agent(
+    parts: list[str],
+    agent_state: Any,
+    padding: int,
+    grid_top: int,
+    cell_size: int,
+) -> None:
+    position = _cell_position(agent_state)
+    if position is None:
+        return
+    direction_index = _direction_index(agent_state)
+    cx, cy = _cell_center(position, padding, grid_top, cell_size)
+    angle = {0: 0, 1: 90, 2: 180, 3: 270}.get(direction_index, 0)
+    parts.append(
+        (
+            f'<g data-marker="current-agent" data-direction-index="{direction_index}" '
+            f'transform="translate({cx:.1f} {cy:.1f}) rotate({angle})">'
+            '<path d="M 0 -13 L 9 10 L 0 5 L -9 10 Z" fill="#7c3aed" '
+            'stroke="#ffffff" stroke-width="1.5"/>'
+            "</g>"
+        )
+    )
+
+
+def _direction_index(value: Any) -> int:
+    if isinstance(value, dict):
+        value = value.get("direction_index")
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+    if isinstance(value, (list, tuple)) and len(value) >= 3:
+        try:
+            return int(value[2])
+        except (TypeError, ValueError):
+            return 0
+    return 0
 
 
 def _source_seed_count(metadata: dict[str, Any], source_seeds: Any) -> int | str:

@@ -151,6 +151,21 @@ Generate the chart/report evidence pack from that comparison JSON:
 python scripts/skill_gs/generate_evidence_pack.py --baseline-json output/skill_gs/baseline_comparison_seed0_127.json
 ```
 
+Open the JSON demo dashboard after installing the small dashboard-only UI
+dependencies:
+
+```bash
+pip install "gradio==4.44.1" "pandas" "huggingface-hub<1.0" "fastapi<0.116" "starlette<1.0"
+python scripts/skill_gs/run_skill_gs_dashboard.py
+```
+
+The dashboard reads saved JSON results under `output/skill_gs`, so it does not
+spend new OpenAI/Gemini/Ollama calls. It compares Luna and Gemini one-shot
+policies against repaired runs, inspects each seed, and includes a Trace Player
+with `Prev` and `Next` controls for stepping through one action at a time. The
+action record explains the current move while the SVG highlights the path prefix
+and current agent direction.
+
 The generated demo report is written to
 `reports/skill_gs_demo_evidence_pack_2026-08-22.md`, with SVG charts under
 `reports/assets/`. The current local proxy comparison shows:

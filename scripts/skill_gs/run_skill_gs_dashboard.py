@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 from pathlib import Path
@@ -51,7 +52,9 @@ from prog_policies.skill_gs.dashboard_data import (
     load_seed_detail,
     load_skill_rows,
     overview_rows,
+    render_trace_step_svg,
     seed_choices,
+    trace_step_summary,
 )
 
 
@@ -89,6 +92,7 @@ SKILL_COLUMNS = [
     "source_seed_count",
     "example_source_seeds",
 ]
+TRACE_SOURCE_CHOICES = ["repaired", "one-shot"]
 
 
 def build_app(
@@ -114,6 +118,32 @@ def build_app(
     .gradio-container { background: var(--skill-paper); }
     .compact-table { min-height: 220px; }
     .trace-table { min-height: 320px; }
+    .trace-action-card {
+        min-height: 86px;
+        padding: 14px 16px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        background: #111827;
+        color: #f8fafc;
+        font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    }
+    .trace-action-source {
+        color: #93c5fd;
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .trace-action-main {
+        color: #ffffff;
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .trace-action-detail {
+        color: #dbeafe;
+        font-size: 12px;
+        line-height: 1.45;
+    }
     .code-panel textarea { font-family: 'IBM Plex Mono', 'Courier New', monospace !important; }
     """
 
@@ -184,6 +214,27 @@ def build_app(
                         label="Repair Plan",
                         elem_classes=["code-panel"],
                     )
+                trace_step_state = gr.State(0)
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        trace_source = gr.Radio(
+                            choices=TRACE_SOURCE_CHOICES,
+                            value="repaired",
+                            label="Trace Source",
+                        )
+                    previous_step = gr.Button("< Prev", scale=1)
+                    with gr.Column(scale=4):
+                        trace_step_status = gr.HTML(
+                            value=_trace_action_card("No trace selected."),
+                            label="Action Record",
+                            show_label=True,
+                        )
+                    next_step = gr.Button("Next >", scale=1)
+                trace_step_visual = gr.HTML(
+                    value="",
+                    label="Trace Player",
+                    show_label=True,
+                )
                 with gr.Row():
                     one_shot_trace = gr.Dataframe(
                         value=_df([], TRACE_COLUMNS),
@@ -221,12 +272,15 @@ def build_app(
             policy_actions.value = initial_outputs[2]
             failure_attribution.value = initial_outputs[3]
             repair_plan.value = initial_outputs[4]
-            one_shot_trace.value = initial_outputs[5]
-            repaired_trace.value = initial_outputs[6]
+            trace_step_state.value = initial_outputs[5]
+            trace_step_status.value = initial_outputs[6]
+            trace_step_visual.value = initial_outputs[7]
+            one_shot_trace.value = initial_outputs[8]
+            repaired_trace.value = initial_outputs[9]
 
         refresh_button.click(
             _refresh,
-            [output_root_box, skill_store_box],
+            [output_root_box, skill_store_box, trace_source],
             [
                 overview_table,
                 dataset_dropdown,
@@ -237,6 +291,9 @@ def build_app(
                 policy_actions,
                 failure_attribution,
                 repair_plan,
+                trace_step_state,
+                trace_step_status,
+                trace_step_visual,
                 one_shot_trace,
                 repaired_trace,
             ],
@@ -244,7 +301,7 @@ def build_app(
         )
         dataset_dropdown.change(
             _change_dataset,
-            [output_root_box, dataset_dropdown],
+            [output_root_box, dataset_dropdown, trace_source],
             [
                 seed_dropdown,
                 seed_status,
@@ -252,6 +309,9 @@ def build_app(
                 policy_actions,
                 failure_attribution,
                 repair_plan,
+                trace_step_state,
+                trace_step_status,
+                trace_step_visual,
                 one_shot_trace,
                 repaired_trace,
             ],
@@ -259,29 +319,56 @@ def build_app(
         )
         seed_dropdown.change(
             _change_seed,
-            [output_root_box, dataset_dropdown, seed_dropdown],
+            [output_root_box, dataset_dropdown, seed_dropdown, trace_source],
             [
                 seed_status,
                 environment_state,
                 policy_actions,
                 failure_attribution,
                 repair_plan,
+                trace_step_state,
+                trace_step_status,
+                trace_step_visual,
                 one_shot_trace,
                 repaired_trace,
             ],
             queue=False,
         )
+        trace_source.change(
+            _change_trace_source,
+            [output_root_box, dataset_dropdown, seed_dropdown, trace_source],
+            [trace_step_state, trace_step_status, trace_step_visual],
+            queue=False,
+        )
+        previous_step.click(
+            _previous_trace_step,
+            [output_root_box, dataset_dropdown, seed_dropdown, trace_source, trace_step_state],
+            [trace_step_state, trace_step_status, trace_step_visual],
+            queue=False,
+        )
+        next_step.click(
+            _next_trace_step,
+            [output_root_box, dataset_dropdown, seed_dropdown, trace_source, trace_step_state],
+            [trace_step_state, trace_step_status, trace_step_visual],
+            queue=False,
+        )
     return app
 
 
-def _refresh(output_root_text: str, skill_store_text: str):
+def _refresh(output_root_text: str, skill_store_text: str, trace_source: str):
     output_root = Path(output_root_text)
     summaries = _safe_summaries(output_root, DEFAULT_DATASET_CONFIGS)
     labels = dataset_choices(summaries)
     dataset_label = labels[0] if labels else ""
     selected_seed = _initial_seed(summaries, dataset_label)
     seed_options = _seed_choices_for_label(summaries, dataset_label)
-    detail_outputs = _seed_outputs(output_root, DEFAULT_DATASET_CONFIGS, dataset_label, selected_seed)
+    detail_outputs = _seed_outputs(
+        output_root,
+        DEFAULT_DATASET_CONFIGS,
+        dataset_label,
+        selected_seed,
+        trace_source,
+    )
     return (
         _df(overview_rows(summaries), OVERVIEW_COLUMNS),
         gr.update(choices=labels, value=dataset_label),
@@ -291,11 +378,17 @@ def _refresh(output_root_text: str, skill_store_text: str):
     )
 
 
-def _change_dataset(output_root_text: str, dataset_label: str):
+def _change_dataset(output_root_text: str, dataset_label: str, trace_source: str):
     output_root = Path(output_root_text)
     summaries = _safe_summaries(output_root, DEFAULT_DATASET_CONFIGS)
     selected_seed = _initial_seed(summaries, dataset_label)
-    detail_outputs = _seed_outputs(output_root, DEFAULT_DATASET_CONFIGS, dataset_label, selected_seed)
+    detail_outputs = _seed_outputs(
+        output_root,
+        DEFAULT_DATASET_CONFIGS,
+        dataset_label,
+        selected_seed,
+        trace_source,
+    )
     return (
         gr.update(
             choices=_seed_choices_for_label(summaries, dataset_label),
@@ -305,8 +398,13 @@ def _change_dataset(output_root_text: str, dataset_label: str):
     )
 
 
-def _change_seed(output_root_text: str, dataset_label: str, seed: int | str | None):
-    return _seed_outputs(Path(output_root_text), DEFAULT_DATASET_CONFIGS, dataset_label, seed)
+def _change_seed(
+    output_root_text: str,
+    dataset_label: str,
+    seed: int | str | None,
+    trace_source: str,
+):
+    return _seed_outputs(Path(output_root_text), DEFAULT_DATASET_CONFIGS, dataset_label, seed, trace_source)
 
 
 def _seed_outputs(
@@ -314,12 +412,14 @@ def _seed_outputs(
     dataset_configs: tuple[DashboardDatasetConfig, ...],
     dataset_label: str,
     seed: int | str | None,
+    trace_source: str = "repaired",
 ):
     if not dataset_label or seed in (None, ""):
         return _empty_seed_outputs()
     try:
         config = find_dataset_config_by_label(dataset_label, dataset_configs)
         detail = load_seed_detail(output_root, config, int(seed))
+        trace_player_outputs = _trace_player_from_detail(detail, trace_source, 0)
         return (
             _status_text(detail),
             _json_text(detail.get("environment_status")),
@@ -332,6 +432,7 @@ def _seed_outputs(
             ),
             _json_text(detail.get("source_attribution") or {}),
             _json_text(detail.get("repair_plan") or {}),
+            *trace_player_outputs,
             _df(detail.get("one_shot_trace_rows") or [], TRACE_COLUMNS),
             _df(detail.get("repaired_trace_rows") or [], TRACE_COLUMNS),
         )
@@ -342,9 +443,140 @@ def _seed_outputs(
             "{}",
             "{}",
             "{}",
+            0,
+            _trace_action_card("No trace selected."),
+            "",
             _df([], TRACE_COLUMNS),
             _df([], TRACE_COLUMNS),
         )
+
+
+def _change_trace_source(
+    output_root_text: str,
+    dataset_label: str,
+    seed: int | str | None,
+    trace_source: str,
+):
+    return _trace_player_outputs(Path(output_root_text), dataset_label, seed, trace_source, 0)
+
+
+def _previous_trace_step(
+    output_root_text: str,
+    dataset_label: str,
+    seed: int | str | None,
+    trace_source: str,
+    step_index: int | str | None,
+):
+    return _trace_player_outputs(
+        Path(output_root_text),
+        dataset_label,
+        seed,
+        trace_source,
+        _to_int(step_index) - 1,
+    )
+
+
+def _next_trace_step(
+    output_root_text: str,
+    dataset_label: str,
+    seed: int | str | None,
+    trace_source: str,
+    step_index: int | str | None,
+):
+    return _trace_player_outputs(
+        Path(output_root_text),
+        dataset_label,
+        seed,
+        trace_source,
+        _to_int(step_index) + 1,
+    )
+
+
+def _trace_player_outputs(
+    output_root: Path,
+    dataset_label: str,
+    seed: int | str | None,
+    trace_source: str,
+    step_index: int,
+):
+    if not dataset_label or seed in (None, ""):
+        return 0, _trace_action_card("No trace selected."), ""
+    try:
+        config = find_dataset_config_by_label(dataset_label, DEFAULT_DATASET_CONFIGS)
+        detail = load_seed_detail(output_root, config, int(seed))
+        return _trace_player_from_detail(detail, trace_source, step_index)
+    except Exception as error:
+        return 0, _trace_action_card(f"Trace player load failed: {error}"), ""
+
+
+def _trace_player_from_detail(
+    detail: dict[str, Any],
+    trace_source: str,
+    step_index: int,
+):
+    trace_label, trace = _selected_trace(detail, trace_source)
+    if not trace:
+        return 0, _trace_action_card(f"{trace_label}: no trace available."), ""
+    selected_step = min(max(_to_int(step_index), 0), len(trace) - 1)
+    summary = trace_step_summary(trace, selected_step, trace_label=trace_label)
+    return (
+        selected_step,
+        _trace_action_card(summary),
+        render_trace_step_svg(
+            detail.get("environment_status") or {},
+            trace,
+            step_index=selected_step,
+            title=f"{trace_label} Trace Player",
+        ),
+    )
+
+
+def _selected_trace(detail: dict[str, Any], trace_source: str) -> tuple[str, list[dict[str, Any]]]:
+    if trace_source == "one-shot":
+        return "One-shot", list(detail.get("one_shot_trace") or [])
+    return "Repaired", list(detail.get("repaired_trace") or [])
+
+
+def _trace_action_card(summary: str) -> str:
+    if not summary:
+        summary = "No trace selected."
+    parts = [part.strip() for part in summary.split("|")]
+    if len(parts) < 6 or "Step " not in parts[1]:
+        return (
+            '<div class="trace-action-card">'
+            f'<div class="trace-action-main">{html.escape(summary)}</div>'
+            "</div>"
+        )
+
+    trace_label = parts[0]
+    step_text, action = _split_step_action(parts[1])
+    transition = parts[2]
+    reward = _metric_text(parts[3], "reward", "Reward")
+    total = _metric_text(parts[4], "total", "Total")
+    door_open = _metric_text(parts[5], "door_open", "Door open")
+    return (
+        '<div class="trace-action-card">'
+        f'<div class="trace-action-source">{html.escape(trace_label)}</div>'
+        f'<div class="trace-action-main">{html.escape(step_text)}</div>'
+        f'<div class="trace-action-detail">Action: {html.escape(action)}</div>'
+        f'<div class="trace-action-detail">Agent: {html.escape(transition)}</div>'
+        f'<div class="trace-action-detail">{html.escape(reward)} | '
+        f'{html.escape(total)} | {html.escape(door_open)}</div>'
+        "</div>"
+    )
+
+
+def _split_step_action(value: str) -> tuple[str, str]:
+    if ": " not in value:
+        return value, ""
+    step_text, action = value.split(": ", 1)
+    return step_text, action
+
+
+def _metric_text(value: str, source_prefix: str, display_prefix: str) -> str:
+    if value.startswith(f"{source_prefix} "):
+        return f"{display_prefix}: {value[len(source_prefix) + 1:]}"
+    return value
 
 
 def _safe_summaries(
@@ -383,6 +615,9 @@ def _empty_seed_outputs():
         "{}",
         "{}",
         "{}",
+        0,
+        _trace_action_card("No trace selected."),
+        "",
         _df([], TRACE_COLUMNS),
         _df([], TRACE_COLUMNS),
     )
@@ -410,6 +645,13 @@ def _success_label(value: Any) -> str:
 
 def _json_text(value: Any) -> str:
     return json.dumps(value or {}, ensure_ascii=False, indent=2)
+
+
+def _to_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _df(rows: list[dict[str, Any]], columns: list[str]) -> pd.DataFrame:
