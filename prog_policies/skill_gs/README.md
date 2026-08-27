@@ -71,15 +71,18 @@ It is a reproducible local proxy benchmark. It does not call an external LLM API
 
 ## Skill-GS JSON demo dashboard
 
-Open the Skill-GS demo dashboard from an environment with Gradio installed:
+The dashboard is the main visualization surface for explaining the current
+Skill-GS prototype to teammates and judges. It reads saved JSON artifacts, so
+opening the dashboard does not call OpenAI, Gemini, Ollama, or the evaluator.
+
+Open it from an environment with Gradio installed:
 
 ```bash
 pip install "gradio==4.44.1" "pandas" "huggingface-hub<1.0" "fastapi<0.116" "starlette<1.0"
 python scripts/skill_gs/run_skill_gs_dashboard.py
 ```
 
-The dashboard reads saved JSON files under `output/skill_gs` and does not call
-OpenAI, Gemini, Ollama, or the evaluator. It displays:
+### What the dashboard displays
 
 - Luna and Gemini one-shot versus repaired success summaries.
 - Per-seed environment state, policy actions, failure attribution, repair plan,
@@ -87,11 +90,42 @@ OpenAI, Gemini, Ollama, or the evaluator. It displays:
 - Current skill memory rows with success rate, evaluation count, failure
   signatures, and compact source seed examples.
 
+### Trace Player
+
 The Trace Player is the primary visual inspection surface. Choose `one-shot` or
 `repaired`, then use `Prev` and `Next` to move through the saved trace. The
-action record reports the current action, agent transition, reward, total
-reward, and door state while the SVG highlights the path prefix and current
-agent direction.
+action record reports:
+
+- Current step and action.
+- Agent state before and after the action.
+- Instant reward, total reward, and `door_open`.
+- The current path prefix and agent direction on the SVG grid.
+
+This makes it easier to explain whether an LLM policy failed because it moved
+into a wall, confused a door with the goal marker, used `putMarker` too early,
+or simply needed repair after the key was picked.
+
+### Data sources
+
+The default dashboard loader currently reads:
+
+- Luna one-shot JSON files matching
+  `output/skill_gs/llm_generated_seed*_openai_luna_skill_augmented_v5_gated_smoke.json`.
+- Gemini one-shot JSON files under
+  `output/skill_gs/gemini_3_5_flash_v1_seed*/`.
+- Repair summaries such as
+  `output/skill_gs/llm_repair_seed0_31_v5_gated_summary.json`.
+- Skill memory from
+  `output/skill_gs/llm_repair_skills_prompt_v4.json`.
+
+### Suggested demo path
+
+1. Start at `Overview` and show the one-shot versus repaired success rates.
+2. Open `Seed Inspector` and pick a seed where one-shot failed.
+3. Set `Trace Source` to `one-shot`, then step until the failure is visible.
+4. Switch `Trace Source` to `repaired` and show how the repaired path changes.
+5. Use the trace table only when a step needs exact before/after coordinates.
+6. Open `Skill Memory` to connect the repair behavior back to stored skills.
 
 ## Intended next wiring
 

@@ -105,15 +105,87 @@ Please note that the result of LLM-GS might not be the same as the one we report
 
 The experiment results will be in the `output` directory.
 
-### Skill-GS DoorKey MVP
+### Skill-GS DoorKey MVP Demo
 
-This branch also includes a small Skill-GS MVP layer for the repo-native Karel
-DoorKey task. It keeps the current baseline solver intact while exposing a
-modular agent workflow:
+This branch contains a Skill-GS prototype for the repo-native Karel DoorKey
+task. The demo is not trying to make a single LLM policy look artificially
+strong. Its focus is the Adaptive Core around the policy: make the agent's plan
+observable, evaluate the result, attribute failures, repair the failed trace,
+and record reusable skills for later runs.
 
 ```text
 PlannerAgent -> SkillManagerAgent -> EvaluatorAgent -> CriticRepairAgent -> SkillMemoryAgent
 ```
+
+#### What This Demo Shows
+
+Skill-GS treats an LLM-generated policy as a candidate plan instead of a final
+answer. If the one-shot policy fails, the evaluator keeps a structured trace,
+the critic/repairer identifies what went wrong, and the repaired policy is
+tested under the same seed. This lets us demonstrate adaptation as a measurable
+loop rather than as a black-box claim.
+
+#### Dashboard Workflow
+
+Open the JSON demo dashboard after installing the dashboard-only UI
+dependencies:
+
+```bash
+pip install "gradio==4.44.1" "pandas" "huggingface-hub<1.0" "fastapi<0.116" "starlette<1.0"
+python scripts/skill_gs/run_skill_gs_dashboard.py
+```
+
+The dashboard reads saved JSON results under `output/skill_gs`, so it does not
+spend new OpenAI, Gemini, or Ollama calls. Use it as a judge-facing and
+teammate-facing inspection tool:
+
+1. `Overview` compares one-shot LLM policies with repaired policies.
+2. `Seed Inspector` selects one provider result and one seed.
+3. `Trace Source` switches between `one-shot` and `repaired`.
+4. `Prev` and `Next` step through the trace one action at a time.
+5. `Action Record` explains the current action, agent transition, reward, total
+   reward, and door state.
+6. `Trace Player` redraws the grid so the current path prefix and agent
+   direction can be checked visually.
+7. `Skill Memory` shows the reusable repair skills accumulated by the system.
+
+#### Why Visualization Matters
+
+The visual trace is useful because success rate alone does not explain agent
+behavior. DoorKey failures can come from walking into walls, treating the door
+as a goal marker, using `putMarker` too early, or having an insufficient action
+budget. The Trace Player makes these cases inspectable step by step, like
+reading a textbook with the figure open beside the paragraph.
+
+#### Current Evidence
+
+Saved LLM policy runs currently show the following dashboard summary:
+
+| Dataset | Seeds | One-shot success | Repaired success | Avg. one-shot steps | Avg. repaired steps |
+| --- | --- | ---: | ---: | ---: | ---: |
+| OpenAI Luna v5 gated | 0-31 | 0/32 (0.0%) | 32/32 (100.0%) | 17.31 | 15.66 |
+| Gemini 3.5 Flash v1 | 0-31 | 6/32 (18.8%) | 32/32 (100.0%) | 15.72 | 16.31 |
+
+The local proxy baseline report is generated with:
+
+```bash
+python scripts/skill_gs/run_baseline_comparison.py --seed-start 0 --seed-end 127 --initial-max-steps 10 --search-candidate-max-steps 10 20 22 24 --ours-retry-budget-schedule 20 22 24 --ours-max-attempts 4 --perturbation-seed 123 --output output/skill_gs/baseline_comparison_seed0_127.json
+python scripts/skill_gs/generate_evidence_pack.py --baseline-json output/skill_gs/baseline_comparison_seed0_127.json
+```
+
+That comparison currently reports:
+
+```text
+llm_generated one-shot proxy: 14/128 success, 128 evaluations
+llm_gs_style_search proxy: 128/128 success, 512 evaluations
+ours_adaptive_skill_gs: 128/128 success, 250 evaluations
+```
+
+The generated demo report is written to
+`reports/skill_gs_demo_evidence_pack_2026-08-22.md`, with SVG charts under
+`reports/assets/`.
+
+#### Development Commands
 
 Run the DoorKey MVP directly:
 
@@ -127,53 +199,10 @@ Run the same loop through the explicit agent workflow:
 python scripts/skill_gs/run_agent_loop.py --seeds 0 1 --skill-store data/skill_gs/doorkey_skills.json
 ```
 
-Run the first adaptive retry wrapper by forcing a small first-attempt budget:
-
-```bash
-python scripts/skill_gs/run_agent_loop.py --seeds 0 --adaptive-retry --initial-max-steps 1 --retry-max-steps 200 --max-attempts 2
-```
-
-Optionally persist Adaptive Core attempt memory:
+Persist Adaptive Core attempt memory:
 
 ```bash
 python scripts/skill_gs/run_agent_loop.py --seeds 0 --adaptive-retry --initial-max-steps 1 --retry-max-steps 200 --max-attempts 2 --attempt-memory output/skill_gs/adaptive_attempts.json --perturbation-seed 123
-```
-
-Run the fair baseline comparison used by the current demo report:
-
-```bash
-python scripts/skill_gs/run_baseline_comparison.py --seed-start 0 --seed-end 127 --initial-max-steps 10 --search-candidate-max-steps 10 20 22 24 --ours-retry-budget-schedule 20 22 24 --ours-max-attempts 4 --perturbation-seed 123 --output output/skill_gs/baseline_comparison_seed0_127.json
-```
-
-Generate the chart/report evidence pack from that comparison JSON:
-
-```bash
-python scripts/skill_gs/generate_evidence_pack.py --baseline-json output/skill_gs/baseline_comparison_seed0_127.json
-```
-
-Open the JSON demo dashboard after installing the small dashboard-only UI
-dependencies:
-
-```bash
-pip install "gradio==4.44.1" "pandas" "huggingface-hub<1.0" "fastapi<0.116" "starlette<1.0"
-python scripts/skill_gs/run_skill_gs_dashboard.py
-```
-
-The dashboard reads saved JSON results under `output/skill_gs`, so it does not
-spend new OpenAI/Gemini/Ollama calls. It compares Luna and Gemini one-shot
-policies against repaired runs, inspects each seed, and includes a Trace Player
-with `Prev` and `Next` controls for stepping through one action at a time. The
-action record explains the current move while the SVG highlights the path prefix
-and current agent direction.
-
-The generated demo report is written to
-`reports/skill_gs_demo_evidence_pack_2026-08-22.md`, with SVG charts under
-`reports/assets/`. The current local proxy comparison shows:
-
-```text
-llm_generated one-shot proxy: 14/128 success, 128 evaluations
-llm_gs_style_search proxy: 128/128 success, 512 evaluations
-ours_adaptive_skill_gs: 128/128 success, 250 evaluations
 ```
 
 ## Adapting LLM-GS to Your Environment
